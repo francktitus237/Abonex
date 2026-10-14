@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// vert = payé, orange = bientôt dû, rouge = en retard.
 enum SubscriptionStatus { paid, dueSoon, overdue }
 
-enum BillingCycle { monthly, quarterly, yearly }
+enum BillingCycle { monthly, quarterly, yearly, once }
 
 /// Catégories d'abonnements (loyers, logiciels, assurances…).
 enum SubscriptionCategory {
@@ -17,6 +17,7 @@ enum SubscriptionCategory {
   water,
   payroll,
   transport,
+  event,
   other;
 
   String get label => switch (this) {
@@ -28,6 +29,7 @@ enum SubscriptionCategory {
     water => 'Eau',
     payroll => 'Salaires',
     transport => 'Transport',
+    event => 'Événement',
     other => 'Autre',
   };
 
@@ -40,6 +42,7 @@ enum SubscriptionCategory {
     water => LucideIcons.droplets,
     payroll => LucideIcons.users,
     transport => LucideIcons.truck,
+    event => LucideIcons.calendarClock,
     other => LucideIcons.tag,
   };
 
@@ -52,6 +55,7 @@ enum SubscriptionCategory {
     water => const Color(0xFF38BDF8),
     payroll => const Color(0xFF14B8A6),
     transport => const Color(0xFFEC4899),
+    event => const Color(0xFFF97316),
     other => const Color(0xFF64748B),
   };
 
@@ -74,6 +78,8 @@ class Subscription {
     required this.cycle,
     required this.status,
     this.currency = 'XAF',
+    this.startDate,
+    this.endDate,
   });
 
   final String id;
@@ -86,9 +92,16 @@ class Subscription {
   final SubscriptionStatus status;
   final String currency;
 
+  /// Date de souscription/première échéance — null si inconnue.
+  final DateTime? startDate;
+
+  /// Fin de contrat — null = renouvellement sans fin.
+  final DateTime? endDate;
+
   String get cycleLabel => switch (cycle) {
     BillingCycle.monthly => 'Mensuel',
     BillingCycle.quarterly => 'Trimestriel',
     BillingCycle.yearly => 'Annuel',
+    BillingCycle.once => 'Une seule fois',
   };
 }

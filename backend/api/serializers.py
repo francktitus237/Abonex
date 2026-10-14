@@ -34,7 +34,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "category",
             "amount",
             "currency",
+            "start_date",
             "next_due_date",
+            "end_date",
             "cycle",
             "status",
         ]

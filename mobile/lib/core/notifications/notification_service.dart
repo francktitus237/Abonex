@@ -131,19 +131,23 @@ class NotificationService {
     await _plugin.cancelAll();
 
     final now = tz.TZDateTime.now(tz.local);
-    // Rappels sonores type alarme : réglage utilisateur (Profil).
-    final urgent = getIt<SettingsStorage>().soundAlerts;
+    // Réglages personnalisés : jours d'anticipation + heure +
+    // mode alarme — tout vient du profil utilisateur.
+    final settings = getIt<SettingsStorage>();
+    final urgent = settings.soundAlerts;
+    final reminderDays = settings.reminderDays;
+    final reminderHour = settings.reminderHour;
     var id = 0;
     for (final sub in subs) {
       if (sub.status != SubscriptionStatus.dueSoon) continue;
-      // J-3 et J à 9h00.
-      for (final daysBefore in [3, 0]) {
+      // Un rappel par jour d'anticipation choisi (ex. J-7, J-3, J).
+      for (final daysBefore in reminderDays) {
         var when = tz.TZDateTime(
           tz.local,
           sub.nextDueDate.year,
           sub.nextDueDate.month,
           sub.nextDueDate.day - daysBefore,
-          9,
+          reminderHour,
         );
         if (when.isBefore(now)) {
           // J passé → on décale au prochain créneau possible.
@@ -154,6 +158,8 @@ class NotificationService {
           id: id++,
           title: daysBefore == 0
               ? 'Échéance aujourd\'hui : ${sub.name}'
+              : daysBefore == 1
+              ? 'Échéance demain : ${sub.name}'
               : 'Échéance dans $daysBefore j : ${sub.name}',
           body: '${sub.provider} — ${AppFormatters.money(sub.amount)} à payer.',
           scheduledDate: when,
@@ -169,7 +175,7 @@ class NotificationService {
 
     // Rappel récurrent : chaque lundi 9h, invite à mettre la liste
     // à jour (factures, salaires, nouveaux abonnements oubliés).
-    var next = _nextWeekday(DateTime.monday, 9);
+    var next = _nextWeekday(DateTime.monday, reminderHour);
     await _plugin.zonedSchedule(
       id: 999,
       title: 'Abonex — liste à jour ?',

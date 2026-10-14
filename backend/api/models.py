@@ -38,12 +38,15 @@ class Subscription(models.Model):
         ("water", "Eau"),
         ("payroll", "Salaires"),
         ("transport", "Transport"),
+        ("event", "Événement"),
         ("other", "Autre"),
     ]
     CYCLES = [
         ("monthly", "Mensuel"),
         ("quarterly", "Trimestriel"),
         ("yearly", "Annuel"),
+        # Paiement/événement ponctuel (rendez-vous, facture unique).
+        ("once", "Une seule fois"),
     ]
     STATUSES = [
         ("paid", "Payé"),
@@ -64,7 +67,12 @@ class Subscription(models.Model):
     )
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     currency = models.CharField(max_length=8, default="XAF")
+    # Date de souscription/première échéance — peut être inconnue
+    # ou dans le passé (saisie rétroactive).
+    start_date = models.DateField(null=True, blank=True)
     next_due_date = models.DateField()
+    # Date de fin de contrat — null = renouvellement sans fin.
+    end_date = models.DateField(null=True, blank=True)
     cycle = models.CharField(max_length=16, choices=CYCLES, default="monthly")
     status = models.CharField(
         max_length=16, choices=STATUSES, default="dueSoon"

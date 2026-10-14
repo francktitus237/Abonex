@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/entities/user.dart';
@@ -52,7 +52,11 @@ abstract final class AppRoutes {
 /// - session active sur /login → /
 /// - /users → réservé au Propriétaire
 GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
+  // Clé du navigateur racine : permet aux pages "plein écran"
+  // (détail abonnement, notifications) de couvrir la barre d'onglets.
+  final rootNavigatorKey = GlobalKey<NavigatorState>();
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     // Le routeur réévalue ses guards à chaque changement d'état d'auth
     // (login, logout, session expirée par l'intercepteur Dio).
@@ -128,6 +132,9 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
                 routes: [
                   GoRoute(
                     path: ':id',
+                    // Plein écran au-dessus de la barre d'onglets —
+                    // pushable depuis n'importe quel contexte.
+                    parentNavigatorKey: rootNavigatorKey,
                     builder: (_, state) => SubscriptionDetailPage(
                       subscriptionId: state.pathParameters['id']!,
                     ),

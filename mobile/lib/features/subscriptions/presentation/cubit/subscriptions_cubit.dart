@@ -124,6 +124,8 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     final result = await _repository.createSubscription(
       name: name,
@@ -132,6 +134,8 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       amount: amount,
       nextDueDate: nextDueDate,
       cycle: cycle,
+      startDate: startDate,
+      endDate: endDate,
     );
     if (result case Ok(value: final created)) {
       final current = state.subscriptions ?? [];

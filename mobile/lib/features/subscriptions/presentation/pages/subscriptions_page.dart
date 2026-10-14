@@ -286,6 +286,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   // (ex. serveur loué dimanche, saisi mercredi) : la prochaine
   // échéance est alors calculée automatiquement.
   DateTime _firstDue = DateTime.now().add(const Duration(days: 30));
+  // Date de prise réelle de l'abonnement — null = inconnue.
+  DateTime? _startDate;
+  // Fin de contrat éventuelle — null = sans fin.
+  DateTime? _endDate;
   bool _submitting = false;
 
   @override
@@ -307,9 +311,41 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         BillingCycle.monthly => DateTime(d.year, d.month + 1, d.day),
         BillingCycle.quarterly => DateTime(d.year, d.month + 3, d.day),
         BillingCycle.yearly => DateTime(d.year + 1, d.month, d.day),
+        // Événement ponctuel : la première échéance EST l'échéance.
+        BillingCycle.once => today,
       };
+      if (_cycle == BillingCycle.once) break;
     }
-    return d;
+    return _cycle == BillingCycle.once ? _firstDue : d;
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      helpText: 'Date de prise de l\'abonnement',
+    );
+    if (picked != null) {
+      setState(() {
+        _startDate = picked;
+        // La première échéance suit la date de prise par défaut.
+        _firstDue = picked;
+      });
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _endDate ?? DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 20)),
+      helpText: 'Fin du contrat',
+    );
+    if (picked != null) setState(() => _endDate = picked);
   }
 
   Future<void> _pickDate() async {
@@ -335,6 +371,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
           0,
       nextDueDate: _nextDue,
       cycle: _cycle,
+      startDate: _startDate,
+      endDate: _endDate,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -434,6 +472,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                                   BillingCycle.monthly => 'Mensuel',
                                   BillingCycle.quarterly => 'Trimestriel',
                                   BillingCycle.yearly => 'Annuel',
+                                  BillingCycle.once => 'Une seule fois',
                                 },
                               ),
                             ),
@@ -486,7 +525,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Prochaine échéance calculée : ${AppFormatters.dateLong(_nextDue)}',
+                      _cycle == BillingCycle.once
+                          ? 'Échéance unique : ${AppFormatters.dateLong(_firstDue)}'
+                          : 'Prochaine échéance calculée : ${AppFormatters.dateLong(_nextDue)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -494,6 +535,43 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   ),
                 ],
               ),
+              const SizedBox(height: 14),
+              // Date de prise réelle — optionnelle, peut être inconnue.
+              OutlinedButton.icon(
+                onPressed: _pickStartDate,
+                icon: const Icon(LucideIcons.calendarPlus, size: 18),
+                label: Text(
+                  _startDate == null
+                      ? 'Date de prise (optionnel — ex. dimanche dernier)'
+                      : 'Pris le : ${AppFormatters.dateLong(_startDate!)}',
+                ),
+              ),
+              if (_startDate != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => setState(() => _startDate = null),
+                    child: const Text('Date inconnue'),
+                  ),
+                ),
+              // Fin de contrat — optionnelle (CDD, abonnement à durée…).
+              OutlinedButton.icon(
+                onPressed: _pickEndDate,
+                icon: const Icon(LucideIcons.calendarOff, size: 18),
+                label: Text(
+                  _endDate == null
+                      ? 'Fin du contrat (optionnel)'
+                      : 'Fin le : ${AppFormatters.dateLong(_endDate!)}',
+                ),
+              ),
+              if (_endDate != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => setState(() => _endDate = null),
+                    child: const Text('Sans date de fin'),
+                  ),
+                ),
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _submitting ? null : _submit,

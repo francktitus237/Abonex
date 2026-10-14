@@ -12,6 +12,8 @@ class SubscriptionModel extends Subscription {
     required super.cycle,
     required super.status,
     super.currency,
+    super.startDate,
+    super.endDate,
   });
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
@@ -33,6 +35,12 @@ class SubscriptionModel extends Subscription {
         orElse: () => SubscriptionStatus.dueSoon,
       ),
       currency: json['currency'] as String? ?? 'XAF',
+      startDate: json['start_date'] is String
+          ? DateTime.tryParse(json['start_date'] as String)
+          : null,
+      endDate: json['end_date'] is String
+          ? DateTime.tryParse(json['end_date'] as String)
+          : null,
     );
   }
 }

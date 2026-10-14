@@ -69,6 +69,8 @@ class _ProfileView extends StatelessWidget {
               const Divider(indent: 56),
               _SoundAlertsTile(),
               const Divider(indent: 56),
+              _ReminderScheduleTile(),
+              const Divider(indent: 56),
               _BiometricTile(),
             ],
           ),
@@ -423,6 +425,134 @@ class _SoundAlertsTileState extends State<_SoundAlertsTile> {
         await getIt<SettingsStorage>().setSoundAlerts(value);
         if (mounted) setState(() => _enabled = value);
       },
+    );
+  }
+}
+
+/// Quand rappeler : jours d'anticipation (J-14 … J) + heure.
+/// L'utilisateur personnalise sa cadence de rappel.
+class _ReminderScheduleTile extends StatefulWidget {
+  @override
+  State<_ReminderScheduleTile> createState() =>
+      _ReminderScheduleTileState();
+}
+
+class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
+  static const _choices = [14, 7, 3, 1, 0];
+  late List<int> _days = getIt<SettingsStorage>().reminderDays;
+  late int _hour = getIt<SettingsStorage>().reminderHour;
+
+  String get _summary {
+    final parts = _days
+        .map((d) => d == 0 ? 'J' : 'J-$d')
+        .toList();
+    return '${parts.join(', ')} à ${_hour}h';
+  }
+
+  Future<void> _configure() async {
+    var days = [..._days];
+    var hour = _hour;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final theme = Theme.of(ctx);
+          return AlertDialog(
+            title: const Text('Rappels d\'échéance'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Me rappeler :',
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final d in _choices)
+                      FilterChip(
+                        label: Text(d == 0 ? 'Le jour J' : 'J-$d'),
+                        selected: days.contains(d),
+                        showCheckmark: false,
+                        onSelected: (on) => setDialog(() {
+                          on ? days.add(d) : days.remove(d);
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text('Heure du rappel :', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Slider(
+                        value: hour.toDouble(),
+                        min: 6,
+                        max: 22,
+                        divisions: 16,
+                        label: '${hour}h',
+                        onChanged: (v) =>
+                            setDialog(() => hour = v.round()),
+                      ),
+                    ),
+                    Text(
+                      '${hour}h00',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                if (days.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Choisissez au moins un rappel.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: days.isEmpty
+                    ? null
+                    : () => Navigator.of(ctx).pop(true),
+                child: const Text('Enregistrer'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final storage = getIt<SettingsStorage>();
+    await storage.setReminderDays(days);
+    await storage.setReminderHour(hour);
+    setState(() {
+      _days = storage.reminderDays;
+      _hour = storage.reminderHour;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.alarmClock),
+      title: const Text('Rappels d\'échéance'),
+      subtitle: Text(_summary),
+      trailing: const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: _configure,
     );
   }
 }

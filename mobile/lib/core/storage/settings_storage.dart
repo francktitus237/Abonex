@@ -17,10 +17,12 @@ class SettingsStorage {
   static const _kBiometricEnabled = 'biometric_enabled';
   static const _kMonthlyBudget = 'monthly_budget';
 
+  // Clair par défaut : identité de marque Abonex. L'utilisateur
+  // peut passer en sombre ou suivre le système depuis le profil.
   ThemeMode get themeMode => switch (_prefs.getString(_kThemeMode)) {
-    'light' => ThemeMode.light,
     'dark' => ThemeMode.dark,
-    _ => ThemeMode.system,
+    'system' => ThemeMode.system,
+    _ => ThemeMode.light,
   };
 
   Future<void> setThemeMode(ThemeMode mode) =>
@@ -56,10 +58,36 @@ class SettingsStorage {
   Future<void> setMonthlyBudget(double value) =>
       _prefs.setDouble(_kMonthlyBudget, value);
 
+  static const _kReminderDays = 'reminder_days';
+  static const _kReminderHour = 'reminder_hour';
+
   /// Rappels sonores type alarme : plein écran + sonnerie forte
   /// pour ne jamais rater une échéance. Activé par défaut.
   bool get soundAlerts => _prefs.getBool(_kSoundAlerts) ?? true;
 
   Future<void> setSoundAlerts(bool enabled) =>
       _prefs.setBool(_kSoundAlerts, enabled);
+
+  /// Nombre de jours AVANT l'échéance pour chaque rappel.
+  /// 0 = le jour même. Défaut : J-7, J-3 et J.
+  List<int> get reminderDays {
+    final raw = _prefs.getString(_kReminderDays) ?? '7,3,0';
+    return raw
+        .split(',')
+        .map(int.tryParse)
+        .whereType<int>()
+        .where((d) => d >= 0 && d <= 30)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+  }
+
+  Future<void> setReminderDays(List<int> days) =>
+      _prefs.setString(_kReminderDays, (days.toSet().toList()..sort()).join(','));
+
+  /// Heure du rappel (0-23). Défaut : 9h.
+  int get reminderHour => _prefs.getInt(_kReminderHour) ?? 9;
+
+  Future<void> setReminderHour(int hour) =>
+      _prefs.setInt(_kReminderHour, hour.clamp(0, 23));
 }

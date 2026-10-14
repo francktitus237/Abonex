@@ -33,6 +33,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     try {
       return Ok(
@@ -41,7 +43,9 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'provider': provider,
           'category': category.name,
           'amount': amount,
+          'start_date': startDate?.toIso8601String().substring(0, 10),
           'next_due_date': nextDueDate.toIso8601String().substring(0, 10),
+          'end_date': endDate?.toIso8601String().substring(0, 10),
           'cycle': cycle.name,
           'currency': 'XAF',
         }),

@@ -12,6 +12,8 @@ abstract class SubscriptionRepository {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    DateTime? startDate,
+    DateTime? endDate,
   });
 
   /// Marque un abonnement comme payé (PATCH status).
