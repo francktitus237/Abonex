@@ -1,0 +1,10 @@
+# Options des générateurs de code (build_runner / freezed / json_serializable).
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          # L'API Django renvoie du snake_case ; le Dart expose du camelCase.
+          # first_name → firstName, created_at → createdAt, etc.
+          # Une seule convention pour TOUS les modèles du projet.
+          field_rename: snake
