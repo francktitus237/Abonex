@@ -22,6 +22,14 @@ abstract class AuthRepository {
   /// (permet d'ouvrir l'app hors-ligne avec le dernier profil connu).
   Future<Result<User>> currentUser();
 
+  /// Met à jour le profil (prénom, nom, langue) et renvoie
+  /// l'utilisateur à jour.
+  Future<Result<User>> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? language,
+  });
+
   /// Un refresh token existe-t-il localement ?
   Future<bool> hasSession();
 

@@ -51,6 +51,24 @@ class AuthCubit extends Cubit<AuthState> {
     return result;
   }
 
+  /// Met à jour le profil (prénom, nom, langue) côté serveur
+  /// puis ré-émet l'utilisateur à jour.
+  Future<Result<User>> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? language,
+  }) async {
+    final result = await _repository.updateProfile(
+      firstName: firstName,
+      lastName: lastName,
+      language: language,
+    );
+    if (result case Ok(value: final user)) {
+      emit(AuthState.authenticated(user));
+    }
+    return result;
+  }
+
   /// Appelé par l'intercepteur Dio quand le refresh token est mort
   /// (session expirée pendant l'usage) → retour forcé au login.
   void onSessionExpired() {

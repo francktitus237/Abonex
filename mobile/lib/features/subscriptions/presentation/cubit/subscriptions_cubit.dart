@@ -145,4 +145,44 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     }
     return result;
   }
+
+  /// Modification complète d'un abonnement existant.
+  Future<Result<Subscription>> update({
+    required String id,
+    String? name,
+    String? provider,
+    SubscriptionCategory? category,
+    double? amount,
+    DateTime? nextDueDate,
+    BillingCycle? cycle,
+    String? currency,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool clearStartDate = false,
+    bool clearEndDate = false,
+  }) async {
+    final result = await _repository.updateSubscription(
+      id: id,
+      name: name,
+      provider: provider,
+      category: category,
+      amount: amount,
+      nextDueDate: nextDueDate,
+      cycle: cycle,
+      currency: currency,
+      startDate: startDate,
+      endDate: endDate,
+      clearStartDate: clearStartDate,
+      clearEndDate: clearEndDate,
+    );
+    if (result case Ok(value: final updated)) {
+      final current = state.subscriptions ?? [];
+      emit(
+        SubscriptionsLoaded([
+          for (final s in current) s.id == updated.id ? updated : s,
+        ]),
+      );
+    }
+    return result;
+  }
 }

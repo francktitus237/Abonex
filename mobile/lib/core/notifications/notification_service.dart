@@ -138,10 +138,12 @@ class NotificationService {
     final reminderDays = settings.reminderDays;
     final reminderHour = settings.reminderHour;
     var id = 0;
+    // Déduplique les jours choisis (ex. J-7 et J tombant le même
+    // jour ne doivent produire qu'UN rappel).
+    final days = {...reminderDays}.toList()..sort();
     for (final sub in subs) {
       if (sub.status != SubscriptionStatus.dueSoon) continue;
-      // Un rappel par jour d'anticipation choisi (ex. J-7, J-3, J).
-      for (final daysBefore in reminderDays) {
+      for (final daysBefore in days) {
         var when = tz.TZDateTime(
           tz.local,
           sub.nextDueDate.year,
@@ -149,8 +151,14 @@ class NotificationService {
           sub.nextDueDate.day - daysBefore,
           reminderHour,
         );
+        final isToday = daysBefore == 0 &&
+            sub.nextDueDate.year == now.year &&
+            sub.nextDueDate.month == now.month &&
+            sub.nextDueDate.day == now.day;
         if (when.isBefore(now)) {
-          // J passé → on décale au prochain créneau possible.
+          // Rappel passé → on le saute SAUF le jour J même,
+          // qui mérite une alerte immédiate.
+          if (!isToday) continue;
           when = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 1));
         }
         if (id >= 60) break; // limite Android de notifications planifiées

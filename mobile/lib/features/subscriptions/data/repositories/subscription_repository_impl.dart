@@ -59,6 +59,49 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   }
 
   @override
+  Future<Result<Subscription>> updateSubscription({
+    required String id,
+    String? name,
+    String? provider,
+    SubscriptionCategory? category,
+    double? amount,
+    DateTime? nextDueDate,
+    BillingCycle? cycle,
+    String? currency,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool clearStartDate = false,
+    bool clearEndDate = false,
+  }) async {
+    try {
+      return Ok(
+        await _remote.update(id, {
+          'name': ?name,
+          'provider': ?provider,
+          'category': ?category?.name,
+          'amount': ?amount,
+          if (nextDueDate != null)
+            'next_due_date': nextDueDate.toIso8601String().substring(0, 10),
+          'cycle': ?cycle?.name,
+          'currency': ?currency,
+          if (clearStartDate)
+            'start_date': null
+          else if (startDate != null)
+            'start_date': startDate.toIso8601String().substring(0, 10),
+          if (clearEndDate)
+            'end_date': null
+          else if (endDate != null)
+            'end_date': endDate.toIso8601String().substring(0, 10),
+        }),
+      );
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
   Future<Result<Subscription>> markPaid(String id) async {
     try {
       return Ok(await _remote.updateStatus(id, 'paid'));

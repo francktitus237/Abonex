@@ -8,6 +8,7 @@ import '../models/subscription_model.dart';
 abstract class SubscriptionRemoteDataSource {
   Future<List<SubscriptionModel>> list();
   Future<SubscriptionModel> create(Map<String, dynamic> payload);
+  Future<SubscriptionModel> update(String id, Map<String, dynamic> payload);
   Future<SubscriptionModel> updateStatus(String id, String status);
   Future<void> delete(String id);
 }
@@ -35,6 +36,18 @@ class SubscriptionRemoteDataSourceImpl
   Future<SubscriptionModel> create(Map<String, dynamic> payload) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.subscriptions,
+      data: payload,
+    );
+    return SubscriptionModel.fromJson(res.data!);
+  }
+
+  @override
+  Future<SubscriptionModel> update(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.subscription(id),
       data: payload,
     );
     return SubscriptionModel.fromJson(res.data!);

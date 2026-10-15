@@ -26,6 +26,9 @@ abstract class AuthRemoteDataSource {
   /// GET /auth/me/ → user
   Future<UserModel> me();
 
+  /// PATCH /auth/me/ {first_name?, last_name?, language?} → user
+  Future<UserModel> updateMe(Map<String, dynamic> payload);
+
   /// POST /auth/logout/ {refresh} → blacklist du refresh token.
   Future<void> logout(String refreshToken);
 
@@ -88,6 +91,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<UserModel> me() async {
     final res = await _dio.get<Map<String, dynamic>>(ApiEndpoints.me);
+    return UserModel.fromJson(res.data!);
+  }
+
+  @override
+  Future<UserModel> updateMe(Map<String, dynamic> payload) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.me,
+      data: payload,
+    );
     return UserModel.fromJson(res.data!);
   }
 

@@ -75,6 +75,27 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Result<User>> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? language,
+  }) async {
+    try {
+      final model = await _remote.updateMe({
+        'first_name': ?firstName,
+        'last_name': ?lastName,
+        'language': ?language,
+      });
+      await _local.saveUser(model);
+      return Ok(model.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
   Future<bool> hasSession() async => await _local.readRefreshToken() != null;
 
   @override

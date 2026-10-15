@@ -8,6 +8,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -199,6 +200,15 @@ class _IdentityCard extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Modifier le profil',
+            onPressed: () => _showEditProfileSheet(context, user),
+            icon: Icon(
+              LucideIcons.pencil,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -211,6 +221,98 @@ class _IdentityCard extends StatelessWidget {
     ].where((p) => p != null && p.isNotEmpty);
     if (parts.isEmpty) return user.email[0].toUpperCase();
     return parts.map((p) => p![0].toUpperCase()).join();
+  }
+
+  /// Bottom sheet d'édition : prénom, nom, langue — PATCH /auth/me/.
+  static void _showEditProfileSheet(BuildContext context, User user) {
+    final firstName = TextEditingController(text: user.firstName);
+    final lastName = TextEditingController(text: user.lastName);
+    var saving = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final bottom = MediaQuery.viewInsetsOf(context).bottom;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Modifier le profil',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: firstName,
+                  decoration: const InputDecoration(
+                    labelText: 'Prénom',
+                    prefixIcon: Icon(LucideIcons.user, size: 20),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: lastName,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom',
+                    prefixIcon: Icon(LucideIcons.userRound, size: 20),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setSheetState(() => saving = true);
+                          final result = await sheetContext
+                              .read<AuthCubit>()
+                              .updateProfile(
+                                firstName: firstName.text.trim(),
+                                lastName: lastName.text.trim(),
+                              );
+                          if (!context.mounted) return;
+                          setSheetState(() => saving = false);
+                          if (result is Ok) {
+                            Navigator.of(context).pop();
+                          }
+                          toastification.show(
+                            context: context,
+                            type: result is Ok
+                                ? ToastificationType.success
+                                : ToastificationType.error,
+                            style: ToastificationStyle.flat,
+                            title: Text(
+                              result is Ok
+                                  ? 'Profil mis à jour.'
+                                  : switch (result) {
+                                      Err(failure: final f) => f.message,
+                                      _ => 'Erreur inattendue.',
+                                    },
+                            ),
+                            autoCloseDuration: const Duration(seconds: 3),
+                          );
+                        },
+                  icon: saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(LucideIcons.check, size: 19),
+                  label: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 

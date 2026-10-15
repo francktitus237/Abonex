@@ -14,6 +14,7 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../domain/entities/subscription.dart';
 import '../cubit/subscriptions_cubit.dart';
+import 'subscriptions_page.dart';
 
 /// Détail d'un abonnement : fiche complète + actions
 /// (marquer payé, supprimer). Les données sont relues depuis
@@ -202,6 +203,13 @@ class _DetailBody extends StatelessWidget {
             label: const Text('Marquer comme payé'),
           ),
         if (sub.status != SubscriptionStatus.paid) const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () =>
+              showSubscriptionFormSheet(context, existing: sub),
+          icon: const Icon(LucideIcons.pencil, size: 18),
+          label: const Text('Modifier'),
+        ),
+        const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => _confirmDelete(context),
           icon: Icon(

@@ -172,10 +172,27 @@ class RegisterView(APIView):
 
 
 class MeView(APIView):
-    """GET /auth/me/ → user"""
+    """GET /auth/me/ → user · PATCH → met à jour prénom, nom
+    et langue du profil (champs éditables côté app)."""
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        user = request.user
+        data = request.data
+        changed = False
+        for field in ("first_name", "last_name"):
+            if field in data:
+                setattr(user, field, str(data[field]).strip()[:150])
+                changed = True
+        language = data.get("language")
+        if language is not None:
+            user.profile.language = str(language).strip()[:8]
+            user.profile.save(update_fields=["language"])
+        if changed:
+            user.save(update_fields=["first_name", "last_name"])
+        return Response(UserSerializer(user).data)
 
 
 class LogoutView(APIView):

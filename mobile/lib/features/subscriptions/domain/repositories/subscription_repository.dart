@@ -17,6 +17,23 @@ abstract class SubscriptionRepository {
     DateTime? endDate,
   });
 
+  /// Modifie un abonnement existant (PATCH partiel).
+  /// clearStartDate/clearEndDate servent à effacer une date.
+  Future<Result<Subscription>> updateSubscription({
+    required String id,
+    String? name,
+    String? provider,
+    SubscriptionCategory? category,
+    double? amount,
+    DateTime? nextDueDate,
+    BillingCycle? cycle,
+    String? currency,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool clearStartDate,
+    bool clearEndDate,
+  });
+
   /// Marque un abonnement comme payé (PATCH status).
   Future<Result<Subscription>> markPaid(String id);
 

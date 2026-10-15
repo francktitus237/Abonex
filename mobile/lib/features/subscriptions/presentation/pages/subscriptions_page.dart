@@ -227,17 +227,26 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     );
   }
 
-  void _showAddSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => BlocProvider.value(
-        value: context.read<SubscriptionsCubit>(),
-        child: const _AddSubscriptionSheet(),
-      ),
-    );
-  }
+  void _showAddSheet(BuildContext context) =>
+      showSubscriptionFormSheet(context);
+}
+
+/// Ouvre le formulaire d'ajout/édition d'abonnement.
+/// Réutilisé par la page détail (bouton Modifier) : passer
+/// [existing] pour éditer, rien pour créer.
+void showSubscriptionFormSheet(
+  BuildContext context, {
+  Subscription? existing,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => BlocProvider.value(
+      value: context.read<SubscriptionsCubit>(),
+      child: _AddSubscriptionSheet(existing: existing),
+    ),
+  );
 }
 
 class _FilterChip extends StatelessWidget {
@@ -275,10 +284,12 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-/// Formulaire d'ajout en bottom sheet — validé localement,
-/// envoyé au SubscriptionsCubit.
+/// Formulaire d'ajout/édition en bottom sheet — validé localement,
+/// envoyé au SubscriptionsCubit. [existing] non null = édition.
 class _AddSubscriptionSheet extends StatefulWidget {
-  const _AddSubscriptionSheet();
+  const _AddSubscriptionSheet({this.existing});
+
+  final Subscription? existing;
 
   @override
   State<_AddSubscriptionSheet> createState() => _AddSubscriptionSheetState();
@@ -319,6 +330,23 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     };
     if (workspace?.defaultCurrency?.isNotEmpty ?? false) {
       _currency = workspace!.defaultCurrency!;
+    }
+    // Mode édition : on pré-remplit tous les champs.
+    final e = widget.existing;
+    if (e != null) {
+      _name.text = e.name;
+      _provider.text = e.provider;
+      _amount.text = e.amount == e.amount.roundToDouble()
+          ? e.amount.toStringAsFixed(0)
+          : e.amount.toString();
+      _category = e.category;
+      _cycle = e.cycle;
+      _currency = e.currency;
+      _isEvent = e.cycle == BillingCycle.once ||
+          e.category == SubscriptionCategory.event;
+      _firstDue = e.nextDueDate;
+      _startDate = e.startDate;
+      _endDate = e.endDate;
     }
     // Fournisseurs connus du pays → autocomplétion du champ.
     getIt<WorkspaceRemoteDataSource>()
@@ -414,22 +442,40 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
-    final result = await context.read<SubscriptionsCubit>().create(
-      name: _name.text.trim(),
-      provider: _isEvent ? '' : _provider.text.trim(),
-      category: _isEvent ? SubscriptionCategory.event : _category,
-      amount: _isEvent
-          ? 0
-          : double.tryParse(
-                  _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
-                ) ??
-                0,
-      nextDueDate: _isEvent ? _firstDue : _nextDue,
-      cycle: _isEvent ? BillingCycle.once : _cycle,
-      currency: _currency,
-      startDate: _isEvent ? null : _startDate,
-      endDate: _isEvent ? null : _endDate,
-    );
+    final amount = _isEvent
+        ? 0.0
+        : double.tryParse(
+              _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
+            ) ??
+            0;
+    final cubit = context.read<SubscriptionsCubit>();
+    final existing = widget.existing;
+    final result = existing == null
+        ? await cubit.create(
+            name: _name.text.trim(),
+            provider: _isEvent ? '' : _provider.text.trim(),
+            category: _isEvent ? SubscriptionCategory.event : _category,
+            amount: amount,
+            nextDueDate: _isEvent ? _firstDue : _nextDue,
+            cycle: _isEvent ? BillingCycle.once : _cycle,
+            currency: _currency,
+            startDate: _isEvent ? null : _startDate,
+            endDate: _isEvent ? null : _endDate,
+          )
+        : await cubit.update(
+            id: existing.id,
+            name: _name.text.trim(),
+            provider: _isEvent ? '' : _provider.text.trim(),
+            category: _isEvent ? SubscriptionCategory.event : _category,
+            amount: amount,
+            nextDueDate: _isEvent ? _firstDue : _nextDue,
+            cycle: _isEvent ? BillingCycle.once : _cycle,
+            currency: _currency,
+            clearStartDate: _isEvent || _startDate == null,
+            startDate: _startDate,
+            clearEndDate: _isEvent || _endDate == null,
+            endDate: _endDate,
+          );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result is Ok) {
@@ -439,7 +485,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         type: ToastificationType.success,
         style: ToastificationStyle.flat,
         title: Text(
-          _isEvent ? 'Rendez-vous enregistré.' : 'Abonnement ajouté.',
+          widget.existing != null
+              ? 'Modifications enregistrées.'
+              : _isEvent
+                  ? 'Rendez-vous enregistré.'
+                  : 'Abonnement ajouté.',
         ),
         autoCloseDuration: const Duration(seconds: 3),
       );
@@ -469,7 +519,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _isEvent ? 'Nouveau rendez-vous' : 'Nouvel abonnement',
+                widget.existing != null
+                    ? 'Modifier — ${widget.existing!.name}'
+                    : _isEvent
+                        ? 'Nouveau rendez-vous'
+                        : 'Nouvel abonnement',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -665,43 +719,66 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 ],
               ),
               const SizedBox(height: 14),
-              // Date de prise réelle — optionnelle, peut être inconnue.
+              // Dates optionnelles regroupées dans une section
+              // pliable — le formulaire reste simple par défaut.
               if (!_isEvent)
-                OutlinedButton.icon(
-                onPressed: _pickStartDate,
-                icon: const Icon(LucideIcons.calendarPlus, size: 18),
-                label: Text(
-                  _startDate == null
-                      ? 'Date de prise (optionnel — ex. dimanche dernier)'
-                      : 'Pris le : ${AppFormatters.dateLong(_startDate!)}',
-                ),
-              ),
-              if (_startDate != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => setState(() => _startDate = null),
-                    child: const Text('Date inconnue'),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 8),
+                  leading: Icon(
+                    LucideIcons.settings2,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
-              // Fin de contrat — optionnelle (CDD, abonnement à durée…).
-              if (!_isEvent)
-                OutlinedButton.icon(
-                onPressed: _pickEndDate,
-                icon: const Icon(LucideIcons.calendarOff, size: 18),
-                label: Text(
-                  _endDate == null
-                      ? 'Fin du contrat (optionnel)'
-                      : 'Fin le : ${AppFormatters.dateLong(_endDate!)}',
-                ),
-              ),
-              if (_endDate != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => setState(() => _endDate = null),
-                    child: const Text('Sans date de fin'),
+                  title: Text(
+                    'Options avancées',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  subtitle: Text(
+                    'Date de prise, fin de contrat…',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  children: [
+                    // Date de prise réelle — peut être inconnue.
+                    OutlinedButton.icon(
+                      onPressed: _pickStartDate,
+                      icon: const Icon(LucideIcons.calendarPlus, size: 18),
+                      label: Text(
+                        _startDate == null
+                            ? 'Date de prise (ex. dimanche dernier)'
+                            : 'Pris le : ${AppFormatters.dateLong(_startDate!)}',
+                      ),
+                    ),
+                    if (_startDate != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => setState(() => _startDate = null),
+                          child: const Text('Date inconnue'),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    // Fin de contrat — CDD, engagement limité…
+                    OutlinedButton.icon(
+                      onPressed: _pickEndDate,
+                      icon: const Icon(LucideIcons.calendarOff, size: 18),
+                      label: Text(
+                        _endDate == null
+                            ? 'Fin du contrat'
+                            : 'Fin le : ${AppFormatters.dateLong(_endDate!)}',
+                      ),
+                    ),
+                    if (_endDate != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => setState(() => _endDate = null),
+                          child: const Text('Sans date de fin'),
+                        ),
+                      ),
+                  ],
                 ),
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -715,10 +792,12 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     : const Icon(LucideIcons.plus, size: 19),
                 label: Text(
                   _submitting
-                      ? 'Ajout…'
-                      : _isEvent
-                          ? 'Créer le rappel'
-                          : 'Ajouter l\'abonnement',
+                      ? 'Enregistrement…'
+                      : widget.existing != null
+                          ? 'Enregistrer les modifications'
+                          : _isEvent
+                              ? 'Créer le rappel'
+                              : 'Ajouter l\'abonnement',
                 ),
               ),
             ],
