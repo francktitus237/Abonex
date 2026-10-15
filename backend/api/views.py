@@ -1,6 +1,7 @@
 import json
 import secrets
 import uuid
+from datetime import date
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -83,6 +84,37 @@ class LoginView(APIView):
         )
 
 
+# Pays → (devise principale, langue) pour la configuration
+# automatique dès l'inscription — le setup finit ensuite
+# (devises secondaires, invitations) via /workspace/setup/.
+COUNTRY_DEFAULTS = {
+    "CM": ("XAF", "fr"), "GA": ("XAF", "fr"), "CG": ("XAF", "fr"),
+    "TD": ("XAF", "fr"), "GQ": ("XAF", "fr"),
+    "CI": ("XOF", "fr"), "SN": ("XOF", "fr"), "BJ": ("XOF", "fr"),
+    "BF": ("XOF", "fr"), "TG": ("XOF", "fr"), "ML": ("XOF", "fr"),
+    "NE": ("XOF", "fr"), "GN": ("GNF", "fr"),
+    "CD": ("CDF", "fr"), "MG": ("MGA", "fr"),
+    "MA": ("MAD", "fr"), "DZ": ("DZD", "ar"), "TN": ("TND", "ar"),
+    "NG": ("NGN", "en"), "GH": ("GHS", "en"), "KE": ("KES", "en"),
+    "ZA": ("ZAR", "en"), "RW": ("RWF", "en"), "UG": ("UGX", "en"),
+    "TZ": ("TZS", "en"), "ET": ("ETB", "en"),
+    "FR": ("EUR", "fr"), "BE": ("EUR", "fr"), "LU": ("EUR", "fr"),
+    "DE": ("EUR", "de"), "ES": ("EUR", "es"), "IT": ("EUR", "it"),
+    "PT": ("EUR", "pt"), "NL": ("EUR", "nl"), "IE": ("EUR", "en"),
+    "AT": ("EUR", "de"), "GR": ("EUR", "el"), "PL": ("PLN", "pl"),
+    "RO": ("RON", "ro"), "SE": ("SEK", "sv"), "DK": ("DKK", "da"),
+    "CH": ("CHF", "fr"), "GB": ("GBP", "en"),
+    "US": ("USD", "en"), "CA": ("CAD", "en"), "MX": ("MXN", "es"),
+    "BR": ("BRL", "pt"), "AR": ("ARS", "es"), "CO": ("COP", "es"),
+    "CL": ("CLP", "es"), "HT": ("HTG", "fr"),
+    "IN": ("INR", "en"), "ID": ("IDR", "id"), "PH": ("PHP", "en"),
+    "VN": ("VND", "vi"), "TH": ("THB", "th"), "SG": ("SGD", "en"),
+    "PK": ("PKR", "ur"), "BD": ("BDT", "bn"),
+    "AE": ("AED", "ar"), "SA": ("SAR", "ar"), "TR": ("TRY", "tr"),
+    "JP": ("JPY", "ja"), "CN": ("CNY", "zh"), "KR": ("KRW", "ko"),
+}
+
+
 class RegisterView(APIView):
     """POST /auth/register/ → crée le compte + profil, renvoie
     {access, refresh, user} comme /auth/login/."""
@@ -94,6 +126,7 @@ class RegisterView(APIView):
         password = request.data.get("password") or ""
         first_name = (request.data.get("first_name") or "").strip()
         last_name = (request.data.get("last_name") or "").strip()
+        country = (request.data.get("country") or "").strip().upper()
 
         errors = {}
         if "@" not in email:
@@ -112,11 +145,20 @@ class RegisterView(APIView):
             first_name=first_name,
             last_name=last_name,
         )
+        # Pays choisi à l'inscription → devise/langue configurées
+        # automatiquement (le workspace reste "non configuré" tant
+        # que le setup complet n'est pas validé).
+        currency, language = COUNTRY_DEFAULTS.get(country, ("", "fr"))
         # L'inscrit est propriétaire de son propre espace de travail.
         workspace = Workspace.objects.create(
-            name=f"Espace de {first_name or email}"
+            name=f"Espace de {first_name or email}",
+            country=country if country in COUNTRY_DEFAULTS else "",
+            default_currency=currency,
         )
-        Profile.objects.create(user=user, workspace=workspace, role="owner")
+        Profile.objects.create(
+            user=user, workspace=workspace, role="owner",
+            language=language,
+        )
 
         refresh = RefreshToken.for_user(user)
         return Response(
@@ -204,6 +246,57 @@ class UserDetailView(generics.UpdateAPIView):
         return super().update(request, *args, **kwargs)
 
 
+def _refresh_statuses(qs):
+    """Recalcule les statuts selon la date du jour :
+    dueSoon dont l'échéance est passée → overdue ;
+    paid dont la date est dépassée (nouvelle période) → overdue.
+    """
+    today = date.today()
+    qs.filter(
+        status__in=["dueSoon", "paid"], next_due_date__lt=today
+    ).update(status="overdue")
+
+
+def _advance_due(subscription):
+    """Après un paiement : fait avancer next_due_date d'un cycle
+    complet jusqu'à une date future, puis repasse en dueSoon.
+    Un événement 'once' payé reste payé (terminal)."""
+    from datetime import date as _date
+
+    if subscription.cycle == "once":
+        return
+    today = _date.today()
+    d = subscription.next_due_date
+    step = {"monthly": 1, "quarterly": 3, "yearly": 12}.get(
+        subscription.cycle, 1
+    )
+    guard = 0
+    while d <= today and guard < 240:
+        month = d.month - 1 + step
+        year = d.year + month // 12
+        month = month % 12 + 1
+        # Dernier jour du mois si le jour n'existe pas (31 février…).
+        day = min(d.day, _month_days(year, month))
+        d = _date(year, month, day)
+        guard += 1
+    # Ne jamais dépasser la fin de contrat.
+    if subscription.end_date and d > subscription.end_date:
+        subscription.status = "paid"
+        subscription.save(update_fields=["status"])
+        return
+    subscription.next_due_date = d
+    subscription.status = "dueSoon"
+    subscription.save(update_fields=["next_due_date", "status"])
+
+
+def _month_days(year, month):
+    if month == 12:
+        nxt = date(year + 1, 1, 1)
+    else:
+        nxt = date(year, month + 1, 1)
+    return (nxt - date(year, month, 1)).days
+
+
 class SubscriptionListCreateView(generics.ListCreateAPIView):
     """GET /subscriptions/ · POST /subscriptions/"""
 
@@ -211,14 +304,26 @@ class SubscriptionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, SubscriptionPermission]
 
     def get_queryset(self):
-        return Subscription.objects.filter(
+        qs = Subscription.objects.filter(
             workspace=self.request.user.profile.workspace
         )
+        _refresh_statuses(qs)
+        return qs
 
     def perform_create(self, serializer):
+        from datetime import date as _date
+
+        next_due = serializer.validated_data.get("next_due_date")
+        # Statut cohérent dès la création : échéance passée → overdue.
+        computed = (
+            "overdue"
+            if next_due and next_due < _date.today()
+            else serializer.validated_data.get("status", "dueSoon")
+        )
         serializer.save(
             owner=self.request.user,
             workspace=self.request.user.profile.workspace,
+            status=computed,
         )
 
 
@@ -229,9 +334,11 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, SubscriptionPermission]
 
     def get_queryset(self):
-        return Subscription.objects.filter(
+        qs = Subscription.objects.filter(
             workspace=self.request.user.profile.workspace
         )
+        _refresh_statuses(qs)
+        return qs
 
     def perform_update(self, serializer):
         subscription = serializer.save()
@@ -245,6 +352,9 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
                     "amount": subscription.amount,
                 },
             )
+            # L'échéance payée appartient au passé : on fait avancer
+            # la prochaine échéance d'un cycle complet.
+            _advance_due(subscription)
 
 
 class PaymentHistoryView(generics.ListAPIView):

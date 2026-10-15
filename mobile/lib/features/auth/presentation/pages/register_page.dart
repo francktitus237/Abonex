@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/data/countries.dart';
 import '../../../../core/errors/failure.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/result.dart';
@@ -31,6 +32,19 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _accepted = false;
   bool _submitting = false;
   String? _error;
+  // Pays de l'utilisateur — pré-rempli depuis la locale du
+  // téléphone ; détermine devise/langue côté serveur.
+  late Country _country = _detectCountry();
+
+  static Country _detectCountry() {
+    final code =
+        WidgetsBinding.instance.platformDispatcher.locale.countryCode
+            ?.toUpperCase();
+    return AppCountries.all.firstWhere(
+      (c) => c.code == code,
+      orElse: () => AppCountries.all.firstWhere((c) => c.code == 'CM'),
+    );
+  }
 
   @override
   void dispose() {
@@ -59,6 +73,7 @@ class _RegisterPageState extends State<RegisterPage> {
       password: _password.text,
       firstName: _firstName.text.trim(),
       lastName: _lastName.text.trim(),
+      country: _country.code,
     );
 
     // Le router gère la redirection sur Authenticated — ici on
@@ -200,6 +215,31 @@ class _RegisterPageState extends State<RegisterPage> {
                       validator: (v) => v != null && v.contains('@')
                           ? null
                           : 'Entrez un email valide',
+                    ),
+                    const SizedBox(height: 14),
+                    // Pays → détermine automatiquement la devise
+                    // locale et la langue côté serveur.
+                    DropdownButtonFormField<Country>(
+                      initialValue: _country,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Pays',
+                        helperText:
+                            'Devise : ${_country.currency} — ajustable après',
+                        prefixIcon:
+                            const Icon(LucideIcons.globe, size: 20),
+                      ),
+                      items: AppCountries.all
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c,
+                              child: Text('${c.name} — ${c.currency}'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (c) {
+                        if (c != null) setState(() => _country = c);
+                      },
                     ),
                     const SizedBox(height: 14),
                     TextFormField(

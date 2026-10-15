@@ -36,12 +36,14 @@ class AuthCubit extends Cubit<AuthState> {
     required String password,
     String? firstName,
     String? lastName,
+    String? country,
   }) async {
     final result = await _repository.register(
       email: email,
       password: password,
       firstName: firstName,
       lastName: lastName,
+      country: country,
     );
     if (result case Ok(value: final user)) {
       emit(AuthState.authenticated(user));

@@ -20,6 +20,7 @@ abstract class AuthRemoteDataSource {
     required String password,
     String? firstName,
     String? lastName,
+    String? country,
   });
 
   /// GET /auth/me/ → user
@@ -62,6 +63,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String password,
     String? firstName,
     String? lastName,
+    String? country,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.register,
@@ -70,6 +72,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'password': password,
         'first_name': ?firstName,
         'last_name': ?lastName,
+        'country': ?country,
       },
     );
     final data = res.data!;

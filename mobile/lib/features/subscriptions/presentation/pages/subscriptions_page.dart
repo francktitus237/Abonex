@@ -291,6 +291,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   final _amount = TextEditingController();
   SubscriptionCategory _category = SubscriptionCategory.software;
   BillingCycle _cycle = BillingCycle.monthly;
+  // Mode rendez-vous/événement : pas de fournisseur ni de
+  // montant — l'app sert juste à ne pas rater l'échéance.
+  bool _isEvent = false;
   // Devise de l'abonnement — pré-remplie avec la devise principale
   // du workspace, modifiable (un compte peut suivre EUR + FCFA).
   String _currency = 'XAF';
@@ -413,16 +416,19 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     setState(() => _submitting = true);
     final result = await context.read<SubscriptionsCubit>().create(
       name: _name.text.trim(),
-      provider: _provider.text.trim(),
-      category: _category,
-      amount:
-          double.tryParse(_amount.text.replaceAll(' ', '').replaceAll(',', '.')) ??
-          0,
-      nextDueDate: _nextDue,
-      cycle: _cycle,
+      provider: _isEvent ? '' : _provider.text.trim(),
+      category: _isEvent ? SubscriptionCategory.event : _category,
+      amount: _isEvent
+          ? 0
+          : double.tryParse(
+                  _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
+                ) ??
+                0,
+      nextDueDate: _isEvent ? _firstDue : _nextDue,
+      cycle: _isEvent ? BillingCycle.once : _cycle,
       currency: _currency,
-      startDate: _startDate,
-      endDate: _endDate,
+      startDate: _isEvent ? null : _startDate,
+      endDate: _isEvent ? null : _endDate,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -432,7 +438,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         context: context,
         type: ToastificationType.success,
         style: ToastificationStyle.flat,
-        title: const Text('Abonnement ajouté.'),
+        title: Text(
+          _isEvent ? 'Rendez-vous enregistré.' : 'Abonnement ajouté.',
+        ),
         autoCloseDuration: const Duration(seconds: 3),
       );
     } else if (result case Err(failure: final f)) {
@@ -461,25 +469,49 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Nouvel abonnement',
+                _isEvent ? 'Nouveau rendez-vous' : 'Nouvel abonnement',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              const SizedBox(height: 16),
+              // Type d'entrée — un abonnement facturé ou un simple
+              // rappel d'échéance (entretien, événement, RDV…).
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(LucideIcons.repeat, size: 17),
+                    label: Text('Abonnement'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(LucideIcons.calendarClock, size: 17),
+                    label: Text('Rendez-vous'),
+                  ),
+                ],
+                selected: {_isEvent},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) =>
+                    setState(() => _isEvent = s.first),
+              ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Nom',
-                  hintText: 'Ex. Loyer siège social',
-                  prefixIcon: Icon(LucideIcons.tag, size: 20),
+                decoration: InputDecoration(
+                  labelText: _isEvent ? 'Titre' : 'Nom',
+                  hintText: _isEvent
+                      ? 'Ex. Entretien, réunion, RDV médecin…'
+                      : 'Ex. Loyer siège social',
+                  prefixIcon: const Icon(LucideIcons.tag, size: 20),
                 ),
                 validator: _required,
               ),
               const SizedBox(height: 14),
-              // Fournisseur avec suggestions adaptées au pays
-              // (ENEO/Camwater pour le Cameroun, EDF pour la France…).
-              Autocomplete<Map<String, dynamic>>(
+              // Fournisseur (optionnel) avec suggestions adaptées au
+              // pays (ENEO/Camwater pour le Cameroun, EDF/Orange…).
+              if (!_isEvent)
+                Autocomplete<Map<String, dynamic>>(
                 displayStringForOption: (o) => o['name'] as String,
                 optionsBuilder: (value) {
                   final q = value.text.toLowerCase();
@@ -505,16 +537,16 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     controller: controller,
                     focusNode: focus,
                     decoration: const InputDecoration(
-                      labelText: 'Fournisseur',
+                      labelText: 'Fournisseur (optionnel)',
                       hintText: 'Ex. ENEO, OVH, EDF…',
                       prefixIcon: Icon(LucideIcons.building2, size: 20),
                     ),
-                    validator: _required,
                   );
                 },
               ),
-              const SizedBox(height: 14),
-              Row(
+              if (!_isEvent) const SizedBox(height: 14),
+              if (!_isEvent)
+                Row(
                 children: [
                   Expanded(
                     child: TextFormField(
@@ -576,7 +608,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 ],
               ),
               const SizedBox(height: 14),
-              DropdownButtonFormField<SubscriptionCategory>(
+              if (!_isEvent)
+                DropdownButtonFormField<SubscriptionCategory>(
                 initialValue: _category,
                 decoration: const InputDecoration(
                   labelText: 'Catégorie',
@@ -603,23 +636,27 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 onPressed: _pickDate,
                 icon: const Icon(LucideIcons.calendar, size: 18),
                 label: Text(
-                  'Première échéance : ${AppFormatters.dateLong(_firstDue)}',
+                  _isEvent
+                      ? 'Date : ${AppFormatters.dateLong(_firstDue)}'
+                      : 'Première échéance : ${AppFormatters.dateLong(_firstDue)}',
                 ),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Icon(
-                    LucideIcons.info,
+                    _isEvent ? LucideIcons.bellRing : LucideIcons.info,
                     size: 14,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _cycle == BillingCycle.once
-                          ? 'Échéance unique : ${AppFormatters.dateLong(_firstDue)}'
-                          : 'Prochaine échéance calculée : ${AppFormatters.dateLong(_nextDue)}',
+                      _isEvent
+                          ? 'Vous serez alerté avant cette date selon vos réglages de rappel.'
+                          : _cycle == BillingCycle.once
+                              ? 'Échéance unique : ${AppFormatters.dateLong(_firstDue)}'
+                              : 'Prochaine échéance calculée : ${AppFormatters.dateLong(_nextDue)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -629,7 +666,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               ),
               const SizedBox(height: 14),
               // Date de prise réelle — optionnelle, peut être inconnue.
-              OutlinedButton.icon(
+              if (!_isEvent)
+                OutlinedButton.icon(
                 onPressed: _pickStartDate,
                 icon: const Icon(LucideIcons.calendarPlus, size: 18),
                 label: Text(
@@ -647,7 +685,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   ),
                 ),
               // Fin de contrat — optionnelle (CDD, abonnement à durée…).
-              OutlinedButton.icon(
+              if (!_isEvent)
+                OutlinedButton.icon(
                 onPressed: _pickEndDate,
                 icon: const Icon(LucideIcons.calendarOff, size: 18),
                 label: Text(
@@ -674,7 +713,13 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(LucideIcons.plus, size: 19),
-                label: Text(_submitting ? 'Ajout…' : 'Ajouter l\'abonnement'),
+                label: Text(
+                  _submitting
+                      ? 'Ajout…'
+                      : _isEvent
+                          ? 'Créer le rappel'
+                          : 'Ajouter l\'abonnement',
+                ),
               ),
             ],
           ),
