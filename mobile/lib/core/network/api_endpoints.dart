@@ -28,4 +28,24 @@ abstract final class ApiEndpoints {
   /// PATCH /subscriptions/ID/ — ex. {status: 'paid'}.
   static String subscription(String id) => 'subscriptions/$id/';
   static String subscriptionHistory(String id) => 'subscriptions/$id/history/';
+
+  /// POST /subscriptions/bulk/ — import en masse.
+  static const subscriptionsBulk = 'subscriptions/bulk/';
+
+  /// Configuration de premier démarrage : pays, devises, langue.
+  static const workspaceSetup = 'workspace/setup/';
+
+  /// Invitations d'équipe + acceptation par token.
+  static const invites = 'invites/';
+  static const inviteAccept = 'invites/accept/';
+
+  /// Catalogue de fournisseurs suggérés (filtré par pays serveur-side).
+  static const providerCatalog = 'providers/catalog/';
+
+  /// GET /rates/?base=XXX — taux de change réels.
+  static const rates = 'rates/';
+
+  /// Connecteurs externes : GET /connectors/ + POST /connectors/x/sync/.
+  static const connectors = 'connectors/';
+  static String connectorSync(String slug) => 'connectors/$slug/sync/';
 }

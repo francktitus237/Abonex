@@ -8,6 +8,8 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../subscriptions/domain/entities/subscription.dart';
 import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
 
@@ -21,10 +23,19 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
+  /// Devise affichée — les rapports ne mélangent JAMAIS deux devises
+  /// (un total FCFA+USD n'a pas de sens comptable).
+  String? _currency;
+
   @override
   void initState() {
     super.initState();
     context.read<SubscriptionsCubit>().ensureLoaded();
+    // Devise principale du workspace comme défaut.
+    _currency = switch (context.read<AuthCubit>().state) {
+      Authenticated(user: final u) => u.workspace?.defaultCurrency,
+      _ => null,
+    };
   }
 
   @override
@@ -53,8 +64,8 @@ class _ReportsPageState extends State<ReportsPage> {
             );
           }
 
-          final items = (state as SubscriptionsLoaded).items;
-          if (items.isEmpty) {
+          final all = (state as SubscriptionsLoaded).items;
+          if (all.isEmpty) {
             return const EmptyState(
               icon: LucideIcons.chartColumn,
               title: 'Pas de données',
@@ -62,14 +73,43 @@ class _ReportsPageState extends State<ReportsPage> {
             );
           }
 
+          // Devises présentes dans les données.
+          final currencies = all.map((s) => s.currency).toSet().toList()
+            ..sort();
+          final active =
+              _currency ?? currencies.first;
+          // Toutes les analyses ne portent que sur cette devise.
+          final items =
+              all.where((s) => s.currency == active).toList();
+
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
-              AnimatedFadeIn(child: _CategoryDonut(items: items)),
+              // Sélecteur de devise — visible seulement si >1.
+              if (currencies.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final c in currencies)
+                        ChoiceChip(
+                          label: Text(c),
+                          selected: c == active,
+                          showCheckmark: false,
+                          onSelected: (_) =>
+                              setState(() => _currency = c),
+                        ),
+                    ],
+                  ),
+                ),
+              AnimatedFadeIn(
+                child: _CategoryDonut(items: items, currency: active),
+              ),
               const SizedBox(height: 20),
               AnimatedFadeIn(
                 delay: const Duration(milliseconds: 100),
-                child: _MonthlyForecast(items: items),
+                child: _MonthlyForecast(items: items, currency: active),
               ),
             ],
           );
@@ -116,9 +156,10 @@ class _ChartCard extends StatelessWidget {
 
 /// Donut : part de chaque catégorie dans les dépenses.
 class _CategoryDonut extends StatelessWidget {
-  const _CategoryDonut({required this.items});
+  const _CategoryDonut({required this.items, required this.currency});
 
   final List<Subscription> items;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +199,7 @@ class _CategoryDonut extends StatelessWidget {
           // le total est affiché sous le donut.
           const SizedBox(height: 8),
           Text(
-            AppFormatters.money(total),
+            AppFormatters.money(total, currency),
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w800,
@@ -195,7 +236,7 @@ class _CategoryDonut extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    AppFormatters.money(e.value),
+                    AppFormatters.money(e.value, currency),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -212,9 +253,10 @@ class _CategoryDonut extends StatelessWidget {
 
 /// Barres : prévision des échéances sur les 6 prochains mois.
 class _MonthlyForecast extends StatelessWidget {
-  const _MonthlyForecast({required this.items});
+  const _MonthlyForecast({required this.items, required this.currency});
 
   final List<Subscription> items;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +312,7 @@ class _MonthlyForecast extends StatelessWidget {
             barTouchData: BarTouchData(
               touchTooltipData: BarTouchTooltipData(
                 getTooltipItem: (group, _, rod, _) => BarTooltipItem(
-                  AppFormatters.money(rod.toY),
+                  AppFormatters.money(rod.toY, currency),
                   const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),

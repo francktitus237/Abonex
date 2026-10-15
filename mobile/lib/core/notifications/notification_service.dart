@@ -161,7 +161,7 @@ class NotificationService {
               : daysBefore == 1
               ? 'Échéance demain : ${sub.name}'
               : 'Échéance dans $daysBefore j : ${sub.name}',
-          body: '${sub.provider} — ${AppFormatters.money(sub.amount)} à payer.',
+          body: '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.',
           scheduledDate: when,
           // Jour J + rappels sonores activés → alarme plein écran.
           notificationDetails: urgent && daysBefore == 0

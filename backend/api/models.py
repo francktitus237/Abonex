@@ -11,6 +11,12 @@ ROLES = [
 
 class Workspace(models.Model):
     name = models.CharField(max_length=120)
+    # Configuration de premier démarrage : pays + devises.
+    country = models.CharField(max_length=2, blank=True, default="")
+    default_currency = models.CharField(max_length=8, blank=True, default="")
+    # Devises secondaires affichées dans l'app (max 2-3).
+    extra_currencies = models.JSONField(default=list, blank=True)
+    configured = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -24,6 +30,47 @@ class Profile(models.Model):
         Workspace, on_delete=models.CASCADE, related_name="profiles"
     )
     role = models.CharField(max_length=16, choices=ROLES, default="viewer")
+    language = models.CharField(max_length=8, blank=True, default="fr")
+
+
+class Invitation(models.Model):
+    """Invitation email → rôle dans un espace de travail.
+    Le destinataire confirme en créant son compte via le token."""
+
+    STATUSES = [("pending", "En attente"), ("accepted", "Acceptée")]
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="invitations"
+    )
+    email = models.EmailField()
+    role = models.CharField(max_length=16, choices=ROLES, default="viewer")
+    token = models.CharField(max_length=64, unique=True)
+    invited_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="invitations"
+    )
+    status = models.CharField(
+        max_length=16, choices=STATUSES, default="pending"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("workspace", "email")]
+
+
+class ProviderConnection(models.Model):
+    """Compte externe connecté (OVH, IONOS…).
+    Les secrets sont chiffrés (Fernet) avant stockage."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="connections"
+    )
+    provider = models.CharField(max_length=40)  # ex. "ovh", "ionos"
+    label = models.CharField(max_length=120, blank=True)
+    credentials_encrypted = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("workspace", "provider", "label")]
 
 
 class Subscription(models.Model):

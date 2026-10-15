@@ -124,6 +124,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    String? currency,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
@@ -134,6 +135,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       amount: amount,
       nextDueDate: nextDueDate,
       cycle: cycle,
+      currency: currency,
       startDate: startDate,
       endDate: endDate,
     );

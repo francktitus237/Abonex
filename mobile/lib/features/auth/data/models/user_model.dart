@@ -20,6 +20,8 @@ abstract class UserModel with _$UserModel {
     @JsonKey(fromJson: UserRole.parse) required UserRole role,
     String? firstName,
     String? lastName,
+    String? language,
+    WorkspaceModel? workspace,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -32,5 +34,35 @@ abstract class UserModel with _$UserModel {
     role: role,
     firstName: firstName,
     lastName: lastName,
+    language: language,
+    workspace: workspace?.toEntity(),
+  );
+}
+
+/// Configuration de l'espace de travail (pays, devises) renvoyée
+/// par le backend dans le payload utilisateur.
+@freezed
+abstract class WorkspaceModel with _$WorkspaceModel {
+  const WorkspaceModel._();
+
+  const factory WorkspaceModel({
+    required String id,
+    String? name,
+    String? country,
+    String? defaultCurrency,
+    @Default([]) List<String> extraCurrencies,
+    @Default(false) bool configured,
+  }) = _WorkspaceModel;
+
+  factory WorkspaceModel.fromJson(Map<String, dynamic> json) =>
+      _$WorkspaceModelFromJson(json);
+
+  Workspace toEntity() => Workspace(
+    id: id,
+    name: name,
+    country: country,
+    defaultCurrency: defaultCurrency,
+    extraCurrencies: extraCurrencies,
+    configured: configured,
   );
 }

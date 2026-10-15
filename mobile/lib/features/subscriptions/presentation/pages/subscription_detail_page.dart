@@ -116,7 +116,7 @@ class _DetailBody extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                AppFormatters.money(sub.amount),
+                AppFormatters.money(sub.amount, sub.currency),
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -190,6 +190,7 @@ class _DetailBody extends StatelessWidget {
         _PaymentHistory(
           key: ValueKey('${sub.id}-${sub.status.name}'),
           subscriptionId: sub.id,
+          currency: sub.currency,
         ),
         const SizedBox(height: 24),
 
@@ -297,9 +298,14 @@ class _DetailBody extends StatelessWidget {
 }
 
 class _PaymentHistory extends StatefulWidget {
-  const _PaymentHistory({super.key, required this.subscriptionId});
+  const _PaymentHistory({
+    super.key,
+    required this.subscriptionId,
+    required this.currency,
+  });
 
   final String subscriptionId;
+  final String currency;
 
   @override
   State<_PaymentHistory> createState() => _PaymentHistoryState();
@@ -422,7 +428,10 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
                           ),
                         ),
                         Text(
-                          AppFormatters.money(entry.amount),
+                          AppFormatters.money(
+                            entry.amount,
+                            widget.currency,
+                          ),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),

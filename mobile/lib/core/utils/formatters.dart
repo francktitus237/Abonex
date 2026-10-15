@@ -3,13 +3,24 @@ import 'package:intl/intl.dart';
 /// Formatage unique de l'app — montants en FCFA, dates en français.
 /// Hand-roll pour les dates : pas de `initializeDateFormatting` requis.
 abstract final class AppFormatters {
-  static final _money = NumberFormat.currency(
-    locale: 'fr_FR',
-    symbol: 'FCFA',
-    decimalDigits: 0,
-  );
+  /// Symboles par code ISO 4217 — couvre les devises des pays cibles.
+  static const _symbols = {
+    'XAF': 'FCFA', 'XOF': 'FCFA', 'EUR': '€', 'USD': '\$',
+    'GBP': '£', 'CHF': 'CHF', 'CAD': '\$', 'MAD': 'DH',
+    'DZD': 'DA', 'TND': 'DT', 'NGN': '₦', 'GHS': '₵',
+    'KES': 'KSh', 'ZAR': 'R', 'INR': '₹', 'CNY': '¥',
+    'JPY': '¥', 'SGD': 'S\$', 'AED': 'AED', 'MXN': '\$',
+    'BRL': 'R\$', 'PHP': '₱', 'VND': '₫', 'MGA': 'Ar', 'CDF': 'FC',
+  };
 
-  static String money(num value) => _money.format(value);
+  static String money(num value, [String currency = 'XAF']) {
+    final symbol = _symbols[currency] ?? currency;
+    return NumberFormat.currency(
+      locale: 'fr_FR',
+      symbol: symbol,
+      decimalDigits: (currency == 'XAF' || currency == 'XOF') ? 0 : 2,
+    ).format(value);
+  }
 
   static const _months = [
     'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',

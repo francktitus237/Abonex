@@ -10,6 +10,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/currency_converter.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
@@ -115,12 +116,34 @@ class _DashboardPageState extends State<DashboardPage> {
             return _ErrorView(message: state.message);
           }
 
-          final monthlyTotal = items
-              .where((s) => s.status != SubscriptionStatus.paid)
-              .fold(0.0, (sum, s) => sum + s.amount);
-          final spent = items
-              .where((s) => s.status == SubscriptionStatus.paid)
-              .fold(0.0, (sum, s) => sum + s.amount);
+          // Totaux regroupés PAR DEVISE — jamais de somme mêlant
+          // FCFA et USD (ex. Starlink facturé en $ au Cameroun).
+          Map<String, double> sumByCurrency(
+            Iterable<Subscription> subs,
+          ) {
+            final map = <String, double>{};
+            for (final s in subs) {
+              map[s.currency] = (map[s.currency] ?? 0) + s.amount;
+            }
+            return map;
+          }
+
+          final dueByCurrency = sumByCurrency(
+            items.where((s) => s.status != SubscriptionStatus.paid),
+          );
+          final spentByCurrency = sumByCurrency(
+            items.where((s) => s.status == SubscriptionStatus.paid),
+          );
+          // Budget : comparé uniquement à la devise principale du
+          // workspace (les montants en USD ne gonflent pas le
+          // budget FCFA).
+          final mainCurrency = switch (context.read<AuthCubit>().state) {
+            Authenticated(user: final u) =>
+              u.workspace?.defaultCurrency ?? 'XAF',
+            _ => 'XAF',
+          };
+          final spentMain = (spentByCurrency[mainCurrency] ?? 0) +
+              (dueByCurrency[mainCurrency] ?? 0);
           final overdueSubs = items
               .where((s) => s.status == SubscriptionStatus.overdue)
               .toList();
@@ -143,8 +166,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 else
                   AnimatedFadeIn(
                     child: _TotalCard(
-                      total: monthlyTotal,
-                      spent: spent,
+                      dueByCurrency: dueByCurrency,
+                      spentByCurrency: spentByCurrency,
+                      mainCurrency: mainCurrency,
                       count: items.length,
                     ),
                   ),
@@ -171,7 +195,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     delay: const Duration(milliseconds: 60),
                     child: _BudgetCard(
                       budget: budget,
-                      spent: spent + monthlyTotal,
+                      spent: spentMain,
                     ),
                   ),
                 const SizedBox(height: 14),
@@ -300,7 +324,14 @@ class _OverdueBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = context.status.overdue;
-    final total = subs.fold(0.0, (sum, s) => sum + s.amount);
+    // Somme par devise — ex. "48 500 FCFA + 45 USD".
+    final byCurrency = <String, double>{};
+    for (final s in subs) {
+      byCurrency[s.currency] = (byCurrency[s.currency] ?? 0) + s.amount;
+    }
+    final totalText = byCurrency.entries
+        .map((e) => AppFormatters.money(e.value, e.key))
+        .join(' + ');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -314,7 +345,7 @@ class _OverdueBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${subs.length} échéance${subs.length > 1 ? 's' : ''} en retard — ${AppFormatters.money(total)}',
+              '${subs.length} échéance${subs.length > 1 ? 's' : ''} en retard — $totalText',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -339,6 +370,13 @@ class _BudgetCard extends StatefulWidget {
 }
 
 class _BudgetCardState extends State<_BudgetCard> {
+  /// Le budget est saisi dans la devise principale du workspace.
+  String get _mainCurrency => switch (context.read<AuthCubit>().state) {
+    Authenticated(user: final u) =>
+      u.workspace?.defaultCurrency ?? 'XAF',
+    _ => 'XAF',
+  };
+
   Future<void> _editBudget() async {
     final controller = TextEditingController(
       text: widget.budget > 0 ? widget.budget.round().toString() : '',
@@ -355,9 +393,9 @@ class _BudgetCardState extends State<_BudgetCard> {
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Montant',
-            suffixText: 'FCFA',
+            suffixText: _mainCurrency,
           ),
         ),
         actions: [
@@ -492,9 +530,12 @@ class _CategorySpend extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    final byCategory = <SubscriptionCategory, double>{};
+    // Regroupement (catégorie, devise) — une ligne par combinaison
+    // pour ne jamais fusionner FCFA et USD dans une même barre.
+    final byCategory = <(SubscriptionCategory, String), double>{};
     for (final s in items) {
-      byCategory[s.category] = (byCategory[s.category] ?? 0) + s.amount;
+      final key = (s.category, s.currency);
+      byCategory[key] = (byCategory[key] ?? 0) + s.amount;
     }
     final entries = byCategory.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -524,18 +565,18 @@ class _CategorySpend extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(e.key.icon, size: 15, color: e.key.color),
+                      Icon(e.key.$1.icon, size: 15, color: e.key.$1.color),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          e.key.label,
+                          e.key.$1.label,
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                       Text(
-                        AppFormatters.money(e.value),
+                        AppFormatters.money(e.value, e.key.$2),
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -551,7 +592,7 @@ class _CategorySpend extends StatelessWidget {
                       backgroundColor: scheme.outlineVariant.withValues(
                         alpha: 0.35,
                       ),
-                      color: e.key.color,
+                      color: e.key.$1.color,
                     ),
                   ),
                 ],
@@ -568,13 +609,20 @@ class _CategorySpend extends StatelessWidget {
 /// dégradé navy + accent émeraude.
 class _TotalCard extends StatelessWidget {
   const _TotalCard({
-    required this.total,
-    required this.spent,
+    required this.dueByCurrency,
+    required this.spentByCurrency,
+    required this.mainCurrency,
     required this.count,
   });
 
-  final double total;
-  final double spent;
+  /// Totaux par devise — ex. {XAF: 850000, USD: 45}.
+  /// On n'additionne JAMAIS deux devises ensemble.
+  final Map<String, double> dueByCurrency;
+  final Map<String, double> spentByCurrency;
+
+  /// Devise locale de l'utilisateur (workspace.defaultCurrency) —
+  /// les gros chiffres de la carte sont convertis dedans.
+  final String mainCurrency;
   final int count;
 
   @override
@@ -642,14 +690,22 @@ class _TotalCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      AppFormatters.money(spent),
+                    _ConvertedAmount(
+                      byCurrency: spentByCurrency,
+                      target: mainCurrency,
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       ),
                     ),
+                    if (spentByCurrency.length > 1)
+                      Text(
+                        _breakdown(spentByCurrency),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -670,14 +726,22 @@ class _TotalCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      AppFormatters.money(total),
+                    _ConvertedAmount(
+                      byCurrency: dueByCurrency,
+                      target: mainCurrency,
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       ),
                     ),
+                    if (dueByCurrency.length > 1)
+                      Text(
+                        _breakdown(dueByCurrency),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -734,7 +798,13 @@ class _ReminderDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = context.status.overdue;
-    final total = overdue.fold(0.0, (sum, s) => sum + s.amount);
+    final byCurrency = <String, double>{};
+    for (final s in overdue) {
+      byCurrency[s.currency] = (byCurrency[s.currency] ?? 0) + s.amount;
+    }
+    final totalText = byCurrency.entries
+        .map((e) => AppFormatters.money(e.value, e.key))
+        .join(' + ');
 
     return AlertDialog(
       shape: RoundedRectangleBorder(
@@ -759,7 +829,7 @@ class _ReminderDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '${overdue.length} échéance${overdue.length > 1 ? 's' : ''} en retard — ${AppFormatters.money(total)} au total.',
+            '${overdue.length} échéance${overdue.length > 1 ? 's' : ''} en retard — $totalText au total.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -782,7 +852,7 @@ class _ReminderDialog extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    AppFormatters.money(s.amount),
+                    AppFormatters.money(s.amount, s.currency),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -813,6 +883,58 @@ class _ReminderDialog extends StatelessWidget {
           child: const Text('Voir les échéances'),
         ),
       ],
+    );
+  }
+}
+
+/// Résumé multi-devises en petit : "850 000 FCFA + 45 $".
+String _breakdown(Map<String, double> byCurrency) => byCurrency.entries
+    .map((e) => AppFormatters.money(e.value, e.key))
+    .join(' + ');
+
+/// Montant converti dans la devise locale de l'utilisateur.
+/// Somme toutes les entrées APRÈS conversion (taux réels /rates/).
+/// Si la conversion est impossible (hors-ligne…), affiche la
+/// somme dans la devise cible uniquement — jamais de mélange.
+class _ConvertedAmount extends StatelessWidget {
+  const _ConvertedAmount({
+    required this.byCurrency,
+    required this.target,
+    this.style,
+  });
+
+  final Map<String, double> byCurrency;
+  final String target;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    if (byCurrency.isEmpty) {
+      return Text(AppFormatters.money(0, target), style: style);
+    }
+    if (byCurrency.length == 1) {
+      final e = byCurrency.entries.first;
+      return Text(AppFormatters.money(e.value, e.key), style: style);
+    }
+    return FutureBuilder<double>(
+      future: getIt<CurrencyConverter>().convertAll(
+        byCurrency.entries.map(
+          (e) => (amount: e.value, currency: e.key),
+        ),
+        target,
+      ),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          // Pendant le chargement : première devise seule,
+          // plutôt qu'un chiffre incertain.
+          final e = byCurrency.entries.first;
+          return Text(AppFormatters.money(e.value, e.key), style: style);
+        }
+        return Text(
+          AppFormatters.money(snapshot.data!, target),
+          style: style,
+        );
+      },
     );
   }
 }

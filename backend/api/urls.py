@@ -24,4 +24,15 @@ urlpatterns = [
         "subscriptions/<int:pk>/history/",
         views.PaymentHistoryView.as_view(),
     ),
+    path("subscriptions/bulk/", views.SubscriptionBulkCreateView.as_view()),
+    path("workspace/setup/", views.WorkspaceSetupView.as_view()),
+    path("invites/", views.InviteListCreateView.as_view()),
+    path("invites/accept/", views.InviteAcceptView.as_view()),
+    path("providers/catalog/", views.ProviderCatalogView.as_view()),
+    path("rates/", views.ExchangeRatesView.as_view()),
+    path("connectors/", views.ConnectorListView.as_view()),
+    path(
+        "connectors/<str:slug>/sync/",
+        views.ConnectorSyncView.as_view(),
+    ),
 ]

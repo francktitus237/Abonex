@@ -1,0 +1,74 @@
+name: Build APK de production
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  # URL du serveur de production embarquée dans l'APK.
+  API_BASE_URL: https://abonex.aiforge.world/api/v1
+
+jobs:
+  backend:
+    name: Backend — checks Django
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python manage.py check && python manage.py test api
+        working-directory: backend
+        env:
+          DJANGO_SECRET_KEY: ci-test-secret-key
+          DJANGO_DEBUG: "True"
+
+  apk:
+    name: Android — build APK release
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dépendances Flutter
+        run: flutter pub get
+        working-directory: mobile
+
+      - name: Code generation (freezed/json_serializable)
+        run: dart run build_runner build --delete-conflicting-outputs
+        working-directory: mobile
+
+      - name: Analyse statique
+        run: flutter analyze --no-fatal-infos
+        working-directory: mobile
+
+      - name: Tests unitaires
+        run: flutter test
+        working-directory: mobile
+
+      - name: Build APK release (production)
+        run: >
+          flutter build apk --release
+          --dart-define=API_BASE_URL=$API_BASE_URL
+          --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+        working-directory: mobile
+
+      - name: Publication de l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30

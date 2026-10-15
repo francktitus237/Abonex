@@ -15,12 +15,14 @@ import '../../features/subscriptions/data/datasources/subscription_remote_dataso
 import '../../features/subscriptions/data/repositories/subscription_repository_impl.dart';
 import '../../features/subscriptions/domain/repositories/subscription_repository.dart';
 import '../../features/subscriptions/presentation/cubit/subscriptions_cubit.dart';
+import '../../features/workspace/data/datasources/workspace_remote_datasource.dart';
 import '../network/dio_client.dart';
 import '../notifications/notification_service.dart';
 import '../router/app_router.dart';
 import '../security/biometric_service.dart';
 import '../storage/settings_storage.dart';
 import '../storage/token_storage.dart';
+import '../utils/currency_converter.dart';
 
 /// Service locator unique (get_it).
 /// Règle : TOUTES les dépendances sont enregistrées ici —
@@ -80,6 +82,15 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<SubscriptionsCubit>(
       () => SubscriptionsCubit(getIt()),
+    );
+
+  // ---------- Feature : workspace (setup, invites, connecteurs) ----------
+  getIt
+    ..registerLazySingleton<WorkspaceRemoteDataSource>(
+      () => WorkspaceRemoteDataSource(getIt()),
+    )
+    ..registerLazySingleton<CurrencyConverter>(
+      () => CurrencyConverter(getIt()),
     );
 
   // ---------- Feature : settings ----------

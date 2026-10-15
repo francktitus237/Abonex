@@ -12,6 +12,7 @@ abstract class SubscriptionRepository {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    String? currency,
     DateTime? startDate,
     DateTime? endDate,
   });

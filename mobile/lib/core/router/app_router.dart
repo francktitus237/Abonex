@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/domain/entities/user.dart';
 import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/auth/presentation/cubit/auth_state.dart';
+import '../../features/auth/presentation/pages/invite_accept_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
@@ -17,6 +18,8 @@ import '../../features/reports/presentation/pages/reports_page.dart';
 import '../../features/subscriptions/presentation/pages/subscription_detail_page.dart';
 import '../../features/subscriptions/presentation/pages/subscriptions_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
+import '../../features/workspace/presentation/pages/integrations_page.dart';
+import '../../features/workspace/presentation/pages/workspace_setup_page.dart';
 import '../storage/settings_storage.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/splash_page.dart';
@@ -28,6 +31,10 @@ abstract final class AppRoutes {
   static const onboarding = '/onboarding';
   static const login = '/login';
   static const register = '/register';
+  static const inviteAccept = '/invite';
+
+  /// Configuration de premier démarrage (pays, devises, invitations).
+  static const setup = '/setup';
   static const home = '/';
   static const subscriptions = '/subscriptions';
   static const calendar = '/calendar';
@@ -39,6 +46,9 @@ abstract final class AppRoutes {
 
   /// Centre de notifications in-app.
   static const notifications = '/notifications';
+
+  /// Import CSV / connexions aux comptes fournisseurs.
+  static const integrations = '/integrations';
 
   /// Détail d'un abonnement — `/subscriptions/42`.
   static String subscriptionDetail(String id) => '/subscriptions/$id';
@@ -63,8 +73,9 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
     refreshListenable: _AuthListenable(authCubit),
     redirect: (context, state) {
       final location = state.matchedLocation;
-      final onPublicAuth =
-          location == AppRoutes.login || location == AppRoutes.register;
+      final onPublicAuth = location == AppRoutes.login ||
+          location == AppRoutes.register ||
+          location == AppRoutes.inviteAccept;
       final onOnboarding = location == AppRoutes.onboarding;
 
       return switch (authCubit.state) {
@@ -85,7 +96,15 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
           return AppRoutes.login;
         }(),
         Authenticated(user: final user) => () {
-          if (onPublicAuth || onOnboarding || location == AppRoutes.splash) {
+          // Premier démarrage : workspace non configuré → setup forcé.
+          final needsSetup = !(user.workspace?.configured ?? true);
+          if (needsSetup) {
+            return location == AppRoutes.setup ? null : AppRoutes.setup;
+          }
+          if (location == AppRoutes.setup ||
+              onPublicAuth ||
+              onOnboarding ||
+              location == AppRoutes.splash) {
             return AppRoutes.home;
           }
           // Guard par rôle, exigence CDC.
@@ -110,6 +129,14 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.register,
         builder: (_, _) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.inviteAccept,
+        builder: (_, _) => const InviteAcceptPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.setup,
+        builder: (_, _) => const WorkspaceSetupPage(),
       ),
 
       // --- Shell à 5 onglets (l'état de chaque branche est préservé) ---
@@ -175,6 +202,10 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (_, _) => const NotificationsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.integrations,
+        builder: (_, _) => const IntegrationsPage(),
       ),
     ],
   );

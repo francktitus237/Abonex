@@ -48,6 +48,21 @@ extension UserRoleX on UserRole {
   bool get isReadOnly => this == UserRole.viewer;
 }
 
+/// Espace de travail — configuration pays/devises du compte.
+@freezed
+abstract class Workspace with _$Workspace {
+  const Workspace._();
+
+  const factory Workspace({
+    required String id,
+    String? name,
+    String? country,
+    String? defaultCurrency,
+    @Default([]) List<String> extraCurrencies,
+    @Default(false) bool configured,
+  }) = _Workspace;
+}
+
 /// Utilisateur authentifié — entité du domaine, indépendante du JSON.
 @freezed
 abstract class User with _$User {
@@ -59,6 +74,8 @@ abstract class User with _$User {
     required UserRole role,
     String? firstName,
     String? lastName,
+    String? language,
+    Workspace? workspace,
   }) = _User;
 
   String get fullName => [

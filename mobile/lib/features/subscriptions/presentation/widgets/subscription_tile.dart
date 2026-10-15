@@ -96,7 +96,7 @@ class SubscriptionTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                AppFormatters.money(sub.amount),
+                AppFormatters.money(sub.amount, sub.currency),
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),

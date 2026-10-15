@@ -33,6 +33,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required double amount,
     required DateTime nextDueDate,
     required BillingCycle cycle,
+    String? currency,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
@@ -47,7 +48,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'next_due_date': nextDueDate.toIso8601String().substring(0, 10),
           'end_date': endDate?.toIso8601String().substring(0, 10),
           'cycle': cycle.name,
-          'currency': 'XAF',
+          'currency': currency ?? 'XAF',
         }),
       );
     } on DioException catch (e) {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_router.dart';
 
 import '../../../../core/utils/formatters.dart';
@@ -11,6 +12,9 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../auth/presentation/cubit/auth_state.dart';
+import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 import '../../domain/entities/subscription.dart';
 import '../cubit/subscriptions_cubit.dart';
 import '../widgets/subscription_tile.dart';
@@ -41,6 +45,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       appBar: AppBar(
         title: const Text('Abonnements'),
         actions: [
+          IconButton(
+            tooltip: 'Import & intégrations',
+            onPressed: () => context.push(AppRoutes.integrations),
+            icon: const Icon(LucideIcons.plugZap, size: 20),
+          ),
           IconButton(
             tooltip: 'Notifications',
             onPressed: () => context.push(AppRoutes.notifications),
@@ -282,6 +291,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   final _amount = TextEditingController();
   SubscriptionCategory _category = SubscriptionCategory.software;
   BillingCycle _cycle = BillingCycle.monthly;
+  // Devise de l'abonnement — pré-remplie avec la devise principale
+  // du workspace, modifiable (un compte peut suivre EUR + FCFA).
+  String _currency = 'XAF';
+  // Suggestions de fournisseurs selon le pays du workspace.
+  List<Map<String, dynamic>> _providerSuggestions = [];
   // Date de la PREMIÈRE échéance — peut être dans le passé
   // (ex. serveur loué dimanche, saisi mercredi) : la prochaine
   // échéance est alors calculée automatiquement.
@@ -291,6 +305,41 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   // Fin de contrat éventuelle — null = sans fin.
   DateTime? _endDate;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Devise principale du workspace comme défaut intelligent.
+    final workspace = switch (context.read<AuthCubit>().state) {
+      Authenticated(user: final u) => u.workspace,
+      _ => null,
+    };
+    if (workspace?.defaultCurrency?.isNotEmpty ?? false) {
+      _currency = workspace!.defaultCurrency!;
+    }
+    // Fournisseurs connus du pays → autocomplétion du champ.
+    getIt<WorkspaceRemoteDataSource>()
+        .providerCatalog()
+        .then((list) {
+          if (mounted) setState(() => _providerSuggestions = list);
+        })
+        .onError((_, _) {});
+  }
+
+  /// Devises proposées : principale + secondaires du workspace.
+  List<String> get _currencies {
+    final workspace = switch (context.read<AuthCubit>().state) {
+      Authenticated(user: final u) => u.workspace,
+      _ => null,
+    };
+    final list = <String>{
+      if (workspace?.defaultCurrency?.isNotEmpty ?? false)
+        workspace!.defaultCurrency!,
+      ...?workspace?.extraCurrencies,
+      'XAF', 'EUR', 'USD',
+    }.toList();
+    return list;
+  }
 
   @override
   void dispose() {
@@ -371,6 +420,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
           0,
       nextDueDate: _nextDue,
       cycle: _cycle,
+      currency: _currency,
       startDate: _startDate,
       endDate: _endDate,
     );
@@ -427,14 +477,41 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 validator: _required,
               ),
               const SizedBox(height: 14),
-              TextFormField(
-                controller: _provider,
-                decoration: const InputDecoration(
-                  labelText: 'Fournisseur',
-                  hintText: 'Ex. ENEO, Orange…',
-                  prefixIcon: Icon(LucideIcons.building2, size: 20),
-                ),
-                validator: _required,
+              // Fournisseur avec suggestions adaptées au pays
+              // (ENEO/Camwater pour le Cameroun, EDF pour la France…).
+              Autocomplete<Map<String, dynamic>>(
+                displayStringForOption: (o) => o['name'] as String,
+                optionsBuilder: (value) {
+                  final q = value.text.toLowerCase();
+                  if (q.isEmpty) return _providerSuggestions;
+                  return _providerSuggestions.where(
+                    (p) => (p['name'] as String)
+                        .toLowerCase()
+                        .contains(q),
+                  );
+                },
+                onSelected: (option) {
+                  _provider.text = option['name'] as String;
+                  final cat = option['category'] as String?;
+                  if (cat != null) {
+                    setState(
+                      () => _category = SubscriptionCategory.parse(cat),
+                    );
+                  }
+                },
+                fieldViewBuilder: (context, controller, focus, _) {
+                  controller.addListener(() => _provider.text = controller.text);
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focus,
+                    decoration: const InputDecoration(
+                      labelText: 'Fournisseur',
+                      hintText: 'Ex. ENEO, OVH, EDF…',
+                      prefixIcon: Icon(LucideIcons.building2, size: 20),
+                    ),
+                    validator: _required,
+                  );
+                },
               ),
               const SizedBox(height: 14),
               Row(
@@ -443,10 +520,25 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     child: TextFormField(
                       controller: _amount,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Montant',
-                        suffixText: 'FCFA',
-                        prefixIcon: Icon(LucideIcons.banknote, size: 20),
+                        prefixIcon:
+                            const Icon(LucideIcons.banknote, size: 20),
+                        suffixIcon: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _currency,
+                            items: _currencies
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _currency = v!),
+                          ),
+                        ),
                       ),
                       validator: (v) =>
                           (double.tryParse(

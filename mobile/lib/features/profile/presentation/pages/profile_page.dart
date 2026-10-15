@@ -96,6 +96,16 @@ class _ProfileView extends StatelessWidget {
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.users),
                 ),
+                const Divider(indent: 56),
+                ListTile(
+                  leading: _TileIcon(icon: LucideIcons.plugZap),
+                  title: const Text('Import & intégrations'),
+                  subtitle: const Text(
+                    'Fichier CSV, comptes OVH/IONOS connectés',
+                  ),
+                  trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                  onTap: () => context.push(AppRoutes.integrations),
+                ),
               ],
             ),
           ),

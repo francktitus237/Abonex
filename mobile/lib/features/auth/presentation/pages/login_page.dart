@@ -199,6 +199,10 @@ class _LoginViewState extends State<_LoginView> {
                           ),
                         ],
                       ),
+                      TextButton(
+                        onPressed: () => context.go('/invite'),
+                        child: const Text('J\'ai une invitation'),
+                      ),
                       const SizedBox(height: 16),
 
                       // --- Mention de confiance ---

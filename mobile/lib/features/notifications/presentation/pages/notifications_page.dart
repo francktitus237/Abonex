@@ -58,7 +58,7 @@ class NotificationsPage extends StatelessWidget {
                     subscription: s,
                     title: 'Échéance dépassée',
                     body:
-                        '${AppFormatters.money(s.amount)} — attendue le ${AppFormatters.dateLong(s.nextDueDate)}',
+                        '${AppFormatters.money(s.amount, s.currency)} — attendue le ${AppFormatters.dateLong(s.nextDueDate)}',
                     color: context.status.overdue,
                     icon: LucideIcons.circleAlert,
                   ),
@@ -76,7 +76,7 @@ class NotificationsPage extends StatelessWidget {
                     subscription: s,
                     title: _dueIn(s),
                     body:
-                        '${AppFormatters.money(s.amount)} — ${s.provider}',
+                        '${AppFormatters.money(s.amount, s.currency)} — ${s.provider}',
                     color: context.status.dueSoon,
                     icon: LucideIcons.bellRing,
                   ),
