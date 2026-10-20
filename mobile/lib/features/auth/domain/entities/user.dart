@@ -38,6 +38,15 @@ extension UserRoleX on UserRole {
     UserRole.viewer => 'Lecteur',
   };
 
+  /// Clé de traduction (voir core/l10n/app_strings.dart) :
+  /// context.tr(role.labelKey) donne le libellé dans la langue courante.
+  String get labelKey => switch (this) {
+    UserRole.owner => 'role.owner',
+    UserRole.manager => 'role.manager',
+    UserRole.assistant => 'role.assistant',
+    UserRole.viewer => 'role.viewer',
+  };
+
   bool get canManageUsers => this == UserRole.owner;
 
   bool get canEditFinancials =>

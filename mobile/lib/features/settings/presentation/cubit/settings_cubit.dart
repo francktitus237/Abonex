@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/security/biometric_service.dart';
 import '../../../../core/storage/settings_storage.dart';
+import '../../../../core/utils/formatters.dart';
 import 'settings_state.dart';
 
 /// Cubit des réglages : lit les préférences au démarrage,
@@ -16,7 +17,10 @@ class SettingsCubit extends Cubit<SettingsState> {
           locale: _storage.locale,
           biometricEnabled: _storage.biometricEnabled,
         ),
-      );
+      ) {
+    // Les formatters (dates, "Dans 3 j"…) suivent la langue choisie.
+    AppFormatters.lang = _storage.locale.languageCode;
+  }
 
   final SettingsStorage _storage;
   final BiometricService _biometric;
@@ -29,6 +33,8 @@ class SettingsCubit extends Cubit<SettingsState> {
   }
 
   Future<void> setLocale(Locale locale) async {
+    // AVANT l'émission : les widgets reconstruits lisent déjà la bonne langue.
+    AppFormatters.lang = locale.languageCode;
     emit(state.copyWith(locale: locale));
     await _storage.setLocale(locale);
   }

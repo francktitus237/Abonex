@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-not-secret-change-in-prod")
 if DEBUG:
-    # En dev on accepte le réseau local (téléphone en Wi-Fi/hotspot).
+    # En dev on accepte le réseau local (téléphone en Wi-Fi/hotspot).ALLOWED_HOSTS = ["*"]
     ALLOWED_HOSTS = ["*"]
 else:
     ALLOWED_HOSTS = [

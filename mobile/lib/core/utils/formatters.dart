@@ -1,8 +1,14 @@
 import 'package:intl/intl.dart';
 
-/// Formatage unique de l'app — montants en FCFA, dates en français.
+import '../l10n/app_strings.dart';
+
+/// Formatage unique de l'app — montants en FCFA, dates FR/EN.
 /// Hand-roll pour les dates : pas de `initializeDateFormatting` requis.
 abstract final class AppFormatters {
+  /// Langue courante ('fr' | 'en'). Mise à jour par SettingsCubit
+  /// au démarrage et à chaque changement de langue.
+  static String lang = 'fr';
+
   /// Symboles par code ISO 4217 — couvre les devises des pays cibles.
   static const _symbols = {
     'XAF': 'FCFA', 'XOF': 'FCFA', 'EUR': '€', 'USD': '\$',
@@ -22,41 +28,60 @@ abstract final class AppFormatters {
     ).format(value);
   }
 
-  static const _months = [
+  static const _monthsFr = [
     'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
     'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
   ];
+  static const _monthsEn = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
 
-  static const _monthsLong = [
+  static const _monthsLongFr = [
     'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
     'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
   ];
-
-  static const _weekdays = [
-    'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+  static const _monthsLongEn = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
 
-  /// ex. `12 mars`
-  static String dateShort(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+  static const _weekdaysFr = [
+    'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+  ];
+  static const _weekdaysEn = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    'Sunday',
+  ];
 
-  /// ex. `lundi 12 mars`
-  static String dateLong(DateTime d) =>
-      '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}';
+  static bool get _en => lang == 'en';
 
-  static String monthYear(DateTime d) =>
-      '${_monthsLong[d.month - 1]} ${d.year}';
+  /// FR `12 mars` · EN `Mar 12`
+  static String dateShort(DateTime d) => _en
+      ? '${_monthsEn[d.month - 1]} ${d.day}'
+      : '${d.day} ${_monthsFr[d.month - 1]}';
 
-  /// "Dans 3 j" / "Aujourd'hui" / "En retard de 2 j"
+  /// FR `lundi 12 mars` · EN `Monday, Mar 12`
+  static String dateLong(DateTime d) => _en
+      ? '${_weekdaysEn[d.weekday - 1]}, ${_monthsEn[d.month - 1]} ${d.day}'
+      : '${_weekdaysFr[d.weekday - 1]} ${d.day} ${_monthsFr[d.month - 1]}';
+
+  /// FR `mars 2026` · EN `March 2026`
+  static String monthYear(DateTime d) => _en
+      ? '${_monthsLongEn[d.month - 1]} ${d.year}'
+      : '${_monthsLongFr[d.month - 1]} ${d.year}';
+
+  /// "Dans 3 j" / "Aujourd'hui" / "En retard de 2 j" (ou équivalent EN)
   static String relativeDay(DateTime d) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final day = DateTime(d.year, d.month, d.day);
     final diff = day.difference(today).inDays;
     return switch (diff) {
-      0 => "Aujourd'hui",
-      1 => 'Demain',
-      < 0 => 'En retard de ${-diff} j',
-      _ => 'Dans $diff j',
+      0 => AppStrings.t(lang, 'date.today'),
+      1 => AppStrings.t(lang, 'date.tomorrow'),
+      < 0 => AppStrings.t(lang, 'date.late', {'n': '${-diff}'}),
+      _ => AppStrings.t(lang, 'date.in', {'n': '$diff'}),
     };
   }
 }

@@ -5,7 +5,7 @@ abstract final class Env {
   ///
   /// Défaut : 10.0.2.2 = le localhost de ta machine vu depuis
   /// l'émulateur Android. Pour un téléphone physique ou la prod :
-  /// `flutter run --dart-define=API_BASE_URL=https://api.abonex.com/api/v1`
+  /// `flutter run --dart-define=API_BASE_URL=https://api.abonex.com/api/v1`,'http://10.0.2.2:8000/api/v1'
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8000/api/v1',

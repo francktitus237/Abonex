@@ -15,6 +15,7 @@ Future<void> main() async {
 
   // Formats de date/nombre en français (intl) — affichage Africa/Douala.
   await initializeDateFormatting('fr');
+  await initializeDateFormatting('en');
 
   // Injection de dépendances : stockage, réseau, repositories, cubits, router.
   await configureDependencies();

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../di/injection.dart';
+import '../l10n/app_strings.dart';
 import '../storage/settings_storage.dart';
 
 /// Coquille de navigation basse — les 5 onglets du cahier des charges :
@@ -24,11 +25,11 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   static const _items = [
-    (icon: LucideIcons.house, label: 'Accueil'),
-    (icon: LucideIcons.repeat, label: 'Abonnements'),
-    (icon: LucideIcons.calendar, label: 'Calendrier'),
-    (icon: LucideIcons.chartColumn, label: 'Rapports'),
-    (icon: LucideIcons.user, label: 'Profil'),
+    (icon: LucideIcons.house, label: 'nav.home'),
+    (icon: LucideIcons.repeat, label: 'nav.subscriptions'),
+    (icon: LucideIcons.calendar, label: 'nav.calendar'),
+    (icon: LucideIcons.chartColumn, label: 'nav.reports'),
+    (icon: LucideIcons.user, label: 'nav.profile'),
   ];
 
   @override
@@ -95,7 +96,7 @@ class _AppShellState extends State<AppShell> {
                 for (var i = 0; i < _items.length; i++)
                   _NavItem(
                     icon: _items[i].icon,
-                    label: _items[i].label,
+                    label: context.tr(_items[i].label),
                     selected: i == widget.shell.currentIndex,
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -132,21 +133,18 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
   static const _steps = [
     (
       icon: LucideIcons.layoutDashboard,
-      title: 'Votre tableau de bord',
-      description:
-          'Retrouvez immédiatement votre budget, vos dépenses et vos prochaines échéances.',
+      title: 'guide.1.title',
+      description: 'guide.1.desc',
     ),
     (
       icon: LucideIcons.circlePlus,
-      title: 'Ajoutez un abonnement',
-      description:
-          'Ouvrez l’onglet Abonnements puis utilisez le bouton Ajouter pour commencer votre suivi.',
+      title: 'guide.2.title',
+      description: 'guide.2.desc',
     ),
     (
       icon: LucideIcons.calendarCheck,
-      title: 'Gardez une longueur d’avance',
-      description:
-          'Le calendrier et les rapports vous aident à anticiper chaque paiement.',
+      title: 'guide.3.title',
+      description: 'guide.3.desc',
     ),
   ];
 
@@ -193,7 +191,7 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
-                    'PRISE EN MAIN',
+                    context.tr('guide.badge'),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w800,
@@ -204,7 +202,7 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Passer'),
+                  child: Text(context.tr('guide.skip')),
                 ),
               ],
             ),
@@ -245,7 +243,7 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          step.title,
+                          context.tr(step.title),
                           textAlign: TextAlign.center,
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w800,
@@ -253,7 +251,7 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          step.description,
+                          context.tr(step.description),
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
@@ -297,7 +295,7 @@ class _FirstLoginGuideState extends State<_FirstLoginGuide> {
                 }
               },
               icon: Icon(last ? LucideIcons.check : LucideIcons.arrowRight),
-              label: Text(last ? 'Explorer Abonex' : 'Continuer'),
+              label: Text(context.tr(last ? 'guide.done' : 'guide.next')),
             ),
           ],
         ),

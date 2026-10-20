@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -24,7 +25,7 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil')),
+      appBar: AppBar(title: Text(context.tr('profile.title'))),
       body: BlocBuilder<AuthCubit, AuthState>(
         builder: (context, state) {
           return switch (state) {
@@ -55,9 +56,9 @@ class _ProfileView extends StatelessWidget {
         const SizedBox(height: 28),
 
         // ---------- Préférences ----------
-        const AnimatedFadeIn(
-          delay: Duration(milliseconds: 80),
-          child: _SectionTitle('Préférences'),
+        AnimatedFadeIn(
+          delay: const Duration(milliseconds: 80),
+          child: _SectionTitle(context.tr('profile.preferences')),
         ),
         const SizedBox(height: 10),
         AnimatedFadeIn(
@@ -81,9 +82,9 @@ class _ProfileView extends StatelessWidget {
         // Le CDC : Flutter MASQUE l'interface, Django refuse côté serveur.
         if (user.role.canManageUsers) ...[
           const SizedBox(height: 28),
-          const AnimatedFadeIn(
-            delay: Duration(milliseconds: 160),
-            child: _SectionTitle('Administration'),
+          AnimatedFadeIn(
+            delay: const Duration(milliseconds: 160),
+            child: _SectionTitle(context.tr('profile.admin')),
           ),
           const SizedBox(height: 10),
           AnimatedFadeIn(
@@ -92,18 +93,16 @@ class _ProfileView extends StatelessWidget {
               children: [
                 ListTile(
                   leading: _TileIcon(icon: LucideIcons.users),
-                  title: const Text('Utilisateurs & rôles'),
-                  subtitle: const Text('Inviter, changer les droits'),
+                  title: Text(context.tr('profile.users')),
+                  subtitle: Text(context.tr('profile.usersSub')),
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.users),
                 ),
                 const Divider(indent: 56),
                 ListTile(
                   leading: _TileIcon(icon: LucideIcons.plugZap),
-                  title: const Text('Import & intégrations'),
-                  subtitle: const Text(
-                    'Fichier CSV, comptes OVH/IONOS connectés',
-                  ),
+                  title: Text(context.tr('profile.integrations')),
+                  subtitle: Text(context.tr('profile.integrationsSub')),
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.integrations),
                 ),
@@ -125,7 +124,7 @@ class _ProfileView extends StatelessWidget {
               color: theme.colorScheme.error,
             ),
             label: Text(
-              'Se déconnecter',
+              context.tr('profile.logout'),
               style: TextStyle(color: theme.colorScheme.error),
             ),
             style: OutlinedButton.styleFrom(
@@ -201,7 +200,7 @@ class _IdentityCard extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Modifier le profil',
+            tooltip: context.tr('profile.edit'),
             onPressed: () => _showEditProfileSheet(context, user),
             icon: Icon(
               LucideIcons.pencil,
@@ -243,7 +242,7 @@ class _IdentityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Modifier le profil',
+                  context.tr('profile.edit'),
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -251,16 +250,16 @@ class _IdentityCard extends StatelessWidget {
                 const SizedBox(height: 20),
                 TextField(
                   controller: firstName,
-                  decoration: const InputDecoration(
-                    labelText: 'Prénom',
+                  decoration: InputDecoration(
+                    labelText: context.tr('profile.firstName'),
                     prefixIcon: Icon(LucideIcons.user, size: 20),
                   ),
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: lastName,
-                  decoration: const InputDecoration(
-                    labelText: 'Nom',
+                  decoration: InputDecoration(
+                    labelText: context.tr('profile.lastName'),
                     prefixIcon: Icon(LucideIcons.userRound, size: 20),
                   ),
                 ),
@@ -289,10 +288,10 @@ class _IdentityCard extends StatelessWidget {
                             style: ToastificationStyle.flat,
                             title: Text(
                               result is Ok
-                                  ? 'Profil mis à jour.'
+                                  ? context.tr('profile.updated')
                                   : switch (result) {
                                       Err(failure: final f) => f.message,
-                                      _ => 'Erreur inattendue.',
+                                      _ => context.tr('profile.unexpected'),
                                     },
                             ),
                             autoCloseDuration: const Duration(seconds: 3),
@@ -305,7 +304,7 @@ class _IdentityCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(LucideIcons.check, size: 19),
-                  label: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+                  label: Text(context.tr(saving ? 'profile.saving' : 'profile.save')),
                 ),
               ],
             ),
@@ -341,7 +340,7 @@ class _RoleChip extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            role.label,
+            context.tr(role.labelKey),
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w600,
@@ -428,7 +427,7 @@ class _ThemeModeTile extends StatelessWidget {
       builder: (context, settings) {
         return ListTile(
           leading: _TileIcon(icon: LucideIcons.sunMoon),
-          title: const Text('Thème'),
+          title: Text(context.tr('settings.theme')),
           trailing: SegmentedButton<ThemeMode>(
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
@@ -464,7 +463,7 @@ class _LanguageTile extends StatelessWidget {
       builder: (context, settings) {
         return ListTile(
           leading: _TileIcon(icon: LucideIcons.languages),
-          title: const Text('Langue'),
+          title: Text(context.tr('settings.language')),
           trailing: SegmentedButton<String>(
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
@@ -473,8 +472,12 @@ class _LanguageTile extends StatelessWidget {
               ButtonSegment(value: 'en', label: Text('EN')),
             ],
             selected: {settings.locale.languageCode},
-            onSelectionChanged: (codes) =>
-                context.read<SettingsCubit>().setLocale(Locale(codes.first)),
+            onSelectionChanged: (codes) {
+              final code = codes.first;
+              context.read<SettingsCubit>().setLocale(Locale(code));
+              // Garde la langue du profil serveur alignée (best effort).
+              context.read<AuthCubit>().updateProfile(language: code);
+            },
           ),
         );
       },
@@ -490,8 +493,8 @@ class _BiometricTile extends StatelessWidget {
       builder: (context, settings) {
         return SwitchListTile(
           secondary: _TileIcon(icon: LucideIcons.fingerprint),
-          title: const Text('Verrouillage biométrique'),
-          subtitle: const Text('Empreinte ou Face ID à l\'ouverture'),
+          title: Text(context.tr('settings.biometric')),
+          subtitle: Text(context.tr('settings.biometricSub')),
           value: settings.biometricEnabled,
           onChanged: (enabled) async {
             final applied = await context
@@ -503,9 +506,7 @@ class _BiometricTile extends StatelessWidget {
                 context: context,
                 type: ToastificationType.warning,
                 style: ToastificationStyle.flat,
-                title: const Text(
-                  'Biométrie indisponible ou vérification annulée.',
-                ),
+                title: Text(context.tr('settings.biometricUnavailable')),
                 autoCloseDuration: const Duration(seconds: 3),
               );
             }
@@ -530,8 +531,8 @@ class _SoundAlertsTileState extends State<_SoundAlertsTile> {
   Widget build(BuildContext context) {
     return SwitchListTile(
       secondary: _TileIcon(icon: LucideIcons.bellRing),
-      title: const Text('Rappels sonores'),
-      subtitle: const Text('Alarme plein écran le jour de l\'échéance'),
+      title: Text(context.tr('settings.sound')),
+      subtitle: Text(context.tr('settings.soundSub')),
       value: _enabled,
       onChanged: (value) async {
         await getIt<SettingsStorage>().setSoundAlerts(value);
@@ -554,11 +555,12 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
   late List<int> _days = getIt<SettingsStorage>().reminderDays;
   late int _hour = getIt<SettingsStorage>().reminderHour;
 
-  String get _summary {
-    final parts = _days
-        .map((d) => d == 0 ? 'J' : 'J-$d')
-        .toList();
-    return '${parts.join(', ')} à ${_hour}h';
+  String _summary(BuildContext context) {
+    final parts = _days.map((d) => d == 0 ? 'J' : 'J-$d').toList();
+    return context.tr('reminder.summary', {
+      'days': parts.join(', '),
+      'hour': '$_hour',
+    });
   }
 
   Future<void> _configure() async {
@@ -570,13 +572,13 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
         builder: (ctx, setDialog) {
           final theme = Theme.of(ctx);
           return AlertDialog(
-            title: const Text('Rappels d\'échéance'),
+            title: Text(ctx.tr('reminder.title')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Me rappeler :',
+                  ctx.tr('reminder.remindMe'),
                   style: theme.textTheme.labelLarge,
                 ),
                 const SizedBox(height: 10),
@@ -586,7 +588,7 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
                   children: [
                     for (final d in _choices)
                       FilterChip(
-                        label: Text(d == 0 ? 'Le jour J' : 'J-$d'),
+                        label: Text(d == 0 ? ctx.tr('reminder.dayJ') : 'J-$d'),
                         selected: days.contains(d),
                         showCheckmark: false,
                         onSelected: (on) => setDialog(() {
@@ -596,7 +598,10 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
                   ],
                 ),
                 const SizedBox(height: 18),
-                Text('Heure du rappel :', style: theme.textTheme.labelLarge),
+                Text(
+                  ctx.tr('reminder.hour'),
+                  style: theme.textTheme.labelLarge,
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
@@ -623,7 +628,7 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Choisissez au moins un rappel.',
+                      ctx.tr('reminder.atLeastOne'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.error,
                       ),
@@ -634,13 +639,13 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Annuler'),
+                child: Text(ctx.tr('common.cancel')),
               ),
               FilledButton(
                 onPressed: days.isEmpty
                     ? null
                     : () => Navigator.of(ctx).pop(true),
-                child: const Text('Enregistrer'),
+                child: Text(ctx.tr('profile.save')),
               ),
             ],
           );
@@ -661,8 +666,8 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
   Widget build(BuildContext context) {
     return ListTile(
       leading: _TileIcon(icon: LucideIcons.alarmClock),
-      title: const Text('Rappels d\'échéance'),
-      subtitle: Text(_summary),
+      title: Text(context.tr('reminder.title')),
+      subtitle: Text(_summary(context)),
       trailing: const Icon(LucideIcons.chevronRight, size: 18),
       onTap: _configure,
     );

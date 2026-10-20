@@ -5,6 +5,8 @@ from .models import Payment, Subscription, Workspace
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(read_only=True)
+
     class Meta:
         model = Workspace
         fields = [
