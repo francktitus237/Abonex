@@ -144,7 +144,11 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     );
     if (result case Ok(value: final created)) {
       final current = state.subscriptions ?? [];
-      emit(SubscriptionsLoaded([...current, created]));
+      final next = [...current, created];
+      emit(SubscriptionsLoaded(next));
+      unawaited(
+        getIt<NotificationService>().scheduleDueReminders(next),
+      );
     }
     return result;
   }
@@ -184,10 +188,12 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     );
     if (result case Ok(value: final updated)) {
       final current = state.subscriptions ?? [];
-      emit(
-        SubscriptionsLoaded([
-          for (final s in current) s.id == updated.id ? updated : s,
-        ]),
+      final next = [
+        for (final s in current) s.id == updated.id ? updated : s,
+      ];
+      emit(SubscriptionsLoaded(next));
+      unawaited(
+        getIt<NotificationService>().scheduleDueReminders(next),
       );
     }
     return result;

@@ -618,6 +618,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 Row(
                 children: [
                   Expanded(
+                    flex: 3,
                     child: TextFormField(
                       controller: _amount,
                       keyboardType: TextInputType.number,
@@ -653,8 +654,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    flex: 2,
                     child: DropdownButtonFormField<BillingCycle>(
                       initialValue: _cycle,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Cycle'),
                       items: BillingCycle.values
                           .map(
@@ -667,6 +670,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                                   BillingCycle.yearly => 'Annuel',
                                   BillingCycle.once => 'Une seule fois',
                                 },
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           )

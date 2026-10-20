@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -8,9 +11,24 @@ import '../di/injection.dart';
 import '../storage/settings_storage.dart';
 import '../utils/formatters.dart';
 
+/// Action sur l'alarme de rendez-vous reçue hors de l'app (app
+/// fermée ou en arrière-plan) : exécutée dans un isolate dédié,
+/// d'où l'annotation et l'initialisation locale du fuseau horaire.
+@pragma('vm:entry-point')
+Future<void> onBackgroundNotificationResponse(NotificationResponse r) async {
+  if (r.actionId != NotificationService.actionSnooze) return;
+  tz_data.initializeTimeZones();
+  try {
+    final zone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(zone.identifier));
+  } catch (_) {}
+  await NotificationService.snoozeFromPayload(r.payload);
+}
+
 /// Rappels locaux d'échéances (CDC : anticiper chaque paiement).
 /// Une notification est programmée 3 jours avant + le jour J
-/// pour chaque abonnement "À venir".
+/// pour chaque abonnement "À venir". Les rendez-vous déclenchent
+/// en plus une ALARME exacte à l'heure prévue.
 class NotificationService {
   NotificationService();
 
@@ -28,6 +46,26 @@ class NotificationService {
   static const _urgentChannelName = 'Alarmes d\'échéance';
   static const _urgentChannelDesc =
       'Rappels plein écran avec sonnerie pour les paiements du jour.';
+
+  // Canal dédié aux rendez-vous : sonnerie d'alarme en boucle
+  // jusqu'à ce que l'utilisateur arrête ou repousse.
+  static const _eventChannelId = 'abonex_event_alarm';
+  static const _eventChannelName = 'Alarmes de rendez-vous';
+  static const _eventChannelDesc =
+      'Sonne à l\'heure exacte du rendez-vous jusqu\'à arrêt ou report.';
+
+  static const actionStop = 'stop';
+  static const actionSnooze = 'snooze';
+  static const _snoozeDuration = Duration(minutes: 10);
+
+  // Plages d'identifiants : rappels classiques 0-59, hebdo 999,
+  // alarmes de RDV 1000-1999, reports (snooze) 2000-2999.
+  static const _eventIdBase = 1000;
+  static const _snoozeIdBase = 2000;
+  static const _idRange = 1000;
+
+  // FLAG_INSISTENT : le son se répète jusqu'à fermeture.
+  static final _insistent = Int32List.fromList(const <int>[4]);
 
   static const _notificationDetails = NotificationDetails(
     android: AndroidNotificationDetails(
@@ -73,6 +111,47 @@ class NotificationService {
     ),
   );
 
+  static final _eventAlarmDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _eventChannelId,
+      _eventChannelName,
+      channelDescription: _eventChannelDesc,
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      enableVibration: true,
+      fullScreenIntent: true,
+      ongoing: true,
+      autoCancel: false,
+      category: AndroidNotificationCategory.alarm,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      visibility: NotificationVisibility.public,
+      additionalFlags: _insistent,
+      actions: const [
+        AndroidNotificationAction(
+          actionSnooze,
+          'Repousser 10 min',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        AndroidNotificationAction(
+          actionStop,
+          'Arrêter',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+      ],
+    ),
+    iOS: const DarwinNotificationDetails(
+      presentAlert: true,
+      presentBanner: true,
+      presentBadge: true,
+      presentSound: true,
+      categoryIdentifier: _eventChannelId,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    ),
+  );
+
   Future<void> init() async {
     if (_initialized) return;
     tz_data.initializeTimeZones();
@@ -80,14 +159,33 @@ class NotificationService {
     tz.setLocalLocation(tz.getLocation(localZone.identifier));
 
     await _plugin.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      settings: InitializationSettings(
+        android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,
           requestSoundPermission: false,
+          notificationCategories: [
+            DarwinNotificationCategory(
+              _eventChannelId,
+              actions: [
+                DarwinNotificationAction.plain(
+                  actionSnooze,
+                  'Repousser 10 min',
+                ),
+                DarwinNotificationAction.plain(
+                  actionStop,
+                  'Arrêter',
+                  options: {DarwinNotificationActionOption.destructive},
+                ),
+              ],
+            ),
+          ],
         ),
       ),
+      onDidReceiveNotificationResponse: _onResponse,
+      onDidReceiveBackgroundNotificationResponse:
+          onBackgroundNotificationResponse,
     );
     final android = _plugin
         .resolvePlatformSpecificImplementation<
@@ -113,9 +211,22 @@ class NotificationService {
         enableVibration: true,
       ),
     );
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _eventChannelId,
+        _eventChannelName,
+        description: _eventChannelDesc,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+      ),
+    );
     await android?.requestNotificationsPermission();
     // Demande l'autorisation plein écran (rappel type alarme).
     await android?.requestFullScreenIntentPermission();
+    // Alarme à l'heure exacte du rendez-vous (Android 12+).
+    await android?.requestExactAlarmsPermission();
     await _plugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
@@ -124,11 +235,24 @@ class NotificationService {
     _initialized = true;
   }
 
+  /// Action sur l'alarme quand l'app est au premier plan.
+  Future<void> _onResponse(NotificationResponse r) async {
+    if (r.actionId == actionSnooze) await snoozeFromPayload(r.payload);
+  }
+
   /// Replanifie tous les rappels à chaque chargement de la liste :
   /// simple et toujours cohérent avec l'état serveur.
   Future<void> scheduleDueReminders(List<Subscription> subs) async {
     if (!_initialized) return;
-    await _plugin.cancelAll();
+    // On ne touche pas aux reports (snooze) en cours : ils doivent
+    // survivre à un rafraîchissement de la liste.
+    for (var i = 0; i < 60; i++) {
+      await _plugin.cancel(id: i);
+    }
+    await _plugin.cancel(id: 999);
+    for (var i = 0; i < _idRange; i++) {
+      await _plugin.cancel(id: _eventIdBase + i);
+    }
 
     final now = tz.TZDateTime.now(tz.local);
     // Réglages personnalisés : jours d'anticipation + heure +
@@ -155,6 +279,9 @@ class NotificationService {
             sub.nextDueDate.year == now.year &&
             sub.nextDueDate.month == now.month &&
             sub.nextDueDate.day == now.day;
+        // Rendez-vous avec heure : le jour J, c'est l'alarme exacte
+        // qui prévient — pas de doublon à l'heure de rappel.
+        if (isToday && sub.isEvent && sub.dueTime != null) continue;
         if (when.isBefore(now)) {
           // Rappel passé → on le saute SAUF le jour J même,
           // qui mérite une alerte immédiate.
@@ -165,11 +292,19 @@ class NotificationService {
         await _plugin.zonedSchedule(
           id: id++,
           title: daysBefore == 0
-              ? 'Échéance aujourd\'hui : ${sub.name}'
+              ? (sub.isEvent
+                  ? 'Rendez-vous aujourd\'hui : ${sub.name}'
+                  : 'Échéance aujourd\'hui : ${sub.name}')
               : daysBefore == 1
-              ? 'Échéance demain : ${sub.name}'
-              : 'Échéance dans $daysBefore j : ${sub.name}',
-          body: '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.',
+              ? (sub.isEvent
+                  ? 'Rendez-vous demain : ${sub.name}'
+                  : 'Échéance demain : ${sub.name}')
+              : (sub.isEvent
+                  ? 'Rendez-vous dans $daysBefore j : ${sub.name}'
+                  : 'Échéance dans $daysBefore j : ${sub.name}'),
+          body: sub.isEvent
+              ? _eventBody(sub)
+              : '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.',
           scheduledDate: when,
           // Jour J + rappels sonores activés → alarme plein écran.
           notificationDetails: urgent && daysBefore == 0
@@ -179,6 +314,24 @@ class NotificationService {
           payload: 'subscription:${sub.id}',
         );
       }
+    }
+
+    // Alarmes de rendez-vous : à l'heure exacte, sonnerie en boucle,
+    // boutons Arrêter / Repousser.
+    for (final sub in subs) {
+      if (!sub.isEvent || sub.dueTime == null) continue;
+      if (sub.status == SubscriptionStatus.paid) continue;
+      final when = tz.TZDateTime.from(sub.dueAt, tz.local);
+      if (!when.isAfter(now)) continue;
+      final numericId = int.tryParse(sub.id) ?? sub.id.hashCode.abs();
+      await _scheduleEventAlarm(
+        _plugin,
+        id: _eventIdBase + numericId % _idRange,
+        title: 'Rendez-vous : ${sub.name}',
+        body: _eventBody(sub),
+        when: when,
+        payload: _eventPayload(sub.id, sub.name, _eventBody(sub)),
+      );
     }
 
     // Rappel récurrent : chaque lundi 9h, invite à mettre la liste
@@ -195,6 +348,59 @@ class NotificationService {
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       payload: 'weekly-update',
     );
+  }
+
+  static String _eventBody(Subscription sub) => sub.dueTime != null
+      ? 'C\'est l\'heure — ${AppFormatters.dateTimeLong(sub.dueAt)}'
+      : AppFormatters.dateLong(sub.nextDueDate);
+
+  /// Payload auto-suffisant : l'isolate de fond n'a pas accès à la
+  /// liste des abonnements pour reconstruire titre et texte.
+  static String _eventPayload(String id, String name, String body) =>
+      'event:$id\u0001$name\u0001$body';
+
+  /// Repousse l'alarme de 10 minutes à partir du payload reçu.
+  /// Statique : utilisable depuis l'isolate de fond.
+  static Future<void> snoozeFromPayload(String? payload) async {
+    if (payload == null || !payload.startsWith('event:')) return;
+    final parts = payload.substring(6).split('\u0001');
+    if (parts.length < 3) return;
+    final [id, name, body] = parts;
+    final numericId = int.tryParse(id) ?? id.hashCode.abs();
+    await _scheduleEventAlarm(
+      FlutterLocalNotificationsPlugin(),
+      id: _snoozeIdBase + numericId % _idRange,
+      title: 'Rendez-vous : $name',
+      body: body,
+      when: tz.TZDateTime.now(tz.local).add(_snoozeDuration),
+      payload: payload,
+    );
+  }
+
+  /// Alarme exacte si autorisée, sinon repli sur le mode inexact
+  /// (le système peut décaler de quelques minutes).
+  static Future<void> _scheduleEventAlarm(
+    FlutterLocalNotificationsPlugin plugin, {
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime when,
+    required String payload,
+  }) async {
+    Future<void> schedule(AndroidScheduleMode mode) => plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: when,
+      notificationDetails: _eventAlarmDetails,
+      androidScheduleMode: mode,
+      payload: payload,
+    );
+    try {
+      await schedule(AndroidScheduleMode.exactAllowWhileIdle);
+    } on PlatformException {
+      await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+    }
   }
 
   /// Prochain [weekday] à [hour]h — DateTime monday=1 … sunday=7.
