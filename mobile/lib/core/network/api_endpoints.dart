@@ -48,4 +48,17 @@ abstract final class ApiEndpoints {
   /// Connecteurs externes : GET /connectors/ + POST /connectors/x/sync/.
   static const connectors = 'connectors/';
   static String connectorSync(String slug) => 'connectors/$slug/sync/';
+
+  /// GET /meta/app-version/ → dernière version publiée + lien
+  /// de téléchargement (mise à jour de l'app depuis le profil).
+  static const appVersion = 'meta/app-version/';
+
+  /// Agrégation bancaire (Powens) : login OAuth + échange du code.
+  static const powensLogin = 'connectors/powens/login/';
+  static const powensCallback = 'connectors/powens/callback/';
+
+  /// Comptes externes connectés : GET /connections/ +
+  /// POST/DELETE /connections/ID/resync/.
+  static const connections = 'connections/';
+  static String connectionResync(int id) => 'connections/$id/resync/';
 }

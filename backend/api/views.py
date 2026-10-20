@@ -1,4 +1,5 @@
 import json
+import os
 import secrets
 import uuid
 from datetime import date
@@ -15,7 +16,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from . import crypto
 from .catalog import providers_for
-from .connectors import CONNECTORS, get_connector
+from .connectors import CONNECTORS, connector_meta, get_connector
+from .connectors.powens import (
+    build_auth_url as powens_auth_url,
+    exchange_code as powens_exchange_code,
+    is_configured as powens_configured,
+)
 from .rates import rates_for
 from .models import (
     Invitation, Payment, Profile, ProviderConnection,
@@ -564,17 +570,27 @@ class ProviderCatalogView(APIView):
 # ------------------------------------------------------------------
 
 class ConnectorListView(APIView):
-    """GET /connectors/ → connecteurs disponibles + leurs champs."""
+    """GET /connectors/ → connecteurs disponibles + leurs champs.
+    Inclut groupe d'affichage, pays couverts et indicateur de
+    disponibilité pour le pays du workspace."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        country = (request.user.profile.workspace.country or "").upper()
         return Response([
             {
                 "slug": c.slug,
                 "label": c.label,
                 "description": c.description,
                 "auth_fields": c.auth_fields,
+                "group": connector_meta(c.slug)["group"],
+                "oauth": getattr(c, "oauth", False),
+                "countries": connector_meta(c.slug)["countries"],
+                "available": (
+                    "*" in connector_meta(c.slug)["countries"]
+                    or country in connector_meta(c.slug)["countries"]
+                ),
             }
             for c in CONNECTORS.values()
         ])
@@ -615,7 +631,7 @@ class ConnectorSyncView(APIView):
         ProviderConnection.objects.update_or_create(
             workspace=request.user.profile.workspace,
             provider=slug,
-            label=credentials.get("label") or slug,
+            label=credentials.get("label") or connector.label,
             defaults={
                 "credentials_encrypted": crypto.encrypt(
                     json.dumps(credentials)
@@ -623,6 +639,139 @@ class ConnectorSyncView(APIView):
             },
         )
         return Response({"subscriptions": items, "count": len(items)})
+
+
+class PowensLoginView(APIView):
+    """GET /connectors/powens/login/ → {auth_url}
+    URL du webview bancaire Powens à ouvrir côté app (OAuth PSD2 —
+    les identifiants bancaires ne passent jamais par Abonex)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not powens_configured():
+            return Response(
+                {
+                    "detail": (
+                        "Agrégation bancaire non configurée : renseigner "
+                        "POWENS_CLIENT_ID et POWENS_CLIENT_SECRET "
+                        "côté serveur."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        country = request.user.profile.workspace.country or "fr"
+        return Response({"auth_url": powens_auth_url(country)})
+
+
+class PowensCallbackView(APIView):
+    """POST /connectors/powens/callback/ {code}
+    Échange le code OAuth → access_token, mémorise la connexion
+    chiffrée et renvoie les abonnements détectés dans le relevé."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = request.data.get("code")
+        if not code:
+            return Response(
+                {"code": "Code manquant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not powens_configured():
+            return Response(
+                {"detail": "Agrégation bancaire non configurée."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        try:
+            token_data = powens_exchange_code(code)
+            access_token = token_data["access_token"]
+            items = get_connector("powens").fetch(
+                {"access_token": access_token}
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": f"Connexion bancaire impossible : {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        ProviderConnection.objects.update_or_create(
+            workspace=request.user.profile.workspace,
+            provider="powens",
+            label="Ma banque",
+            defaults={
+                "credentials_encrypted": crypto.encrypt(
+                    json.dumps({"access_token": access_token})
+                ),
+            },
+        )
+        return Response({"subscriptions": items, "count": len(items)})
+
+
+class ConnectionListView(APIView):
+    """GET /connections/ → comptes externes connectés au workspace.
+    Les identifiants ne sont JAMAIS renvoyés — id + libellé seulement.
+    DELETE /connections/<id>/ → déconnecte le compte."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        conns = ProviderConnection.objects.filter(
+            workspace=request.user.profile.workspace
+        ).order_by("provider", "label")
+        return Response([
+            {
+                "id": c.id,
+                "provider": c.provider,
+                "provider_label": (
+                    get_connector(c.provider).label
+                    if get_connector(c.provider)
+                    else c.provider
+                ),
+                "label": c.label,
+                "connected_at": c.created_at,
+            }
+            for c in conns
+        ])
+
+
+class ConnectionResyncView(APIView):
+    """POST /connections/<id>/resync/ → relance fetch() avec les
+    credentials chiffrés stockés — re-synchronisation en un tap.
+    DELETE /connections/<id>/resync/ → supprime la connexion."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_connection(self, request, pk):
+        return get_object_or_404(
+            ProviderConnection,
+            pk=pk,
+            workspace=request.user.profile.workspace,
+        )
+
+    def post(self, request, pk):
+        conn = self._get_connection(request, pk)
+        connector = get_connector(conn.provider)
+        if connector is None:
+            return Response(
+                {"detail": "Connecteur introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            credentials = json.loads(
+                crypto.decrypt(conn.credentials_encrypted)
+            )
+            items = connector.fetch(credentials)
+        except Exception as exc:
+            return Response(
+                {"detail": f"Connexion au fournisseur impossible : {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response({"subscriptions": items, "count": len(items)})
+
+    def delete(self, request, pk):
+        conn = self._get_connection(request, pk)
+        conn.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ExchangeRatesView(APIView):
@@ -643,6 +792,29 @@ class ExchangeRatesView(APIView):
                 {"detail": "Service de taux indisponible."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+
+class AppVersionView(APIView):
+    """GET /meta/app-version/ → dernière version publiée + lien
+    de téléchargement. Le mobile compare avec sa version
+    installée et propose la mise à jour.
+    Config : APP_LATEST_VERSION / APP_UPDATE_URL (env)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(
+            {
+                "latest_version": os.environ.get(
+                    "APP_LATEST_VERSION", "1.0.0"
+                ),
+                "update_url": os.environ.get(
+                    "APP_UPDATE_URL",
+                    "https://play.google.com/store/apps/details"
+                    "?id=com.abonex.abonex",
+                ),
+            }
+        )
 
 
 class SubscriptionBulkCreateView(APIView):

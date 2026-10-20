@@ -197,6 +197,17 @@ class _NotificationTile extends StatelessWidget {
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
+                      if (subscription.description.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            subscription.description,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

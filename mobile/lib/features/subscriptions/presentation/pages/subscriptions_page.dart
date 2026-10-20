@@ -300,6 +300,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   final _name = TextEditingController();
   final _provider = TextEditingController();
   final _amount = TextEditingController();
+  // Note libre : ville, lieu, référence — rappelée dans les
+  // alertes et notifications d'échéance.
+  final _description = TextEditingController();
   SubscriptionCategory _category = SubscriptionCategory.software;
   BillingCycle _cycle = BillingCycle.monthly;
   // Mode rendez-vous/événement : pas de fournisseur ni de
@@ -338,6 +341,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     if (e != null) {
       _name.text = e.name;
       _provider.text = e.provider;
+      _description.text = e.description;
       _amount.text = e.amount == e.amount.roundToDouble()
           ? e.amount.toStringAsFixed(0)
           : e.amount.toString();
@@ -380,6 +384,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     _name.dispose();
     _provider.dispose();
     _amount.dispose();
+    _description.dispose();
     super.dispose();
   }
 
@@ -471,6 +476,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             nextDueDate: _isEvent ? _firstDue : _nextDue,
             cycle: _isEvent ? BillingCycle.once : _cycle,
             currency: _currency,
+            description: _description.text.trim(),
             startDate: _isEvent ? null : _startDate,
             endDate: _isEvent ? null : _endDate,
             dueTime: _isEvent ? _dueTime : null,
@@ -484,6 +490,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             nextDueDate: _isEvent ? _firstDue : _nextDue,
             cycle: _isEvent ? BillingCycle.once : _cycle,
             currency: _currency,
+            description: _description.text.trim(),
             clearStartDate: _isEvent || _startDate == null,
             startDate: _startDate,
             clearEndDate: _isEvent || _endDate == null,
@@ -612,6 +619,24 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     ),
                   );
                 },
+              ),
+              const SizedBox(height: 14),
+              // Description : ville/lieu du service ou détail du
+              // rendez-vous — affichée dans les alertes.
+              TextFormField(
+                controller: _description,
+                decoration: InputDecoration(
+                  labelText: 'Description (optionnel)',
+                  hintText: _isEvent
+                      ? 'Ex. Bureaux — Bonanjo, Douala'
+                      : 'Ex. Abonnement EDF — appartement Paris 11e',
+                  prefixIcon: const Icon(
+                    LucideIcons.mapPin,
+                    size: 20,
+                  ),
+                ),
+                maxLength: 255,
+                maxLines: 1,
               ),
               if (!_isEvent) const SizedBox(height: 14),
               if (!_isEvent)

@@ -66,6 +66,54 @@ class WorkspaceRemoteDataSource {
         .cast<Map<String, dynamic>>();
   }
 
+  /// GET /meta/app-version/ → {latest_version, update_url}.
+  Future<Map<String, dynamic>> appVersion() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.appVersion,
+    );
+    return res.data!;
+  }
+
+  /// GET /connectors/powens/login/ → URL du webview bancaire (OAuth).
+  Future<String> powensLogin() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.powensLogin,
+    );
+    return res.data!['auth_url'] as String;
+  }
+
+  /// POST /connectors/powens/callback/ {code} → abonnements détectés
+  /// à partir des prélèvements récurrents du relevé bancaire.
+  Future<List<Map<String, dynamic>>> powensCallback(String code) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.powensCallback,
+      data: {'code': code},
+    );
+    return (res.data!['subscriptions'] as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+  }
+
+  /// GET /connections/ → comptes externes déjà connectés.
+  Future<List<Map<String, dynamic>>> connections() async {
+    final res = await _dio.get<dynamic>(ApiEndpoints.connections);
+    return (res.data as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  /// POST /connections/ID/resync/ → re-synchronise sans ressaisir
+  /// les identifiants (stockés chiffrés côté serveur).
+  Future<List<Map<String, dynamic>>> resyncConnection(int id) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.connectionResync(id),
+    );
+    return (res.data!['subscriptions'] as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+  }
+
+  /// DELETE /connections/ID/resync/ → déconnecte le compte.
+  Future<void> disconnectConnection(int id) async {
+    await _dio.delete<void>(ApiEndpoints.connectionResync(id));
+  }
+
   /// GET /rates/?base=XAF → taux de change réels.
   /// rates[USD]=0.0016 signifie : 1 XAF = 0.0016 USD.
   Future<Map<String, double>> exchangeRates(String base) async {

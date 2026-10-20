@@ -304,7 +304,7 @@ class NotificationService {
                   : 'Échéance dans $daysBefore j : ${sub.name}'),
           body: sub.isEvent
               ? _eventBody(sub)
-              : '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.',
+              : '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.${_descSuffix(sub)}',
           scheduledDate: when,
           // Jour J + rappels sonores activés → alarme plein écran.
           notificationDetails: urgent && daysBefore == 0
@@ -350,9 +350,17 @@ class NotificationService {
     );
   }
 
-  static String _eventBody(Subscription sub) => sub.dueTime != null
-      ? 'C\'est l\'heure — ${AppFormatters.dateTimeLong(sub.dueAt)}'
-      : AppFormatters.dateLong(sub.nextDueDate);
+  static String _eventBody(Subscription sub) =>
+      (sub.dueTime != null
+              ? 'C\'est l\'heure — ${AppFormatters.dateTimeLong(sub.dueAt)}'
+              : AppFormatters.dateLong(sub.nextDueDate)) +
+          _descSuffix(sub);
+
+  /// Note libre (ville, lieu, référence…) rappelée dans l'alerte.
+  static String _descSuffix(Subscription sub) {
+    final d = sub.description.trim();
+    return d.isEmpty ? '' : '\n$d';
+  }
 
   /// Payload auto-suffisant : l'isolate de fond n'a pas accès à la
   /// liste des abonnements pour reconstruire titre et texte.

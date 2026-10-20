@@ -30,9 +30,23 @@ urlpatterns = [
     path("invites/accept/", views.InviteAcceptView.as_view()),
     path("providers/catalog/", views.ProviderCatalogView.as_view()),
     path("rates/", views.ExchangeRatesView.as_view()),
+    path("meta/app-version/", views.AppVersionView.as_view()),
     path("connectors/", views.ConnectorListView.as_view()),
     path(
         "connectors/<str:slug>/sync/",
         views.ConnectorSyncView.as_view(),
+    ),
+    path(
+        "connectors/powens/login/",
+        views.PowensLoginView.as_view(),
+    ),
+    path(
+        "connectors/powens/callback/",
+        views.PowensCallbackView.as_view(),
+    ),
+    path("connections/", views.ConnectionListView.as_view()),
+    path(
+        "connections/<int:pk>/resync/",
+        views.ConnectionResyncView.as_view(),
     ),
 ]

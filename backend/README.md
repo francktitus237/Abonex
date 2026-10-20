@@ -19,14 +19,19 @@ Compte seed : `demo@abonex.app` (mot de passe dans `api/management/commands/seed
 
 ## Variables d'environnement
 
+Voir `backend/.env.example` pour le fichier complet et
+`DEPLOYMENT.md` (racine du dépôt) pour la mise en production.
+
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `DJANGO_DEBUG` | `False` | Mode debug — en prod toujours `False` |
+| `DJANGO_DEBUG` | `true` en dev | Mode debug — `false` en prod |
 | `DJANGO_SECRET_KEY` | — | Clé secrète Django (obligatoire en prod) |
-| `ALLOWED_HOSTS` | `*` en DEBUG | Hôtes autorisés, séparés par `,` |
-| `FIELD_ENCRYPTION_KEY` | dérivée du SECRET_KEY | Clé Fernet pour les identifiants fournisseurs |
+| `DJANGO_ALLOWED_HOSTS` | `*` en DEBUG | Hôtes autorisés, séparés par `,` |
+| `PROVIDER_SECRET_KEY` | dérivée de SECRET_KEY | Clé Fernet pour identifiants/tokens fournisseurs |
+| `POWENS_CLIENT_ID`, `POWENS_CLIENT_SECRET`, `POWENS_DOMAIN` | sandbox | Agrégation bancaire PSD2 (OAuth) |
+| `APP_LATEST_VERSION`, `APP_UPDATE_URL` | — | Bouton « Mettre à jour » du profil |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | console | SMTP pour les invitations par e-mail |
-| `RATES_API_URL` | api.frankfurter.dev | Source des taux de change |
+| `RATES_CONVERT_URL`… | frankfurter.dev | Source des taux de change |
 
 ## Modèles principaux
 
@@ -67,8 +72,13 @@ Compte seed : `demo@abonex.app` (mot de passe dans `api/management/commands/seed
 | POST | `invites/accept/` | Accepter une invitation (token) |
 | GET | `providers/catalog/` | Fournisseurs connus du pays du workspace |
 | GET | `rates/` | Taux de change (`?base=XAF`), cache 12 h |
-| GET/POST | `connectors/` | Connexions fournisseurs |
-| POST | `connectors/<slug>/sync/` | Synchroniser un fournisseur |
+| GET | `meta/app-version/` | Dernière version publiée + URL de mise à jour |
+| GET | `connectors/` | Connecteurs disponibles (métadonnées, pays, groupe) |
+| POST | `connectors/<slug>/sync/` | Synchroniser un fournisseur (credentials → import) |
+| GET | `connectors/powens/login/` | URL du webview bancaire (OAuth PSD2) |
+| POST | `connectors/powens/callback/` | Échange du code → détection des prélèvements |
+| GET | `connections/` | Comptes connectés (sans les secrets) |
+| POST/DELETE | `connections/<id>/resync/` | Re-synchroniser / déconnecter un compte |
 
 ## Permissions par rôle
 
@@ -84,14 +94,42 @@ Appliquées côté serveur — le client ne fait que masquer les boutons.
 ## Connecteurs fournisseurs
 
 `api/connectors/registry.py` enregistre des connecteurs découplés :
-`ovh.py` (signature X-Ovh), `ionos.py` (Bearer), `stripe.py`,
-`hetzner.py`, `digitalocean.py`.
 
-Chaque connecteur expose `sync(connection)` qui retourne les services
-facturés du compte. Les identifiants sont stockés chiffrés (Fernet,
-`api/crypto.py`) — jamais en clair. Pour ajouter un fournisseur :
+- **Cloud** : `ovh.py` (signature X-Ovh), `ionos.py`,
+  `hetzner.py` (Hetzner + DigitalOcean), `cloud.py` (Vultr,
+  UpCloud, Linode, Cloudflare)
+- **Domaines** : `domains.py` (Gandi, GoDaddy, Namecheap)
+- **Paiements récurrents** : `stripe.py`, `billing.py` (Mollie,
+  Paddle, GoCardless)
+- **Banque (OAuth)** : `powens.py` — agrégation PSD2
 
-1. Créer `connectors/<nom>.py` avec une classe `sync()`
+Chaque connecteur expose `fetch(credentials)` qui retourne les
+abonnements détectés `{name, provider, category, amount, currency,
+cycle, next_due_date}`. Les identifiants sont stockés chiffrés (Fernet,
+`api/crypto.py`) — jamais en clair ni renvoyés au client.
+
+### Connecteur Powens (agrégation bancaire)
+
+Flux OAuth conforme PSD2 — Abonex ne voit jamais les identifiants
+bancaires :
+
+1. `GET /connectors/powens/login/` → `auth_url` du webview Powens
+2. L'utilisateur se connecte à **sa banque** dans le webview ;
+   redirection vers `abonex://powens/callback?code=…`
+3. `POST /connectors/powens/callback/` échange le `code` contre un
+   `access_token` (stocké chiffré) puis lit les transactions
+4. `detect_recurring()` regroupe les débits par libellé : marchands
+   revenant ≥ 2 fois à intervalle régulier → abonnement normalisé
+   (cycle mensuel/trimestriel/annuel, montant médian, prochaine
+   échéance, catégorie devinée : énergie, eau, télécom, loyer…)
+
+Variables : `POWENS_CLIENT_ID`, `POWENS_CLIENT_SECRET`,
+`POWENS_DOMAIN` (`sandbox.biapi.pro` en test, domaine client en prod)
+— voir `DEPLOYMENT.md` §5.
+
+Pour ajouter un fournisseur :
+
+1. Créer `connectors/<nom>.py` avec `fetch()` + `auth_fields`
 2. L'enregistrer dans `registry.py`
 3. L'ajouter au catalogue `catalog.py` s'il est local à certains pays
 
@@ -108,7 +146,11 @@ l'import CSV ou la saisie guidée — le catalogue aide à pré-remplir.
 
 ## Déploiement
 
+Voir **`../DEPLOYMENT.md`** — guide complet (Docker Compose,
+PostgreSQL, nginx, HTTPS, Powens, checklist de mise en ligne).
+
 - `config/settings.py` lit tout depuis l'environnement
+- `Dockerfile` (gunicorn) + `docker-compose.yml` (db + backend + nginx)
 - En DEBUG : `ALLOWED_HOSTS=*` ; en prod liste explicite
 - Santé : `GET /health/` → `{"status": "ok"}`
 

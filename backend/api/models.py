@@ -109,6 +109,9 @@ class Subscription(models.Model):
     )
     name = models.CharField(max_length=120)
     provider = models.CharField(max_length=120, blank=True)
+    # Note libre : ville/lieu du service, référence contrat…
+    # Affichée dans les rappels et notifications.
+    description = models.CharField(max_length=255, blank=True)
     category = models.CharField(
         max_length=16, choices=CATEGORIES, default="other"
     )

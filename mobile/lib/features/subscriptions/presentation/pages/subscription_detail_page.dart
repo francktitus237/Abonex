@@ -203,8 +203,14 @@ class _DetailBody extends StatelessWidget {
             (
               icon: LucideIcons.building2,
               label: 'Fournisseur',
-              value: sub.provider,
+              value: sub.provider.isEmpty ? '—' : sub.provider,
             ),
+            if (sub.description.isNotEmpty)
+              (
+                icon: LucideIcons.mapPin,
+                label: 'Description',
+                value: sub.description,
+              ),
           ],
         ),
         const SizedBox(height: 16),
@@ -528,10 +534,15 @@ class _InfoCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Text(
-                    rows[i].value,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  Flexible(
+                    child: Text(
+                      rows[i].value,
+                      textAlign: TextAlign.end,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

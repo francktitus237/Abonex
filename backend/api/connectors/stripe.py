@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 import urllib.request
 
 
@@ -48,6 +49,16 @@ class StripeConnector:
             interval = (price.get("recurring") or {}).get("interval", "month")
             product_id = price.get("product")
             name = f"Abonnement {product_id}" if product_id else "Abonnement Stripe"
+            # current_period_end = prochaine date de facturation réelle.
+            period_end = sub.get("current_period_end")
+            next_due = (
+                time.strftime("%Y-%m-%d", time.gmtime(period_end))
+                if period_end else None
+            )
+            start = (
+                time.strftime("%Y-%m-%d", time.gmtime(sub["start_date"]))
+                if sub.get("start_date") else None
+            )
             out.append({
                 "name": name,
                 "provider": "Stripe",
@@ -59,7 +70,7 @@ class StripeConnector:
                     "year": "yearly",
                     "week": "monthly",
                 }.get(interval, "monthly"),
-                "next_due_date": None,
-                "start_date": None,
+                "next_due_date": next_due,
+                "start_date": start,
             })
         return out

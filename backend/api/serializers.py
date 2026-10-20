@@ -55,6 +55,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "provider",
+            "description",
             "category",
             "amount",
             "currency",

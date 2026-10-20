@@ -78,6 +78,7 @@ class Subscription {
     required this.cycle,
     required this.status,
     this.currency = 'XAF',
+    this.description = '',
     this.startDate,
     this.endDate,
     this.dueTime,
@@ -92,6 +93,10 @@ class Subscription {
   final BillingCycle cycle;
   final SubscriptionStatus status;
   final String currency;
+
+  /// Note libre : ville/lieu du service, référence du contrat…
+  /// Rappelée dans les alertes et notifications.
+  final String description;
 
   /// Date de souscription/première échéance — null si inconnue.
   final DateTime? startDate;

@@ -61,6 +61,9 @@ dependencies:
   flutter_timezone: ^5.1.1
   file_picker: ^13.1.0
   csv: ^8.0.0
+  flutter_web_auth_2: ^5.1.0
+  package_info_plus: ^10.2.2
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

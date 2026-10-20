@@ -72,6 +72,18 @@ lib/
 - **État** : BLoC/Cubit ; datasources → repositories (convertissent les
   `DioException` en `Failure`) → cubits → UI
 
+## Intégrations
+
+- **Connecteurs fournisseurs** : page Intégrations — clés API des
+  comptes externes (OVH, Stripe…), synchro et déconnexion.
+- **Agrégation bancaire** : « Connecter ma banque » ouvre le webview
+  OAuth Powens (`flutter_web_auth_2`) ; la redirection revient via
+  le deep-link `abonex://powens/callback` (intent-filter Android
+  déclaré dans `AndroidManifest.xml`).
+- **Mise à jour** : tuile Profil → compare la version installée
+  (`package_info_plus`) avec `GET /meta/app-version/` et propose
+  le téléchargement (`url_launcher`).
+
 ## Tests
 
 ```bash

@@ -9,6 +9,16 @@ Chaque connecteur déclare :
   normalisés : {name, provider, category, amount, currency,
   next_due_date, cycle, start_date}
 """
-from .registry import CONNECTORS, get_connector
+from .registry import (
+    CONNECTOR_GROUPS,
+    CONNECTORS,
+    connector_meta,
+    get_connector,
+)
 
-__all__ = ["CONNECTORS", "get_connector"]
+__all__ = [
+    "CONNECTOR_GROUPS",
+    "CONNECTORS",
+    "connector_meta",
+    "get_connector",
+]

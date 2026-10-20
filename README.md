@@ -49,9 +49,16 @@ l'**import de fichiers** et aux **intégrations fournisseurs**.
 ### Automatisation — moins de saisie manuelle
 - **Import CSV** en masse (`/subscriptions/bulk/`) : nom, fournisseur,
   montant, devise, cycle, échéance
+- **Agrégation bancaire (Powens / PSD2)** : connexion sécurisée à la
+  banque via webview OAuth — les prélèvements récurrents (énergie,
+  eau, télécom, loyer, streaming…) sont détectés automatiquement
+  avec vraies dates et montants
 - **Connecteurs fournisseurs** (framework extensible) : OVH, IONOS,
-  Stripe, Hetzner, DigitalOcean — synchronisation des services en
-  un clic depuis un compte client
+  Hetzner, DigitalOcean, Vultr, UpCloud, Linode, Cloudflare,
+  Gandi, GoDaddy, Namecheap, Stripe, Mollie, Paddle, GoCardless —
+  synchronisation des services en un clic depuis un compte client
+- **Comptes connectés** : re-synchronisation en un tap, identifiants
+  chiffrés (Fernet) jamais renvoyés au client
 - **Catalogue par pays** (`/providers/catalog/`) : autocomplétion des
   fournisseurs locaux et internationaux (ENEO, EDF, Orange, MTN…)
 - Identifiants fournisseurs chiffrés côté serveur (Fernet)
@@ -98,6 +105,8 @@ Abonex/
 
 ## Documentation
 
-- `backend/README.md` — API, modèles, connecteurs, déploiement
+- **`DEPLOYMENT.md`** — mise en production complète (Docker,
+  PostgreSQL, nginx, HTTPS, Powens, checklist)
+- `backend/README.md` — API, modèles, connecteurs, variables d'env
 - `mobile/README.md` — architecture Flutter, build, réglages
 - `.github/workflows/apk.yml` — build de l'APK en ligne

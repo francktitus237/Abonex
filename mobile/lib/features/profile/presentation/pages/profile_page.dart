@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:toastification/toastification.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
@@ -16,6 +18,7 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../settings/presentation/cubit/settings_cubit.dart';
 import '../../../settings/presentation/cubit/settings_state.dart';
+import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 
 /// Onglet Profil : identité du compte + réglages P1 du CDC
 /// (thème, langue, biométrie) + déconnexion.
@@ -110,6 +113,19 @@ class _ProfileView extends StatelessWidget {
             ),
           ),
         ],
+
+        const SizedBox(height: 28),
+
+        // ---------- Application ----------
+        AnimatedFadeIn(
+          delay: const Duration(milliseconds: 220),
+          child: const _SectionTitle('Application'),
+        ),
+        const SizedBox(height: 10),
+        AnimatedFadeIn(
+          delay: const Duration(milliseconds: 240),
+          child: _Card(children: [_UpdateTile()]),
+        ),
 
         const SizedBox(height: 28),
 
@@ -670,6 +686,130 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
       subtitle: Text(_summary(context)),
       trailing: const Icon(LucideIcons.chevronRight, size: 18),
       onTap: _configure,
+    );
+  }
+}
+/// Mise à jour de l'application : compare la version installée
+/// (package_info) avec la dernière publiée par le serveur
+/// (/meta/app-version/) et propose le téléchargement.
+class _UpdateTile extends StatefulWidget {
+  @override
+  State<_UpdateTile> createState() => _UpdateTileState();
+}
+
+class _UpdateTileState extends State<_UpdateTile> {
+  bool _checking = false;
+  String _current = '…';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then(
+      (info) => mounted ? setState(() => _current = info.version) : null,
+    );
+  }
+
+  /// "1.10.0" > "1.9.9" — comparaison sémantique par segments.
+  static bool _isNewer(String latest, String current) {
+    List<int> parts(String v) => v
+        .split(RegExp(r'[.\-+]'))
+        .map((s) => int.tryParse(s) ?? 0)
+        .toList();
+    final a = parts(latest), b = parts(current);
+    for (var i = 0; i < a.length || i < b.length; i++) {
+      final x = i < a.length ? a[i] : 0;
+      final y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return false;
+  }
+
+  Future<void> _check() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      final remote =
+          await getIt<WorkspaceRemoteDataSource>().appVersion();
+      final latest = remote['latest_version'] as String? ?? _current;
+      final url = remote['update_url'] as String? ?? '';
+      if (!mounted) return;
+      if (_isNewer(latest, _current)) {
+        _offerUpdate(latest, url);
+      } else {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          style: ToastificationStyle.flat,
+          title: const Text('Abonex est déjà à jour.'),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        style: ToastificationStyle.flat,
+        title: const Text('Vérification impossible — réessayez.'),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  void _offerUpdate(String latest, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          LucideIcons.arrowDownToLine,
+          color: Theme.of(ctx).colorScheme.primary,
+        ),
+        title: const Text('Mise à jour disponible'),
+        content: Text(
+          'La version $latest est disponible '
+          '(installée : $_current).\n\n'
+          'Voulez-vous télécharger la mise à jour '
+          'maintenant, ou rester sur la version actuelle ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Plus tard'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (url.isNotEmpty) {
+                launchUrl(
+                  Uri.parse(url),
+                  mode: LaunchMode.externalApplication,
+                );
+              }
+            },
+            icon: const Icon(LucideIcons.download, size: 18),
+            label: const Text('Mettre à jour'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.arrowDownToLine),
+      title: const Text('Mise à jour de l\'application'),
+      subtitle: Text('Version installée : $_current'),
+      trailing: _checking
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: _check,
     );
   }
 }
