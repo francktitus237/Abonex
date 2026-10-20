@@ -66,6 +66,19 @@ abstract final class AppFormatters {
       ? '${_weekdaysEn[d.weekday - 1]}, ${_monthsEn[d.month - 1]} ${d.day}'
       : '${_weekdaysFr[d.weekday - 1]} ${d.day} ${_monthsFr[d.month - 1]}';
 
+  /// FR `14h30` · EN `2:30 PM`
+  static String time(int hour, int minute) {
+    final mm = minute.toString().padLeft(2, '0');
+    if (!_en) return '${hour.toString().padLeft(2, '0')}h$mm';
+    final h12 = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h12:$mm ${hour < 12 ? 'AM' : 'PM'}';
+  }
+
+  /// FR `lundi 12 mars à 14h30` · EN `Monday, Mar 12 at 2:30 PM`
+  static String dateTimeLong(DateTime d) => _en
+      ? '${dateLong(d)} at ${time(d.hour, d.minute)}'
+      : '${dateLong(d)} à ${time(d.hour, d.minute)}';
+
   /// FR `mars 2026` · EN `March 2026`
   static String monthYear(DateTime d) => _en
       ? '${_monthsLongEn[d.month - 1]} ${d.year}'

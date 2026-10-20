@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart' show TimeOfDay;
+
 import '../../../../core/utils/result.dart';
 import '../entities/subscription.dart';
 
@@ -15,10 +17,11 @@ abstract class SubscriptionRepository {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
   });
 
   /// Modifie un abonnement existant (PATCH partiel).
-  /// clearStartDate/clearEndDate servent à effacer une date.
+  /// clearStartDate/clearEndDate/clearDueTime servent à effacer une valeur.
   Future<Result<Subscription>> updateSubscription({
     required String id,
     String? name,
@@ -30,8 +33,10 @@ abstract class SubscriptionRepository {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
     bool clearStartDate,
     bool clearEndDate,
+    bool clearDueTime,
   });
 
   /// Marque un abonnement comme payé (PATCH status).

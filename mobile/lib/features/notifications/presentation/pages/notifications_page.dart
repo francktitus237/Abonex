@@ -56,9 +56,12 @@ class NotificationsPage extends StatelessWidget {
                 for (final s in overdue)
                   _NotificationTile(
                     subscription: s,
-                    title: 'Échéance dépassée',
-                    body:
-                        '${AppFormatters.money(s.amount, s.currency)} — attendue le ${AppFormatters.dateLong(s.nextDueDate)}',
+                    title: s.isEvent ? 'Rendez-vous passé' : 'Échéance dépassée',
+                    body: s.isEvent
+                        ? (s.dueTime != null
+                            ? AppFormatters.dateTimeLong(s.dueAt)
+                            : AppFormatters.dateLong(s.nextDueDate))
+                        : '${AppFormatters.money(s.amount, s.currency)} — attendue le ${AppFormatters.dateLong(s.nextDueDate)}',
                     color: context.status.overdue,
                     icon: LucideIcons.circleAlert,
                   ),
@@ -75,8 +78,11 @@ class NotificationsPage extends StatelessWidget {
                   _NotificationTile(
                     subscription: s,
                     title: _dueIn(s),
-                    body:
-                        '${AppFormatters.money(s.amount, s.currency)} — ${s.provider}',
+                    body: s.isEvent
+                        ? (s.dueTime != null
+                            ? AppFormatters.dateTimeLong(s.dueAt)
+                            : AppFormatters.dateLong(s.nextDueDate))
+                        : '${AppFormatters.money(s.amount, s.currency)} — ${s.provider}',
                     color: context.status.dueSoon,
                     icon: LucideIcons.bellRing,
                   ),

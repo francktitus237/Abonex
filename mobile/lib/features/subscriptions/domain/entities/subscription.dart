@@ -80,6 +80,7 @@ class Subscription {
     this.currency = 'XAF',
     this.startDate,
     this.endDate,
+    this.dueTime,
   });
 
   final String id;
@@ -97,6 +98,22 @@ class Subscription {
 
   /// Fin de contrat — null = renouvellement sans fin.
   final DateTime? endDate;
+
+  /// Heure de l'échéance — renseignée pour les rendez-vous.
+  final TimeOfDay? dueTime;
+
+  /// Rendez-vous / événement ponctuel (pas un abonnement facturé).
+  bool get isEvent =>
+      category == SubscriptionCategory.event || cycle == BillingCycle.once;
+
+  /// Date + heure complètes de l'échéance (heure à minuit si absente).
+  DateTime get dueAt => DateTime(
+    nextDueDate.year,
+    nextDueDate.month,
+    nextDueDate.day,
+    dueTime?.hour ?? 0,
+    dueTime?.minute ?? 0,
+  );
 
   String get cycleLabel => switch (cycle) {
     BillingCycle.monthly => 'Mensuel',

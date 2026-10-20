@@ -116,18 +116,36 @@ class _DetailBody extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                AppFormatters.money(sub.amount, sub.currency),
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+              if (sub.isEvent) ...[
+                Text(
+                  AppFormatters.dateLong(sub.nextDueDate),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              Text(
-                'par ${sub.cycleLabel.toLowerCase().replaceFirst('mensuel', 'mois').replaceFirst('trimestriel', 'trimestre').replaceFirst('annuel', 'an')}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+                Text(
+                  sub.dueTime != null
+                      ? 'à ${AppFormatters.time(sub.dueTime!.hour, sub.dueTime!.minute)}'
+                      : 'Rendez-vous',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
+              ] else ...[
+                Text(
+                  AppFormatters.money(sub.amount, sub.currency),
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  'par ${sub.cycleLabel.toLowerCase().replaceFirst('mensuel', 'mois').replaceFirst('trimestriel', 'trimestre').replaceFirst('annuel', 'an')}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -156,8 +174,10 @@ class _DetailBody extends StatelessWidget {
           rows: [
             (
               icon: LucideIcons.calendar,
-              label: 'Prochaine échéance',
-              value: AppFormatters.dateLong(sub.nextDueDate),
+              label: sub.isEvent ? 'Date du rendez-vous' : 'Prochaine échéance',
+              value: sub.dueTime != null
+                  ? AppFormatters.dateTimeLong(sub.dueAt)
+                  : AppFormatters.dateLong(sub.nextDueDate),
             ),
             (
               icon: LucideIcons.timer,

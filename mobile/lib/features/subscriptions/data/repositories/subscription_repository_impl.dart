@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 
 import '../../../../core/errors/failure.dart';
 import '../../../../core/network/api_exception.dart';
@@ -36,6 +37,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
   }) async {
     try {
       return Ok(
@@ -46,6 +48,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'amount': amount,
           'start_date': startDate?.toIso8601String().substring(0, 10),
           'next_due_date': nextDueDate.toIso8601String().substring(0, 10),
+          'due_time': dueTime == null ? null : _timeToJson(dueTime),
           'end_date': endDate?.toIso8601String().substring(0, 10),
           'cycle': cycle.name,
           'currency': currency ?? 'XAF',
@@ -70,8 +73,10 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
     bool clearStartDate = false,
     bool clearEndDate = false,
+    bool clearDueTime = false,
   }) async {
     try {
       return Ok(
@@ -82,6 +87,10 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'amount': ?amount,
           if (nextDueDate != null)
             'next_due_date': nextDueDate.toIso8601String().substring(0, 10),
+          if (clearDueTime)
+            'due_time': null
+          else if (dueTime != null)
+            'due_time': _timeToJson(dueTime),
           'cycle': ?cycle?.name,
           'currency': ?currency,
           if (clearStartDate)
@@ -123,6 +132,10 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
       return const Err(UnexpectedFailure());
     }
   }
+
+  /// TimeOfDay → "HH:MM" accepté par le TimeField DRF.
+  String _timeToJson(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Failure _toFailure(ApiException e) => switch (e.statusCode) {
     400 => ValidationFailure(e.message, fieldErrors: e.fieldErrors),

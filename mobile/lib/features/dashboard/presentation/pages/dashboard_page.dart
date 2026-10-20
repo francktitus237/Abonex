@@ -128,11 +128,13 @@ class _DashboardPageState extends State<DashboardPage> {
             return map;
           }
 
+          // Les rendez-vous n'ont pas de montant : exclus des totaux.
+          final billed = items.where((s) => !s.isEvent).toList();
           final dueByCurrency = sumByCurrency(
-            items.where((s) => s.status != SubscriptionStatus.paid),
+            billed.where((s) => s.status != SubscriptionStatus.paid),
           );
           final spentByCurrency = sumByCurrency(
-            items.where((s) => s.status == SubscriptionStatus.paid),
+            billed.where((s) => s.status == SubscriptionStatus.paid),
           );
           // Budget : comparé uniquement à la devise principale du
           // workspace (les montants en USD ne gonflent pas le
@@ -147,10 +149,18 @@ class _DashboardPageState extends State<DashboardPage> {
           final overdueSubs = items
               .where((s) => s.status == SubscriptionStatus.overdue)
               .toList();
+          // Échéances à venir + rendez-vous non passés (quel que
+          // soit leur statut), triés par date/heure.
+          final now = DateTime.now();
           final upcoming = items
-              .where((s) => s.status == SubscriptionStatus.dueSoon)
+              .where(
+                (s) => s.isEvent
+                    ? s.status != SubscriptionStatus.overdue &&
+                        !s.dueAt.isBefore(DateUtils.dateOnly(now))
+                    : s.status == SubscriptionStatus.dueSoon,
+              )
               .toList()
-            ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+            ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
           final budget = getIt<SettingsStorage>().monthlyBudget;
 
           if (!loading) _maybeShowReminder(overdueSubs);
@@ -201,12 +211,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 14),
 
                 // --- Dépenses par catégorie ---
-                if (!loading && items.isNotEmpty)
+                if (!loading && billed.isNotEmpty)
                   AnimatedFadeIn(
                     delay: const Duration(milliseconds: 120),
-                    child: _CategorySpend(items: items),
+                    child: _CategorySpend(items: billed),
                   ),
-                if (!loading && items.isNotEmpty) const SizedBox(height: 20),
+                if (!loading && billed.isNotEmpty) const SizedBox(height: 20),
 
                 const SizedBox(height: 8),
                 Text(
@@ -326,7 +336,7 @@ class _OverdueBanner extends StatelessWidget {
     final color = context.status.overdue;
     // Somme par devise — ex. "48 500 FCFA + 45 USD".
     final byCurrency = <String, double>{};
-    for (final s in subs) {
+    for (final s in subs.where((s) => !s.isEvent)) {
       byCurrency[s.currency] = (byCurrency[s.currency] ?? 0) + s.amount;
     }
     final totalText = byCurrency.entries
@@ -345,7 +355,7 @@ class _OverdueBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${subs.length} échéance${subs.length > 1 ? 's' : ''} en retard — $totalText',
+              '${subs.length} échéance${subs.length > 1 ? 's' : ''} en retard${totalText.isEmpty ? '' : ' — $totalText'}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -487,14 +497,14 @@ class _BudgetCardState extends State<_BudgetCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${AppFormatters.money(widget.spent)} engagés',
+                  '${AppFormatters.money(widget.spent, _mainCurrency)} engagés',
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: over ? context.status.overdue : null,
                   ),
                 ),
                 Text(
-                  '${(ratio * 100).round()} % de ${AppFormatters.money(widget.budget)}',
+                  '${(ratio * 100).round()} % de ${AppFormatters.money(widget.budget, _mainCurrency)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -505,7 +515,7 @@ class _BudgetCardState extends State<_BudgetCard> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Dépassement de ${AppFormatters.money(widget.spent - widget.budget)}',
+                  'Dépassement de ${AppFormatters.money(widget.spent - widget.budget, _mainCurrency)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: context.status.overdue,
                     fontWeight: FontWeight.w600,
@@ -799,7 +809,7 @@ class _ReminderDialog extends StatelessWidget {
     final scheme = theme.colorScheme;
     final color = context.status.overdue;
     final byCurrency = <String, double>{};
-    for (final s in overdue) {
+    for (final s in overdue.where((s) => !s.isEvent)) {
       byCurrency[s.currency] = (byCurrency[s.currency] ?? 0) + s.amount;
     }
     final totalText = byCurrency.entries
@@ -829,7 +839,7 @@ class _ReminderDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '${overdue.length} échéance${overdue.length > 1 ? 's' : ''} en retard — $totalText au total.',
+            '${overdue.length} échéance${overdue.length > 1 ? 's' : ''} en retard${totalText.isEmpty ? '' : ' — $totalText au total'}.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -852,7 +862,11 @@ class _ReminderDialog extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    AppFormatters.money(s.amount, s.currency),
+                    s.isEvent
+                        ? (s.dueTime != null
+                            ? AppFormatters.dateTimeLong(s.dueAt)
+                            : AppFormatters.dateLong(s.nextDueDate))
+                        : AppFormatters.money(s.amount, s.currency),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),

@@ -83,7 +83,11 @@ class SubscriptionTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${sub.cycleLabel} · ${AppFormatters.dateShort(sub.nextDueDate)}',
+                  sub.isEvent
+                      ? 'Rendez-vous · ${AppFormatters.dateLong(sub.nextDueDate)}'
+                      : '${sub.cycleLabel} · ${AppFormatters.dateShort(sub.nextDueDate)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -95,12 +99,39 @@ class SubscriptionTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                AppFormatters.money(sub.amount, sub.currency),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              // Rendez-vous : pas de montant — on affiche date + heure.
+              if (sub.isEvent)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      sub.dueTime != null
+                          ? LucideIcons.clock
+                          : LucideIcons.calendar,
+                      size: 14,
+                      color: sub.category.color,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      sub.dueTime != null
+                          ? AppFormatters.time(
+                              sub.dueTime!.hour,
+                              sub.dueTime!.minute,
+                            )
+                          : AppFormatters.dateShort(sub.nextDueDate),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  AppFormatters.money(sub.amount, sub.currency),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
               const SizedBox(height: 4),
               Row(
                 mainAxisSize: MainAxisSize.min,

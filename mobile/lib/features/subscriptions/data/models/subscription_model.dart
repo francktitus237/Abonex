@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../../domain/entities/subscription.dart';
 
 /// Modèle JSON ↔ entité. Le snake_case correspond au contrat Django.
@@ -14,7 +16,19 @@ class SubscriptionModel extends Subscription {
     super.currency,
     super.startDate,
     super.endDate,
+    super.dueTime,
   });
+
+  /// "14:30:00" (DRF TimeField) → TimeOfDay.
+  static TimeOfDay? _parseTime(Object? raw) {
+    if (raw is! String) return null;
+    final parts = raw.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return TimeOfDay(hour: h, minute: m);
+  }
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
     return SubscriptionModel(
@@ -41,6 +55,7 @@ class SubscriptionModel extends Subscription {
       endDate: json['end_date'] is String
           ? DateTime.tryParse(json['end_date'] as String)
           : null,
+      dueTime: _parseTime(json['due_time']),
     );
   }
 }

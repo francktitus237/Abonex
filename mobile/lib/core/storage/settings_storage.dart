@@ -51,7 +51,7 @@ class SettingsStorage {
 
   static const _kSoundAlerts = 'sound_alerts';
 
-  /// Budget mensuel saisi par l'utilisateur (FCFA).
+  /// Budget mensuel saisi par l'utilisateur (devise principale du workspace).
   /// 0 = non défini → le dashboard propose de le configurer.
   double get monthlyBudget => _prefs.getDouble(_kMonthlyBudget) ?? 0;
 

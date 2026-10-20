@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
@@ -127,6 +128,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
   }) async {
     final result = await _repository.createSubscription(
       name: name,
@@ -138,6 +140,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       currency: currency,
       startDate: startDate,
       endDate: endDate,
+      dueTime: dueTime,
     );
     if (result case Ok(value: final created)) {
       final current = state.subscriptions ?? [];
@@ -158,8 +161,10 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     String? currency,
     DateTime? startDate,
     DateTime? endDate,
+    TimeOfDay? dueTime,
     bool clearStartDate = false,
     bool clearEndDate = false,
+    bool clearDueTime = false,
   }) async {
     final result = await _repository.updateSubscription(
       id: id,
@@ -172,8 +177,10 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       currency: currency,
       startDate: startDate,
       endDate: endDate,
+      dueTime: dueTime,
       clearStartDate: clearStartDate,
       clearEndDate: clearEndDate,
+      clearDueTime: clearDueTime,
     );
     if (result case Ok(value: final updated)) {
       final current = state.subscriptions ?? [];

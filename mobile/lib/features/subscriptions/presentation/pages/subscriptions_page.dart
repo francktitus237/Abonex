@@ -314,6 +314,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   // (ex. serveur loué dimanche, saisi mercredi) : la prochaine
   // échéance est alors calculée automatiquement.
   DateTime _firstDue = DateTime.now().add(const Duration(days: 30));
+  // Heure du rendez-vous — null = journée entière.
+  TimeOfDay? _dueTime;
   // Date de prise réelle de l'abonnement — null = inconnue.
   DateTime? _startDate;
   // Fin de contrat éventuelle — null = sans fin.
@@ -345,6 +347,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _isEvent = e.cycle == BillingCycle.once ||
           e.category == SubscriptionCategory.event;
       _firstDue = e.nextDueDate;
+      _dueTime = e.dueTime;
       _startDate = e.startDate;
       _endDate = e.endDate;
     }
@@ -439,6 +442,15 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     if (picked != null) setState(() => _firstDue = picked);
   }
 
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _dueTime ?? const TimeOfDay(hour: 9, minute: 0),
+      helpText: 'Heure du rendez-vous',
+    );
+    if (picked != null) setState(() => _dueTime = picked);
+  }
+
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
@@ -461,6 +473,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             currency: _currency,
             startDate: _isEvent ? null : _startDate,
             endDate: _isEvent ? null : _endDate,
+            dueTime: _isEvent ? _dueTime : null,
           )
         : await cubit.update(
             id: existing.id,
@@ -475,6 +488,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             startDate: _startDate,
             clearEndDate: _isEvent || _endDate == null,
             endDate: _endDate,
+            clearDueTime: !_isEvent || _dueTime == null,
+            dueTime: _dueTime,
           );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -695,6 +710,30 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       : 'Première échéance : ${AppFormatters.dateLong(_firstDue)}',
                 ),
               ),
+              // Heure du rendez-vous — optionnelle, effaçable.
+              if (_isEvent) const SizedBox(height: 8),
+              if (_isEvent)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickTime,
+                        icon: const Icon(LucideIcons.clock, size: 18),
+                        label: Text(
+                          _dueTime == null
+                              ? 'Heure (optionnel)'
+                              : 'Heure : ${AppFormatters.time(_dueTime!.hour, _dueTime!.minute)}',
+                        ),
+                      ),
+                    ),
+                    if (_dueTime != null)
+                      IconButton(
+                        tooltip: 'Sans heure',
+                        onPressed: () => setState(() => _dueTime = null),
+                        icon: const Icon(LucideIcons.x, size: 18),
+                      ),
+                  ],
+                ),
               const SizedBox(height: 8),
               Row(
                 children: [

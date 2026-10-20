@@ -118,6 +118,8 @@ class Subscription(models.Model):
     # ou dans le passé (saisie rétroactive).
     start_date = models.DateField(null=True, blank=True)
     next_due_date = models.DateField()
+    # Heure de l'échéance — renseignée pour les rendez-vous/événements.
+    due_time = models.TimeField(null=True, blank=True)
     # Date de fin de contrat — null = renouvellement sans fin.
     end_date = models.DateField(null=True, blank=True)
     cycle = models.CharField(max_length=16, choices=CYCLES, default="monthly")

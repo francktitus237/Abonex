@@ -73,18 +73,36 @@ class _ReportsPageState extends State<ReportsPage> {
             );
           }
 
+          // Rendez-vous : pas de montant — listés à part, par
+          // date/heure. Les graphiques ne portent que sur le facturé.
+          final events = all.where((s) => s.isEvent).toList()
+            ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
+          final billed = all.where((s) => !s.isEvent).toList();
+
           // Devises présentes dans les données.
-          final currencies = all.map((s) => s.currency).toSet().toList()
+          final currencies = billed.map((s) => s.currency).toSet().toList()
             ..sort();
-          final active =
-              _currency ?? currencies.first;
+          final active = currencies.contains(_currency)
+              ? _currency!
+              : (currencies.isNotEmpty ? currencies.first : null);
           // Toutes les analyses ne portent que sur cette devise.
           final items =
-              all.where((s) => s.currency == active).toList();
+              billed.where((s) => s.currency == active).toList();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
+              if (events.isNotEmpty)
+                AnimatedFadeIn(child: _UpcomingEvents(events: events)),
+              if (events.isNotEmpty) const SizedBox(height: 20),
+              if (active == null)
+                const EmptyState(
+                  icon: LucideIcons.chartColumn,
+                  title: 'Pas de dépenses',
+                  subtitle:
+                      'Ajoutez des abonnements facturés pour voir les rapports.',
+                )
+              else ...[
               // Sélecteur de devise — visible seulement si >1.
               if (currencies.length > 1)
                 Padding(
@@ -111,9 +129,83 @@ class _ReportsPageState extends State<ReportsPage> {
                 delay: const Duration(milliseconds: 100),
                 child: _MonthlyForecast(items: items, currency: active),
               ),
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Liste des rendez-vous : date + heure, sans montant.
+class _UpcomingEvents extends StatelessWidget {
+  const _UpcomingEvents({required this.events});
+
+  final List<Subscription> events;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return _ChartCard(
+      title: 'Rendez-vous',
+      child: Column(
+        children: [
+          for (final e in events)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: e.category.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      e.category.icon,
+                      size: 18,
+                      color: e.category.color,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          e.dueTime != null
+                              ? AppFormatters.dateTimeLong(e.dueAt)
+                              : AppFormatters.dateLong(e.nextDueDate),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    AppFormatters.relativeDay(e.nextDueDate),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
