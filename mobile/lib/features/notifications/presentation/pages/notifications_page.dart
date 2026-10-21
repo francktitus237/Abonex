@@ -82,7 +82,8 @@ class NotificationsPage extends StatelessWidget {
                         ? (s.dueTime != null
                             ? AppFormatters.dateTimeLong(s.dueAt)
                             : AppFormatters.dateLong(s.nextDueDate))
-                        : '${AppFormatters.money(s.amount, s.currency)} — ${s.provider}',
+                        : '${AppFormatters.money(s.amount, s.currency)}'
+                            '${s.provider.isEmpty ? '' : ' — ${s.provider}'}',
                     color: context.status.dueSoon,
                     icon: LucideIcons.bellRing,
                   ),

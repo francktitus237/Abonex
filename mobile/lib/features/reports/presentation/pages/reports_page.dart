@@ -343,6 +343,29 @@ class _CategoryDonut extends StatelessWidget {
   }
 }
 
+/// L'abonnement tombe-t-il dans le mois [m] ? Projette les cycles
+/// récurrents depuis la prochaine échéance, en respectant la
+/// fin de contrat éventuelle.
+bool _dueInMonth(Subscription s, DateTime m) {
+  final d = s.nextDueDate;
+  final end = s.endDate;
+  if (end != null && DateTime(m.year, m.month)
+      .isAfter(DateTime(end.year, end.month))) {
+    return false;
+  }
+  // Jamais avant la prochaine échéance connue.
+  if (DateTime(m.year, m.month).isBefore(DateTime(d.year, d.month))) {
+    return false;
+  }
+  return switch (s.cycle) {
+    BillingCycle.monthly => true,
+    BillingCycle.quarterly =>
+      ((m.year - d.year) * 12 + (m.month - d.month)) % 3 == 0,
+    BillingCycle.yearly => m.month == d.month,
+    BillingCycle.once => m.year == d.year && m.month == d.month,
+  };
+}
+
 /// Barres : prévision des échéances sur les 6 prochains mois.
 class _MonthlyForecast extends StatelessWidget {
   const _MonthlyForecast({required this.items, required this.currency});
@@ -356,13 +379,12 @@ class _MonthlyForecast extends StatelessWidget {
     final now = DateTime.now();
 
     // Agrège les montants par mois d'échéance sur 6 mois glissants.
+    // Un abonnement récurrent se projette : mensuel → chaque mois,
+    // trimestriel → 1 mois sur 3, annuel → même mois chaque année.
     final months = List.generate(6, (i) => DateTime(now.year, now.month + i));
     final totals = months.map((m) {
       return items
-          .where(
-            (s) =>
-                s.nextDueDate.year == m.year && s.nextDueDate.month == m.month,
-          )
+          .where((s) => _dueInMonth(s, m))
           .fold(0.0, (sum, s) => sum + s.amount);
     }).toList();
     final maxY = totals.fold(0.0, (a, b) => a > b ? a : b);

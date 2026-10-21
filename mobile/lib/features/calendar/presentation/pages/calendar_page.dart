@@ -230,14 +230,14 @@ class _MonthGrid extends StatelessWidget {
           Row(
             children: [
               for (var c = 0; c < 7; c++)
-                Expanded(child: _cell(r * 7 + c, today, theme)),
+                Expanded(child: _cell(r * 7 + c, today, theme, context)),
             ],
           ),
       ],
     );
   }
 
-  Widget _cell(int index, DateTime today, ThemeData theme) {
+  Widget _cell(int index, DateTime today, ThemeData theme, BuildContext context) {
     final leading = DateTime(month.year, month.month).weekday - 1;
     final dayNumber = index - leading + 1;
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
@@ -303,12 +303,11 @@ class _MonthGrid extends StatelessWidget {
                         color: isSelected
                             ? Colors.white
                             : switch (s.status) {
-                                SubscriptionStatus.paid =>
-                                  AppColors.lightSuccess,
+                                SubscriptionStatus.paid => context.status.paid,
                                 SubscriptionStatus.dueSoon =>
-                                  AppColors.lightWarning,
+                                  context.status.dueSoon,
                                 SubscriptionStatus.overdue =>
-                                  AppColors.lightDanger,
+                                  context.status.overdue,
                               },
                       ),
                     ),

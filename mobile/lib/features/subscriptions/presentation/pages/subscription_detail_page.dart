@@ -108,13 +108,15 @@ class _DetailBody extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                sub.provider,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              if (sub.provider.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  sub.provider,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 16),
               if (sub.isEvent) ...[
                 Text(

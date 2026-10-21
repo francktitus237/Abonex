@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/ambient_background.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../data/datasources/auth_local_datasource.dart';
 import '../../data/models/auth_tokens_model.dart';
@@ -98,7 +99,8 @@ class _InviteAcceptPageState extends State<InviteAcceptPage> {
           icon: const Icon(LucideIcons.arrowLeft),
         ),
       ),
-      body: SafeArea(
+      body: AmbientBackground(
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
           child: Center(
@@ -202,6 +204,7 @@ class _InviteAcceptPageState extends State<InviteAcceptPage> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );
