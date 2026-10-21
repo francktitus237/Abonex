@@ -199,12 +199,38 @@ class RegionalDemoTests(APITestCase):
         self.assertEqual(workspace.subscriptions.count(), 13)
         self.assertTrue(user.check_password("Existing-password-123!"))
 
+    def test_missing_password_still_rejects_account_creation(self):
+        with patch.dict(os.environ, {"DEMO_SEED_PASSWORD": ""}):
+            with self.assertRaises(CommandError):
+                call_command("seed", regional_demo=True, stdout=StringIO())
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_wrong_country_and_currency_are_reported_without_overwriting(self):
+        user = User.objects.create_user("demo.cm@abonex.app")
+        workspace = Workspace.objects.create(name="Existant", country="FR", default_currency="EUR")
+        Profile.objects.create(user=user, workspace=workspace, role="owner")
+        errors = StringIO()
+        with patch.dict(os.environ, {"DEMO_SEED_PASSWORD": "Test-only-password-123!"}):
+            call_command("seed", regional_demo=True, stdout=StringIO(), stderr=errors)
+        workspace.refresh_from_db()
+        self.assertEqual(workspace.country, "FR")
+        self.assertEqual(workspace.default_currency, "EUR")
+        self.assertEqual(workspace.subscriptions.count(), 0)
+        self.assertIsNone(workspace.demo_seeded_at)
+        self.assertIn("pays FR, attendu CM", errors.getvalue())
+        self.assertIn("devise EUR, attendue XAF", errors.getvalue())
+
     def test_shared_workspace_is_not_seeded(self):
         user = User.objects.create_user("demo.cm@abonex.app")
         workspace = Workspace.objects.create(name="Espace partagé", country="CM")
         Profile.objects.create(user=user, workspace=workspace, role="owner")
         member = User.objects.create_user("someone-else")
         Profile.objects.create(user=member, workspace=workspace, role="viewer")
-        with self.assertRaises(CommandError):
-            self.seed()
-        self.assertEqual(Subscription.objects.count(), 0)
+        errors = StringIO()
+        with patch.dict(os.environ, {"DEMO_SEED_PASSWORD": "Test-only-password-123!"}):
+            call_command("seed", regional_demo=True, stdout=StringIO(), stderr=errors)
+        self.assertEqual(workspace.subscriptions.count(), 0)
+        workspace.refresh_from_db()
+        self.assertIsNone(workspace.demo_seeded_at)
+        self.assertIn("espace partagé", errors.getvalue())
+        self.assertEqual(User.objects.get(username="demo.fr@abonex.app").profile.workspace.subscriptions.count(), 13)

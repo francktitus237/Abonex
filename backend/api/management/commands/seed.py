@@ -127,11 +127,21 @@ class Command(BaseCommand):
             if workspace.demo_seeded_at:
                 self.stdout.write(f"{email} : démonstration déjà initialisée, données conservées.")
                 continue
-            if (profile.role != "owner" or
-                    workspace.profiles.exclude(user=owner).exists() or
-                    workspace.country not in ("", country) or
-                    workspace.default_currency not in ("", currency)):
-                raise CommandError(f"Espace de {email} incompatible : aucune donnée démo ajoutée.")
+            reasons = []
+            if profile.role != "owner":
+                reasons.append("rôle différent de propriétaire")
+            if workspace.profiles.exclude(user=owner).exists():
+                reasons.append("espace partagé avec d'autres utilisateurs")
+            if workspace.country not in ("", country):
+                reasons.append(f"pays {workspace.country}, attendu {country}")
+            if workspace.default_currency not in ("", currency):
+                reasons.append(f"devise {workspace.default_currency}, attendue {currency}")
+            if reasons:
+                self.stderr.write(self.style.WARNING(
+                    f"{email} : démonstration ignorée ({'; '.join(reasons)}). "
+                    "Données existantes conservées ; vérifier cet espace manuellement."
+                ))
+                continue
             workspace.country = country
             workspace.default_currency = currency
             workspace.configured = True

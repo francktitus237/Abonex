@@ -49,7 +49,11 @@ nom et un budget déjà défini sont conservés. Le marqueur `demo_seeded_at`
 empêche toute réinitialisation lors des déploiements suivants, même si
 l'utilisateur a renommé ou supprimé des exemples. Aucun fournisseur réel
 n'est connecté et aucun paiement réel n'est effectué. Les espaces partagés
-ou incompatibles sont refusés plutôt que modifiés.
+ou incompatibles sont ignorés plutôt que modifiés ; un avertissement précise
+les motifs (rôle, partage, pays ou devise). Le remplissage démo est optionnel :
+son échec est journalisé mais ne bloque pas le démarrage de l'API. Les erreurs
+de migration restent bloquantes. Vérifier les logs pour confirmer le remplissage
+réel de chacun des deux comptes.
 
 Le budget est accessible par `GET/PATCH /api/v1/workspace/budget/` ; seuls
 les propriétaires et gestionnaires peuvent le modifier. Un client mobile

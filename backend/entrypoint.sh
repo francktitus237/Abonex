@@ -23,7 +23,9 @@ fi
 
 python manage.py migrate --noinput
 if [ "${DEMO_SEED_ENABLED:-false}" = "true" ]; then
-  python manage.py seed --regional-demo
+  if ! python manage.py seed --regional-demo; then
+    echo "AVERTISSEMENT : initialisation démo échouée. Consulter les erreurs ci-dessus ; démarrage de l'API maintenu." >&2
+  fi
 fi
 python manage.py collectstatic --noinput
 
