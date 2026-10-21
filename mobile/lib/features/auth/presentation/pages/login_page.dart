@@ -7,6 +7,7 @@ import 'package:toastification/toastification.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/result.dart';
+import '../../../../core/widgets/ambient_background.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../cubit/login_cubit.dart';
 import '../cubit/login_state.dart';
@@ -63,7 +64,8 @@ class _LoginViewState extends State<_LoginView> {
     final scheme = theme.colorScheme;
 
     return Scaffold(
-      body: SafeArea(
+      body: AmbientBackground(
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Center(
@@ -229,6 +231,7 @@ class _LoginViewState extends State<_LoginView> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

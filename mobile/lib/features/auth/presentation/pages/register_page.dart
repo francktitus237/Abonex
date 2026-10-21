@@ -7,6 +7,7 @@ import '../../../../core/data/countries.dart';
 import '../../../../core/errors/failure.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/result.dart';
+import '../../../../core/widgets/ambient_background.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../cubit/auth_cubit.dart';
 
@@ -103,7 +104,8 @@ class _RegisterPageState extends State<RegisterPage> {
           icon: const Icon(LucideIcons.arrowLeft),
         ),
       ),
-      body: SafeArea(
+      body: AmbientBackground(
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
           child: Center(
@@ -327,6 +329,7 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

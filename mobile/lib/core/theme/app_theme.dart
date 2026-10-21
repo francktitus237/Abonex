@@ -59,8 +59,32 @@ abstract final class AppTheme {
 
     // Inter via google_fonts : aucun asset à déclarer, la police est
     // téléchargée et mise en cache au premier lancement.
-    final textTheme = GoogleFonts.interTextTheme(
+    // Tracking négatif sur les titres : la signature visuelle des
+    // apps fintech modernes (Linear, Revolut, Ramp).
+    final base = GoogleFonts.interTextTheme(
       ThemeData(brightness: brightness).textTheme,
+    );
+    final textTheme = base.copyWith(
+      displayLarge: base.displayLarge
+          ?.copyWith(letterSpacing: -1.6, fontWeight: FontWeight.w800),
+      displayMedium: base.displayMedium
+          ?.copyWith(letterSpacing: -1.1, fontWeight: FontWeight.w800),
+      displaySmall: base.displaySmall
+          ?.copyWith(letterSpacing: -0.8, fontWeight: FontWeight.w800),
+      headlineLarge: base.headlineLarge
+          ?.copyWith(letterSpacing: -0.8, fontWeight: FontWeight.w800),
+      headlineMedium: base.headlineMedium
+          ?.copyWith(letterSpacing: -0.6, fontWeight: FontWeight.w800),
+      headlineSmall: base.headlineSmall
+          ?.copyWith(letterSpacing: -0.4, fontWeight: FontWeight.w800),
+      titleLarge: base.titleLarge
+          ?.copyWith(letterSpacing: -0.3, fontWeight: FontWeight.w700),
+      titleMedium: base.titleMedium
+          ?.copyWith(letterSpacing: -0.2, fontWeight: FontWeight.w600),
+      titleSmall: base.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      bodyLarge: base.bodyLarge?.copyWith(height: 1.5),
+      bodyMedium: base.bodyMedium?.copyWith(height: 1.45),
+      labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w600),
     );
 
     return ThemeData(
@@ -68,12 +92,14 @@ abstract final class AppTheme {
       colorScheme: scheme,
       textTheme: textTheme,
       scaffoldBackgroundColor: scaffold,
+      splashFactory: InkSparkle.splashFactory,
 
       appBarTheme: AppBarTheme(
         backgroundColor: scaffold,
         // Sans ça, Material 3 teinte la barre en violet au scroll.
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         titleTextStyle: textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
         ),
@@ -98,6 +124,17 @@ abstract final class AppTheme {
         ),
       ),
 
+      // Bottom sheets : coins hauts très arrondis + poignée de drag —
+      // le standard des apps modernes.
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: card,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -111,6 +148,84 @@ abstract final class AppTheme {
 
       listTileTheme: const ListTileThemeData(
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: card,
+        selectedColor: scheme.primary.withValues(alpha: 0.14),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        labelStyle: textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        color: card,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(card),
+          surfaceTintColor: const WidgetStatePropertyAll(
+            Colors.transparent,
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ),
+
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: scheme.inverseSurface,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: textTheme.labelSmall?.copyWith(
+          color: scheme.onInverseSurface,
+        ),
+      ),
+
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(
+          scheme.outline.withValues(alpha: 0.6),
+        ),
+        radius: const Radius.circular(8),
+        thickness: const WidgetStatePropertyAll(4),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(color: primary),

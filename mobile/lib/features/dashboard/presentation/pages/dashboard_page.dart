@@ -638,7 +638,9 @@ class _TotalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.radius + 4),
+      child: Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -655,7 +657,44 @@ class _TotalCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      child: Stack(
+        children: [
+          // Halos décoratifs — profondeur façon carte bancaire premium.
+          Positioned(
+            top: -70,
+            right: -50,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.emerald.withValues(alpha: 0.28),
+                    AppColors.emerald.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -90,
+            left: -60,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.07),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -765,6 +804,9 @@ class _TotalCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+        ],
+      ),
       ),
     );
   }
