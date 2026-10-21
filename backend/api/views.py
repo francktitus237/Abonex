@@ -152,14 +152,15 @@ class RegisterView(APIView):
             last_name=last_name,
         )
         # Pays choisi à l'inscription → devise/langue configurées
-        # automatiquement (le workspace reste "non configuré" tant
-        # que le setup complet n'est pas validé).
+        # automatiquement : pas d'écran de setup supplémentaire,
+        # l'espace est prêt à l'emploi dès le premier login.
         currency, language = COUNTRY_DEFAULTS.get(country, ("", "fr"))
         # L'inscrit est propriétaire de son propre espace de travail.
         workspace = Workspace.objects.create(
             name=f"Espace de {first_name or email}",
             country=country if country in COUNTRY_DEFAULTS else "",
             default_currency=currency,
+            configured=True,
         )
         Profile.objects.create(
             user=user, workspace=workspace, role="owner",

@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../auth/domain/entities/user.dart';
+import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 
 /// Gestion des utilisateurs et rôles — réservée au Propriétaire.
 /// Le guard du router bloque déjà l'accès aux autres rôles ;
@@ -79,19 +80,91 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  /// Envoie une invitation email avec le rôle choisi — le destinataire
+  /// confirme via le lien et rejoint le workspace avec ce rôle.
+  Future<void> _invite() async {
+    final emailController = TextEditingController();
+    var role = 'viewer';
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => AlertDialog(
+          title: const Text('Inviter un collaborateur'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'email@entreprise.com',
+                  prefixIcon: Icon(LucideIcons.mail, size: 18),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: role,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Rôle'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'manager',
+                    child: Text('Gestionnaire — tout gérer'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'assistant',
+                    child: Text('Assistant — marquer payé'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'viewer',
+                    child: Text('Lecteur — consultation'),
+                  ),
+                ],
+                onChanged: (v) => setSheetState(() => role = v!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Envoyer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final email = emailController.text.trim();
+    emailController.dispose();
+    if (sent != true || !email.contains('@') || !mounted) return;
+    try {
+      await getIt<WorkspaceRemoteDataSource>().invite(
+        email: email,
+        role: role,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invitation envoyée à $email.')),
+      );
+    } on DioException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Envoi de l\'invitation impossible.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Utilisateurs & rôles')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Invitation : endpoint backend prévu au sprint auth+équipe.
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invitation : bientôt disponible via l\'API.'),
-            ),
-          );
-        },
+        onPressed: _invite,
         icon: const Icon(LucideIcons.userPlus, size: 20),
         label: const Text('Inviter'),
       ),

@@ -19,7 +19,6 @@ import '../../features/subscriptions/presentation/pages/subscription_detail_page
 import '../../features/subscriptions/presentation/pages/subscriptions_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/workspace/presentation/pages/integrations_page.dart';
-import '../../features/workspace/presentation/pages/workspace_setup_page.dart';
 import '../storage/settings_storage.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/splash_page.dart';
@@ -33,8 +32,6 @@ abstract final class AppRoutes {
   static const register = '/register';
   static const inviteAccept = '/invite';
 
-  /// Configuration de premier démarrage (pays, devises, invitations).
-  static const setup = '/setup';
   static const home = '/';
   static const subscriptions = '/subscriptions';
   static const calendar = '/calendar';
@@ -96,13 +93,7 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
           return AppRoutes.login;
         }(),
         Authenticated(user: final user) => () {
-          // Premier démarrage : workspace non configuré → setup forcé.
-          final needsSetup = !(user.workspace?.configured ?? true);
-          if (needsSetup) {
-            return location == AppRoutes.setup ? null : AppRoutes.setup;
-          }
-          if (location == AppRoutes.setup ||
-              onPublicAuth ||
+          if (onPublicAuth ||
               onOnboarding ||
               location == AppRoutes.splash) {
             return AppRoutes.home;
@@ -133,10 +124,6 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.inviteAccept,
         builder: (_, _) => const InviteAcceptPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.setup,
-        builder: (_, _) => const WorkspaceSetupPage(),
       ),
 
       // --- Shell à 5 onglets (l'état de chaque branche est préservé) ---
