@@ -17,6 +17,8 @@ class Workspace(models.Model):
     # Devises secondaires affichées dans l'app (max 2-3).
     extra_currencies = models.JSONField(default=list, blank=True)
     configured = models.BooleanField(default=False)
+    monthly_budget = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    demo_seeded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

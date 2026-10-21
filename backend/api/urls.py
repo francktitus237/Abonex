@@ -26,6 +26,7 @@ urlpatterns = [
     ),
     path("subscriptions/bulk/", views.SubscriptionBulkCreateView.as_view()),
     path("workspace/setup/", views.WorkspaceSetupView.as_view()),
+    path("workspace/budget/", views.WorkspaceBudgetView.as_view()),
     path("invites/", views.InviteListCreateView.as_view()),
     path("invites/accept/", views.InviteAcceptView.as_view()),
     path("providers/catalog/", views.ProviderCatalogView.as_view()),

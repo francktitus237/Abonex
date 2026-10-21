@@ -29,7 +29,7 @@ from .models import (
 )
 from .serializers import (
     PaymentSerializer, SubscriptionSerializer, UserSerializer,
-    WorkspaceSerializer,
+    WorkspaceSerializer, WorkspaceBudgetSerializer,
 )
 
 
@@ -401,6 +401,23 @@ class PaymentHistoryView(generics.ListAPIView):
 # ------------------------------------------------------------------
 # Configuration de premier démarrage (pays, devises) — boss point 2
 # ------------------------------------------------------------------
+
+class WorkspaceBudgetView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(WorkspaceBudgetSerializer(request.user.profile.workspace).data)
+
+    def patch(self, request):
+        if request.user.profile.role not in {"owner", "manager"}:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        serializer = WorkspaceBudgetSerializer(
+            request.user.profile.workspace, data=request.data, partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
 
 class WorkspaceSetupView(APIView):
     """PATCH /workspace/setup/ — configure pays + devises.

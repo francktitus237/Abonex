@@ -30,7 +30,7 @@ enum SubscriptionCategory {
     payroll => 'Salaires',
     transport => 'Transport',
     event => 'Événement',
-    other => 'Autre',
+    other => 'Autre (alimentation, santé…)',
   };
 
   IconData get icon => switch (this) {

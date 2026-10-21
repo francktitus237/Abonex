@@ -16,6 +16,16 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "name"]
 
 
+class WorkspaceBudgetSerializer(serializers.ModelSerializer):
+    monthly_budget = serializers.DecimalField(
+        max_digits=14, decimal_places=2, min_value=0, allow_null=True,
+    )
+
+    class Meta:
+        model = Workspace
+        fields = ["monthly_budget"]
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Forme exacte attendue par l'app Flutter :
     {id, email, role, first_name, last_name, language, workspace}."""

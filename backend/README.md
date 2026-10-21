@@ -33,6 +33,29 @@ Voir `backend/.env.example` pour le fichier complet et
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | console | SMTP pour les invitations par e-mail |
 | `RATES_CONVERT_URL`… | frankfurter.dev | Source des taux de change |
 
+## Démonstrations régionales au déploiement
+
+Pour remplir les espaces de `demo.cm@abonex.app` (XAF) et
+`demo.fr@abonex.app` (EUR), activer `DEMO_SEED_ENABLED=true` dans Dokploy.
+`entrypoint.sh` exécute alors `python manage.py seed --regional-demo`
+après les migrations. Si un compte doit être créé, fournir aussi
+`DEMO_SEED_PASSWORD` (12 caractères minimum) via les variables sécurisées.
+Les mots de passe des comptes existants ne sont jamais réinitialisés.
+
+Chaque espace reçoit 10 abonnements/factures, 3 rendez-vous, 2 paiements
+fictifs et un budget mensuel (1 500 000 XAF ou 6 000 EUR). Les dates sont
+relatives au premier remplissage. Les données existantes portant le même
+nom et un budget déjà défini sont conservés. Le marqueur `demo_seeded_at`
+empêche toute réinitialisation lors des déploiements suivants, même si
+l'utilisateur a renommé ou supprimé des exemples. Aucun fournisseur réel
+n'est connecté et aucun paiement réel n'est effectué. Les espaces partagés
+ou incompatibles sont refusés plutôt que modifiés.
+
+Le budget est accessible par `GET/PATCH /api/v1/workspace/budget/` ; seuls
+les propriétaires et gestionnaires peuvent le modifier. Un client mobile
+recompilé avec cette fonctionnalité est nécessaire pour l'afficher ; les
+anciens APK utilisent encore leur budget local.
+
 ## Modèles principaux
 
 | Modèle | Rôle |

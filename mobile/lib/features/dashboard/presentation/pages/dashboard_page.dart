@@ -7,7 +7,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/storage/settings_storage.dart';
+import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_converter.dart';
@@ -15,6 +15,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
+import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../subscriptions/domain/entities/subscription.dart';
@@ -161,7 +162,6 @@ class _DashboardPageState extends State<DashboardPage> {
               )
               .toList()
             ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
-          final budget = getIt<SettingsStorage>().monthlyBudget;
 
           if (!loading) _maybeShowReminder(overdueSubs);
 
@@ -204,7 +204,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   AnimatedFadeIn(
                     delay: const Duration(milliseconds: 60),
                     child: _BudgetCard(
-                      budget: budget,
                       spent: spentMain,
                     ),
                   ),
@@ -370,9 +369,8 @@ class _OverdueBanner extends StatelessWidget {
 
 /// Consommation budgétaire du mois : dépensé + à payer vs budget.
 class _BudgetCard extends StatefulWidget {
-  const _BudgetCard({required this.budget, required this.spent});
+  const _BudgetCard({required this.spent});
 
-  final double budget;
   final double spent;
 
   @override
@@ -380,6 +378,31 @@ class _BudgetCard extends StatefulWidget {
 }
 
 class _BudgetCardState extends State<_BudgetCard> {
+  double _budget = 0;
+  bool _loadingBudget = true;
+  bool _budgetFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBudget();
+  }
+
+  Future<void> _loadBudget() async {
+    setState(() {
+      _loadingBudget = true;
+      _budgetFailed = false;
+    });
+    try {
+      final budget = await getIt<WorkspaceRemoteDataSource>().monthlyBudget();
+      if (mounted) setState(() => _budget = budget);
+    } catch (_) {
+      if (mounted) setState(() => _budgetFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingBudget = false);
+    }
+  }
+
   /// Le budget est saisi dans la devise principale du workspace.
   String get _mainCurrency => switch (context.read<AuthCubit>().state) {
     Authenticated(user: final u) =>
@@ -389,7 +412,7 @@ class _BudgetCardState extends State<_BudgetCard> {
 
   Future<void> _editBudget() async {
     final controller = TextEditingController(
-      text: widget.budget > 0 ? widget.budget.round().toString() : '',
+      text: _budget > 0 ? _budget.round().toString() : '',
     );
     final value = await showDialog<double>(
       context: context,
@@ -424,9 +447,17 @@ class _BudgetCardState extends State<_BudgetCard> {
         ],
       ),
     );
-    if (value != null && value >= 0) {
-      await getIt<SettingsStorage>().setMonthlyBudget(value);
-      if (mounted) setState(() {});
+    controller.dispose();
+    if (value != null && value.isFinite && value >= 0 && mounted) {
+      try {
+        await getIt<WorkspaceRemoteDataSource>().updateMonthlyBudget(value);
+        if (mounted) setState(() => _budget = value);
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Budget non enregistré. Réessayez.')),
+        );
+      }
     }
   }
 
@@ -434,10 +465,10 @@ class _BudgetCardState extends State<_BudgetCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final ratio = widget.budget > 0
-        ? (widget.spent / widget.budget).clamp(0.0, 1.0)
+    final ratio = _budget > 0
+        ? (widget.spent / _budget).clamp(0.0, 1.0)
         : 0.0;
-    final over = widget.budget > 0 && widget.spent > widget.budget;
+    final over = _budget > 0 && widget.spent > _budget;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -465,9 +496,15 @@ class _BudgetCardState extends State<_BudgetCard> {
                 ],
               ),
               TextButton.icon(
-                onPressed: _editBudget,
+                onPressed: _loadingBudget || _budgetFailed ||
+                    switch (context.read<AuthCubit>().state) {
+                      Authenticated(user: final u) =>
+                        u.role != UserRole.owner && u.role != UserRole.manager,
+                      _ => true,
+                    }
+                    ? null : _editBudget,
                 icon: const Icon(LucideIcons.pencil, size: 14),
-                label: Text(widget.budget > 0 ? 'Modifier' : 'Définir'),
+                label: Text(_budget > 0 ? 'Modifier' : 'Définir'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                 ),
@@ -475,7 +512,15 @@ class _BudgetCardState extends State<_BudgetCard> {
             ],
           ),
           const SizedBox(height: 12),
-          if (widget.budget <= 0)
+          if (_loadingBudget)
+            const LinearProgressIndicator()
+          else if (_budgetFailed)
+            TextButton.icon(
+              onPressed: _loadBudget,
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: const Text('Budget indisponible — réessayer'),
+            )
+          else if (_budget <= 0)
             Text(
               'Définissez votre budget mensuel pour suivre la consommation de vos dépenses.',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -504,7 +549,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                   ),
                 ),
                 Text(
-                  '${(ratio * 100).round()} % de ${AppFormatters.money(widget.budget, _mainCurrency)}',
+                  '${(ratio * 100).round()} % de ${AppFormatters.money(_budget, _mainCurrency)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -515,7 +560,7 @@ class _BudgetCardState extends State<_BudgetCard> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Dépassement de ${AppFormatters.money(widget.spent - widget.budget, _mainCurrency)}',
+                  'Dépassement de ${AppFormatters.money(widget.spent - _budget, _mainCurrency)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: context.status.overdue,
                     fontWeight: FontWeight.w600,

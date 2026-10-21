@@ -2,10 +2,17 @@ import 'package:abonex/core/network/api_endpoints.dart';
 import 'package:abonex/core/storage/settings_storage.dart';
 import 'package:abonex/features/auth/data/models/user_model.dart';
 import 'package:abonex/features/auth/domain/entities/user.dart';
+import 'package:abonex/features/subscriptions/domain/entities/subscription.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('les dépenses alimentaires restent compatibles avec la catégorie other', () {
+    expect(SubscriptionCategory.parse('other'), SubscriptionCategory.other);
+    expect(SubscriptionCategory.other.label, contains('alimentation'));
+    expect(SubscriptionCategory.other.name, 'other');
+  });
+
   group('ApiEndpoints', () {
     test('conserve le préfixe /api/v1/ de l’URL de base', () {
       final baseUrl = Uri.parse('http://10.0.2.2:8000/api/v1/');

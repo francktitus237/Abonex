@@ -11,6 +11,15 @@ class WorkspaceRemoteDataSource {
 
   final Dio _dio;
 
+  Future<double> monthlyBudget() async {
+    final response = await _dio.get<Map<String, dynamic>>('workspace/budget/');
+    return double.tryParse(response.data?['monthly_budget']?.toString() ?? '') ?? 0;
+  }
+
+  Future<void> updateMonthlyBudget(double amount) async {
+    await _dio.patch<void>('workspace/budget/', data: {'monthly_budget': amount});
+  }
+
   /// PATCH /workspace/setup/ → user mis à jour (avec workspace).
   Future<UserModel> setup({
     required String country,

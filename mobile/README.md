@@ -90,3 +90,5 @@ lib/
 flutter analyze
 flutter test
 ```
+coommende pour builder le fichier apk :
+cd /c/Users/Utilisateur/Desktop/Abonex/mobile && flutter build apk --release --dart-define=API_BASE_URL=https://abonex.aiforge.world/api/v1

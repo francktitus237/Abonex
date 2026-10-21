@@ -313,6 +313,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   String _currency = 'XAF';
   // Suggestions de fournisseurs selon le pays du workspace.
   List<Map<String, dynamic>> _providerSuggestions = [];
+  bool _loadingProviders = true;
+  bool _providerLoadFailed = false;
   // Date de la PREMIÈRE échéance — peut être dans le passé
   // (ex. serveur loué dimanche, saisi mercredi) : la prochaine
   // échéance est alors calculée automatiquement.
@@ -348,20 +350,29 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _category = e.category;
       _cycle = e.cycle;
       _currency = e.currency;
-      _isEvent = e.cycle == BillingCycle.once ||
-          e.category == SubscriptionCategory.event;
+      _isEvent = e.category == SubscriptionCategory.event;
       _firstDue = e.nextDueDate;
       _dueTime = e.dueTime;
       _startDate = e.startDate;
       _endDate = e.endDate;
     }
     // Fournisseurs connus du pays → autocomplétion du champ.
-    getIt<WorkspaceRemoteDataSource>()
-        .providerCatalog()
-        .then((list) {
-          if (mounted) setState(() => _providerSuggestions = list);
-        })
-        .onError((_, _) {});
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    setState(() {
+      _loadingProviders = true;
+      _providerLoadFailed = false;
+    });
+    try {
+      final list = await getIt<WorkspaceRemoteDataSource>().providerCatalog();
+      if (mounted) setState(() => _providerSuggestions = list);
+    } catch (_) {
+      if (mounted) setState(() => _providerLoadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingProviders = false);
+    }
   }
 
   /// Devises proposées : principale + secondaires du workspace.
@@ -571,6 +582,28 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 onSelectionChanged: (s) =>
                     setState(() => _isEvent = s.first),
               ),
+              // Raccourci vers l'ajout automatique : connexion à un
+              // compte fournisseur ou services populaires pré-remplis —
+              // importe plusieurs abonnements d'un coup.
+              if (widget.existing == null && !_isEvent)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final router = GoRouter.of(context);
+                      Navigator.of(context).pop();
+                      router.push(AppRoutes.integrations);
+                    },
+                    icon: const Icon(LucideIcons.sparkles, size: 17),
+                    label: const Text(
+                      'Importer plusieurs abonnements '
+                      'ou choisir un service',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _name,
@@ -586,40 +619,45 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               const SizedBox(height: 14),
               // Fournisseur (optionnel) avec suggestions adaptées au
               // pays (ENEO/Camwater pour le Cameroun, EDF/Orange…).
-              if (!_isEvent)
-                Autocomplete<Map<String, dynamic>>(
-                displayStringForOption: (o) => o['name'] as String,
-                optionsBuilder: (value) {
-                  final q = value.text.toLowerCase();
-                  if (q.isEmpty) return _providerSuggestions;
-                  return _providerSuggestions.where(
-                    (p) => (p['name'] as String)
-                        .toLowerCase()
-                        .contains(q),
-                  );
-                },
-                onSelected: (option) {
-                  _provider.text = option['name'] as String;
-                  final cat = option['category'] as String?;
-                  if (cat != null) {
-                    setState(
-                      () => _category = SubscriptionCategory.parse(cat),
+              if (!_isEvent) ...[
+                DropdownMenu<String>(
+                  controller: _provider,
+                  expandedInsets: EdgeInsets.zero,
+                  enableFilter: true,
+                  enableSearch: true,
+                  requestFocusOnTap: true,
+                  menuHeight: 260,
+                  label: const Text('Fournisseur (optionnel)'),
+                  hintText: 'Choisir ou saisir un fournisseur',
+                  leadingIcon: const Icon(LucideIcons.building2, size: 20),
+                  helperText: _loadingProviders
+                      ? 'Chargement des fournisseurs de votre pays…'
+                      : 'Selon le pays du compte. Fournisseur absent ? Saisissez son nom.',
+                  dropdownMenuEntries: [
+                    for (final name in _providerSuggestions
+                        .map((p) => p['name'] as String).toSet())
+                      DropdownMenuEntry(value: name, label: name),
+                  ],
+                  onSelected: (name) {
+                    if (name == null) return;
+                    final option = _providerSuggestions.firstWhere(
+                      (p) => p['name'] == name,
                     );
-                  }
-                },
-                fieldViewBuilder: (context, controller, focus, _) {
-                  controller.addListener(() => _provider.text = controller.text);
-                  return TextFormField(
-                    controller: controller,
-                    focusNode: focus,
-                    decoration: const InputDecoration(
-                      labelText: 'Fournisseur (optionnel)',
-                      hintText: 'Ex. ENEO, OVH, EDF…',
-                      prefixIcon: Icon(LucideIcons.building2, size: 20),
-                    ),
-                  );
-                },
-              ),
+                    setState(() {
+                      _category = SubscriptionCategory.parse(
+                        option['category'] as String? ?? 'other',
+                      );
+                      if (_name.text.trim().isEmpty) _name.text = name;
+                    });
+                  },
+                ),
+                if (_providerLoadFailed)
+                  TextButton.icon(
+                    onPressed: _loadProviders,
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    label: const Text('Catalogue indisponible — réessayer'),
+                  ),
+              ],
               const SizedBox(height: 14),
               // Description : ville/lieu du service ou détail du
               // rendez-vous — affichée dans les alertes.

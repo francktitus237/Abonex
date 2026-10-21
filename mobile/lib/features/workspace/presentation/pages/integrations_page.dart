@@ -4,7 +4,6 @@ import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
@@ -91,44 +90,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     }
   }
 
-  /// Connexion bancaire OAuth (Powens) : webview sécurisé → code →
-  /// le serveur analyse le relevé et détecte les prélèvements.
-  Future<void> _connectBank() async {
-    setState(() => _busy = true);
-    try {
-      final authUrl = await _datasource.powensLogin();
-      final redirect = await FlutterWebAuth2.authenticate(
-        url: authUrl,
-        callbackUrlScheme: 'abonex',
-      );
-      final code = Uri.parse(redirect).queryParameters['code'];
-      if (code == null || !mounted) {
-        _toast('Connexion bancaire annulée.', error: true);
-        return;
-      }
-      final detected = await _datasource.powensCallback(code);
-      if (!mounted) return;
-      if (detected.isEmpty) {
-        _toast(
-          'Compte lié — aucun prélèvement récurrent détecté '
-          '(il faut parfois 2-3 relevés).',
-        );
-      } else {
-        setState(() => _detected = detected);
-      }
-      await _loadConnections();
-    } on Exception {
-      if (mounted) {
-        _toast(
-          'Connexion bancaire impossible ou annulée.',
-          error: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _disconnect(Map<String, dynamic> conn) async {
     setState(() => _busy = true);
     try {
@@ -167,7 +128,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       type: FileType.custom,
       allowedExtensions: ['csv'],
     );
-    if (picked.isEmpty) return;
+    if (picked.isEmpty || !mounted) return;
+    final defaultCurrency = switch (context.read<AuthCubit>().state) {
+      Authenticated(user: final user) => user.workspace?.defaultCurrency ?? 'XAF',
+      _ => 'XAF',
+    };
     setState(() => _busy = true);
     try {
       final bytes = await picked.first.readAsBytes();
@@ -191,7 +156,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           'provider': map['provider'] ?? '',
           'category': map['category'] ?? 'other',
           'amount': map['amount'] ?? '0',
-          'currency': map['currency'] ?? 'XAF',
+          'currency': (map['currency'] ?? '').isEmpty
+              ? defaultCurrency
+              : map['currency'],
           'cycle': map['cycle'] ?? 'monthly',
           'next_due_date': map['next_due_date'],
         });
@@ -469,24 +436,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           ),
           const SizedBox(height: 16),
 
-          // --- Agrégation bancaire : tout automatique ---
-          _SectionCard(
-            icon: LucideIcons.landmark,
-            title: 'Synchronisation bancaire',
-            subtitle:
-                'Connectez votre banque : Abonex détecte '
-                'automatiquement tous vos prélèvements récurrents '
-                '(énergie, eau, télécom, loyer, streaming…) avec '
-                'les vraies dates et montants. Sécurisé — vos '
-                'identifiants passent par votre banque, jamais par nous.',
-            child: FilledButton.icon(
-              onPressed: _busy ? null : _connectBank,
-              icon: const Icon(LucideIcons.landmark, size: 18),
-              label: const Text('Connecter ma banque'),
-            ),
-          ),
-          const SizedBox(height: 16),
-
           // --- Comptes déjà connectés ---
           if (_connections.isNotEmpty)
             _SectionCard(
@@ -544,11 +493,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           // --- Connecteurs ---
           _SectionCard(
             icon: LucideIcons.plugZap,
-            title: 'Connecter vos comptes',
+            title: 'Connexions professionnelles',
             subtitle:
-                'Abonex récupère automatiquement vos services — '
-                'cloud, serveurs, domaines (Gandi, GoDaddy…) et '
-                'prélèvements récurrents (Stripe, Mollie, Paddle…).',
+                'Ces intégrations nécessitent des clés API du fournisseur, '
+                'pas votre mot de passe habituel. Les données disponibles '
+                'varient selon le service ; certains montants et dates '
+                'restent à compléter. Les connecteurs de paiement '
+                'concernent les abonnements facturés à vos clients.',
             child: _loadingConnectors
                 ? const Center(child: CircularProgressIndicator())
                 : Column(

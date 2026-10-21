@@ -1,4 +1,11 @@
+import os
 from datetime import date
+from decimal import Decimal
+from io import StringIO
+from unittest.mock import patch
+
+from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -22,6 +29,27 @@ class WorkspaceIsolationTests(APITestCase):
             role="owner",
         )
         self.client.force_authenticate(self.owner)
+
+    def test_budget_is_shared_only_with_own_workspace(self):
+        response = self.client.patch(
+            "/api/v1/workspace/budget/", {"monthly_budget": "1500000.00"}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.other_workspace.refresh_from_db()
+        self.assertIsNone(self.other_workspace.monthly_budget)
+        self.client.force_authenticate(self.member)
+        response = self.client.get("/api/v1/workspace/budget/")
+        self.assertEqual(response.data["monthly_budget"], "1500000.00")
+        response = self.client.patch(
+            "/api/v1/workspace/budget/", {"monthly_budget": "0"}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_budget_rejects_negative_amount(self):
+        response = self.client.patch(
+            "/api/v1/workspace/budget/", {"monthly_budget": "-1"}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_owner_only_lists_users_from_own_workspace(self):
         response = self.client.get("/api/v1/users/")
@@ -101,3 +129,82 @@ class WorkspaceIsolationTests(APITestCase):
             f"/api/v1/subscriptions/{other_subscription.id}/history/"
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class RegionalDemoTests(APITestCase):
+    def seed(self):
+        with patch.dict(os.environ, {"DEMO_SEED_PASSWORD": "Test-only-password-123!"}):
+            call_command("seed", regional_demo=True, stdout=StringIO())
+
+    def test_seed_creates_two_isolated_regional_demos(self):
+        self.seed()
+        for country, currency, budget in [("cm", "XAF", 1500000), ("fr", "EUR", 6000)]:
+            user = User.objects.get(username=f"demo.{country}@abonex.app")
+            self.assertFalse(user.is_staff)
+            self.assertTrue(user.check_password("Test-only-password-123!"))
+            workspace = user.profile.workspace
+            self.assertEqual(workspace.country, country.upper())
+            self.assertEqual(workspace.default_currency, currency)
+            self.assertEqual(workspace.monthly_budget, Decimal(budget))
+            self.assertIsNotNone(workspace.demo_seeded_at)
+            self.assertEqual(workspace.subscriptions.count(), 13)
+            self.assertEqual(workspace.subscriptions.filter(category="event", cycle="once").count(), 3)
+            self.assertEqual(workspace.payments.count(), 2)
+            self.assertTrue(workspace.subscriptions.filter(status="overdue").exists())
+            self.client.force_authenticate(user)
+            response = self.client.get("/api/v1/subscriptions/")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(response.data), 13)
+            self.assertEqual({s["currency"] for s in response.data}, {currency})
+
+    def test_redeploy_preserves_edits_deletions_and_passwords(self):
+        self.seed()
+        user = User.objects.get(username="demo.cm@abonex.app")
+        user.set_password("Changed-password-456!")
+        user.save()
+        workspace = user.profile.workspace
+        workspace.monthly_budget = 2000000
+        workspace.save()
+        sub = workspace.subscriptions.first()
+        sub.name = "Modifié par le boss"
+        sub.amount = 123
+        sub.save()
+        workspace.subscriptions.filter(category="event").first().delete()
+        self.seed()
+        self.assertEqual(workspace.subscriptions.count(), 12)
+        self.assertEqual(Payment.objects.count(), 4)
+        sub.refresh_from_db()
+        workspace.refresh_from_db()
+        user.refresh_from_db()
+        self.assertEqual(sub.name, "Modifié par le boss")
+        self.assertEqual(sub.amount, 123)
+        self.assertEqual(workspace.monthly_budget, 2000000)
+        self.assertTrue(user.check_password("Changed-password-456!"))
+
+    def test_seed_preserves_existing_demo_workspace_and_data(self):
+        user = User.objects.create_user("demo.cm@abonex.app", password="Existing-password-123!")
+        workspace = Workspace.objects.create(name="Déjà en ligne", country="CM", default_currency="XAF", monthly_budget=42)
+        Profile.objects.create(user=user, workspace=workspace, role="owner")
+        existing = Subscription.objects.create(
+            owner=user, workspace=workspace, name="Eau — résidence",
+            amount=99, currency="XAF", next_due_date=date.today(),
+        )
+        self.seed()
+        user.refresh_from_db()
+        workspace.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(user.profile.workspace_id, workspace.pk)
+        self.assertEqual(workspace.monthly_budget, 42)
+        self.assertEqual(existing.amount, 99)
+        self.assertEqual(workspace.subscriptions.count(), 13)
+        self.assertTrue(user.check_password("Existing-password-123!"))
+
+    def test_shared_workspace_is_not_seeded(self):
+        user = User.objects.create_user("demo.cm@abonex.app")
+        workspace = Workspace.objects.create(name="Espace partagé", country="CM")
+        Profile.objects.create(user=user, workspace=workspace, role="owner")
+        member = User.objects.create_user("someone-else")
+        Profile.objects.create(user=member, workspace=workspace, role="viewer")
+        with self.assertRaises(CommandError):
+            self.seed()
+        self.assertEqual(Subscription.objects.count(), 0)

@@ -22,6 +22,9 @@ PY
 fi
 
 python manage.py migrate --noinput
+if [ "${DEMO_SEED_ENABLED:-false}" = "true" ]; then
+  python manage.py seed --regional-demo
+fi
 python manage.py collectstatic --noinput
 
 exec "$@"
