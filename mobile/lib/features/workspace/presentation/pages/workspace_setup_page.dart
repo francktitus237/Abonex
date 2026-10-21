@@ -11,7 +11,7 @@ import '../../../settings/presentation/cubit/settings_cubit.dart';
 import '../../data/datasources/workspace_remote_datasource.dart';
 
 /// Configuration de premier démarrage — demandée par le client :
-/// pays, langue, devise principale, devises 2/3, et invitation
+/// pays, langue, devise principale et invitation
 /// de collaborateurs par email.
 class WorkspaceSetupPage extends StatefulWidget {
   const WorkspaceSetupPage({super.key});
@@ -23,7 +23,6 @@ class WorkspaceSetupPage extends StatefulWidget {
 class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
   Country? _country;
   String _currency = 'XAF';
-  final Set<String> _extraCurrencies = {};
   String _language = 'fr';
   String _role = 'owner';
   final _inviteController = TextEditingController();
@@ -57,15 +56,6 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
     super.dispose();
   }
 
-  void _selectCountry(Country c) {
-    setState(() {
-      _country = c;
-      _currency = c.currency;
-      _language = c.languages.first;
-      _extraCurrencies.remove(_currency);
-    });
-  }
-
   Future<void> _finish() async {
     if (_country == null) return;
     setState(() => _saving = true);
@@ -74,7 +64,7 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
       await datasource.setup(
         country: _country!.code,
         defaultCurrency: _currency,
-        extraCurrencies: _extraCurrencies.toList(),
+        extraCurrencies: const [],
         language: _language,
       );
       for (final invite in _invites) {
@@ -121,7 +111,7 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Pays, langue et devises — Abonex adapte ensuite '
+                  'Pays, langue et devise — Abonex adapte ensuite '
                   'les fournisseurs suggérés à votre région.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -131,18 +121,29 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
 
                 _StepHeader(index: 1, title: 'Pays', done: _country != null),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final c in AppCountries.all)
-                      ChoiceChip(
-                        label: Text(c.name),
-                        selected: _country == c,
-                        showCheckmark: false,
-                        onSelected: (_) => _selectCountry(c),
-                      ),
-                  ],
+                DropdownButtonFormField<Country>(
+                  initialValue: _country,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Sélectionnez votre pays',
+                    prefixIcon: Icon(LucideIcons.globe, size: 18),
+                  ),
+                  items: AppCountries.all
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Text('${c.name} — ${c.currency}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (c) {
+                    if (c == null) return;
+                    setState(() {
+                      _country = c;
+                      _currency = c.currency;
+                      _language = c.languages.first;
+                    });
+                  },
                 ),
                 const SizedBox(height: 24),
 
@@ -165,7 +166,7 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
 
                 _StepHeader(
                   index: 3,
-                  title: 'Devises',
+                  title: 'Devise principale',
                   done: _country != null,
                 ),
                 const SizedBox(height: 10),
@@ -176,35 +177,15 @@ class _WorkspaceSetupPageState extends State<WorkspaceSetupPage> {
                   items: _allCurrencies
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
-                  onChanged: (v) => setState(() {
-                    _currency = v!;
-                    _extraCurrencies.remove(v);
-                  }),
+                  onChanged: (v) => setState(() => _currency = v!),
                 ),
-                const SizedBox(height: 10),
-                Text('Devises secondaires (optionnel)',
-                    style: theme.textTheme.labelLarge),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final c in _allCurrencies)
-                      if (c != _currency)
-                        FilterChip(
-                          label: Text(c),
-                          selected: _extraCurrencies.contains(c),
-                          showCheckmark: false,
-                          onSelected: _extraCurrencies.length >= 2 &&
-                                  !_extraCurrencies.contains(c)
-                              ? null
-                              : (on) => setState(() {
-                                    on
-                                        ? _extraCurrencies.add(c)
-                                        : _extraCurrencies.remove(c);
-                                  }),
-                        ),
-                  ],
+                Text(
+                  'Déterminée par votre pays — les autres devises se '
+                  'choisissent lors de la création d\'un abonnement.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 24),
 

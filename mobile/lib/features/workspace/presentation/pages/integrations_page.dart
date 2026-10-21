@@ -402,6 +402,38 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     _ => LucideIcons.plugZap,
   };
 
+  /// Services populaires regroupés par univers — demande client :
+  /// classer et présenter par catégorie plutôt qu'une liste plate.
+  List<(String, List<Map<String, dynamic>>)> _presetGroups() {
+    const order = [
+      'streaming', 'music', 'storage', 'gaming',
+      'productivity', 'security', 'other',
+    ];
+    const titles = {
+      'streaming': 'Streaming & TV',
+      'music': 'Musique',
+      'storage': 'Stockage cloud',
+      'gaming': 'Jeux vidéo',
+      'productivity': 'Productivité & outils pro',
+      'security': 'Sécurité & VPN',
+      'other': 'Autres',
+    };
+    final filtered = _presets
+        .where(
+          (p) => _presetQuery.isEmpty ||
+              (p['name'] as String).toLowerCase().contains(_presetQuery),
+        )
+        .toList();
+    return [
+      for (final g in order)
+        if (filtered.any((p) => (p['group'] ?? 'other') == g))
+          (
+            titles[g]!,
+            filtered.where((p) => (p['group'] ?? 'other') == g).toList(),
+          ),
+    ];
+  }
+
   void _toast(String message, {bool error = false}) {
     toastification.show(
       context: context,
@@ -587,31 +619,41 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  for (final p in _presets.where(
-                    (p) => _presetQuery.isEmpty ||
-                        (p['name'] as String)
-                            .toLowerCase()
-                            .contains(_presetQuery),
-                  ))
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      leading: CircleAvatar(
-                        radius: 15,
-                        backgroundColor:
-                            scheme.primary.withValues(alpha: 0.10),
-                        child: const Icon(LucideIcons.badgePlus, size: 16),
+                  for (final group in _presetGroups()) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, bottom: 2),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          group.$1,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                      title: Text(p['name'] as String),
-                      subtitle: Text(
-                        (p['plans'] as List)
-                            .map((pl) => pl['label'])
-                            .join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: _busy ? null : () => _quickAddPreset(p),
                     ),
+                    for (final p in group.$2)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 15,
+                          backgroundColor:
+                              scheme.primary.withValues(alpha: 0.10),
+                          child: const Icon(LucideIcons.badgePlus, size: 16),
+                        ),
+                        title: Text(p['name'] as String),
+                        subtitle: Text(
+                          (p['plans'] as List)
+                              .map((pl) => pl['label'])
+                              .join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: _busy ? null : () => _quickAddPreset(p),
+                      ),
+                  ],
                 ],
               ),
             ),
