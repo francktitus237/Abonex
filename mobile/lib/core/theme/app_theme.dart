@@ -119,7 +119,7 @@ abstract final class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size(64, 52),
           textStyle: textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -131,7 +131,7 @@ abstract final class AppTheme {
 
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size(64, 52),
           textStyle: textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -143,7 +143,7 @@ abstract final class AppTheme {
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size(64, 52),
           textStyle: textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
           ),
