@@ -249,6 +249,7 @@ class _IdentityCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      useRootNavigator: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final bottom = MediaQuery.viewInsetsOf(context).bottom;

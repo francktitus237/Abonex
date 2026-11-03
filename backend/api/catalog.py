@@ -276,6 +276,21 @@ def flag_emoji(country_code: str | None) -> str:
     return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in code)
 
 
+def provider_origin(name: str | None) -> str | None:
+    """Pays d'origine du fournisseur correspondant à `name`.
+
+    Correspondance insensible à la casse, sur le nom complet ou sur
+    chaque segment d'une entrée composée (« Orange / Sosh » → « Sosh »).
+    Renvoie None si le fournisseur n'est pas dans le catalogue."""
+    key = (name or "").strip().lower()
+    if not key:
+        return None
+    for p in CATALOG:
+        if key in {part.strip().lower() for part in p["name"].split("/")}:
+            return p.get("origin")
+    return None
+
+
 def providers_for(country_code: str) -> list[dict]:
     """Fournisseurs internationaux + ceux du pays demandé.
     `origin` = pays du fournisseur (siège, ou pays d'exploitation

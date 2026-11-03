@@ -245,6 +245,10 @@ void showSubscriptionFormSheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
+    // Le sheet recouvre tout l'écran, y compris la pill de
+    // navigation — sinon elle passerait par-dessus le bouton
+    // de validation depuis extendBody.
+    useRootNavigator: true,
     builder: (_) => BlocProvider.value(
       value: context.read<SubscriptionsCubit>(),
       child: _AddSubscriptionSheet(existing: existing),

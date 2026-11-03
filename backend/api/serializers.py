@@ -59,12 +59,17 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
+    provider_country = serializers.SerializerMethodField()
+    provider_flag = serializers.SerializerMethodField()
+
     class Meta:
         model = Subscription
         fields = [
             "id",
             "name",
             "provider",
+            "provider_country",
+            "provider_flag",
             "description",
             "category",
             "amount",
@@ -76,7 +81,20 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "cycle",
             "status",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "provider_country", "provider_flag"]
+
+    def _provider_origin(self, obj):
+        from .catalog import provider_origin
+
+        return provider_origin(obj.provider) or provider_origin(obj.name)
+
+    def get_provider_country(self, obj):
+        return self._provider_origin(obj) or ""
+
+    def get_provider_flag(self, obj):
+        from .catalog import flag_emoji
+
+        return flag_emoji(self._provider_origin(obj))
 
 
 class PaymentSerializer(serializers.ModelSerializer):

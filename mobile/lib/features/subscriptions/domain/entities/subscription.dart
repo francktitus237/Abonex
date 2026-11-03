@@ -79,6 +79,8 @@ class Subscription {
     required this.status,
     this.currency = 'XAF',
     this.description = '',
+    this.providerCountry = '',
+    this.providerFlag = '',
     this.startDate,
     this.endDate,
     this.dueTime,
@@ -97,6 +99,11 @@ class Subscription {
   /// Note libre : ville/lieu du service, référence du contrat…
   /// Rappelée dans les alertes et notifications.
   final String description;
+
+  /// Pays du fournisseur (ISO alpha-2) + drapeau — résolus par
+  /// l'API à partir du catalogue ('' si fournisseur inconnu).
+  final String providerCountry;
+  final String providerFlag;
 
   /// Date de souscription/première échéance — null si inconnue.
   final DateTime? startDate;

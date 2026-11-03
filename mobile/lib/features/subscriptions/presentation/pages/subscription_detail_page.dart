@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
+import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -118,7 +119,10 @@ class _DetailBody extends StatelessWidget {
               if (sub.provider.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  sub.provider,
+                  [
+                    if (sub.providerFlag.isNotEmpty) sub.providerFlag,
+                    sub.provider,
+                  ].join(' '),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -236,6 +240,16 @@ class _DetailBody extends StatelessWidget {
                     label: 'Fournisseur',
                     value: sub.provider.isEmpty ? '—' : sub.provider,
                   ),
+                  if (sub.providerCountry.isNotEmpty)
+                    (
+                      icon: LucideIcons.flag,
+                      label: 'Pays du fournisseur',
+                      value: [
+                        sub.providerFlag,
+                        AppCountries.byCode(sub.providerCountry)?.name ??
+                            sub.providerCountry,
+                      ].join(' ').trim(),
+                    ),
                   if (sub.description.isNotEmpty)
                     (
                       icon: LucideIcons.mapPin,

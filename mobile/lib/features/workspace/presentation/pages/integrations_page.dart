@@ -199,6 +199,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      useRootNavigator: true,
       builder: (ctx) {
         final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
         return Padding(
@@ -317,6 +318,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      useRootNavigator: true,
       builder: (ctx) => _PresetSheet(preset: preset, currencies: currencies),
     );
     if (entry == null || !mounted) return;

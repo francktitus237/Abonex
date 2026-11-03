@@ -85,7 +85,15 @@ class SubscriptionTile extends StatelessWidget {
                 Text(
                   sub.isEvent
                       ? 'Rendez-vous · ${AppFormatters.dateLong(sub.nextDueDate)}'
-                      : '${sub.cycleLabel} · ${AppFormatters.dateShort(sub.nextDueDate)}',
+                      : [
+                          if (sub.provider.isNotEmpty)
+                            [
+                              if (sub.providerFlag.isNotEmpty) sub.providerFlag,
+                              sub.provider,
+                            ].join(' '),
+                          sub.cycleLabel,
+                          AppFormatters.dateShort(sub.nextDueDate),
+                        ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
