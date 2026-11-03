@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
+import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_router.dart';
 
@@ -318,6 +319,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   // Devise de l'abonnement — pré-remplie avec la devise principale
   // du workspace, modifiable (un compte peut suivre EUR + FCFA).
   String _currency = 'XAF';
+  // Pays où l'abonnement est actif — choisi par l'utilisateur
+  // (peut différer du pays du workspace ET du siège du
+  // fournisseur, ex. un serveur loué en Allemagne).
+  String _country = '';
   // Suggestions de fournisseurs selon le pays du workspace.
   List<Map<String, dynamic>> _providerSuggestions = [];
   bool _loadingProviders = true;
@@ -345,6 +350,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     if (workspace?.defaultCurrency?.isNotEmpty ?? false) {
       _currency = workspace!.defaultCurrency!;
     }
+    _country = workspace?.country ?? '';
     // Mode édition : on pré-remplit tous les champs.
     final e = widget.existing;
     if (e != null) {
@@ -357,6 +363,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _category = e.category;
       _cycle = e.cycle;
       _currency = e.currency;
+      if (e.country.isNotEmpty) _country = e.country;
       _isEvent = e.category == SubscriptionCategory.event;
       _firstDue = e.nextDueDate;
       _dueTime = e.dueTime;
@@ -495,6 +502,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             cycle: _isEvent ? BillingCycle.once : _cycle,
             currency: _currency,
             description: _description.text.trim(),
+            country: _country,
             startDate: _isEvent ? null : _startDate,
             endDate: _isEvent ? null : _endDate,
             dueTime: _isEvent ? _dueTime : null,
@@ -509,6 +517,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             cycle: _isEvent ? BillingCycle.once : _cycle,
             currency: _currency,
             description: _description.text.trim(),
+            country: _country,
             clearStartDate: _isEvent || _startDate == null,
             startDate: _startDate,
             clearEndDate: _isEvent || _endDate == null,
@@ -793,6 +802,39 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     )
                     .toList(),
                 onChanged: (c) => setState(() => _category = c!),
+              ),
+              if (!_isEvent) const SizedBox(height: 14),
+              // Pays où l'abonnement est actif — n'importe lequel,
+              // indépendant du pays du compte ou du fournisseur.
+              if (!_isEvent)
+                DropdownButtonFormField<String>(
+                initialValue: _country.isEmpty ? null : _country,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Pays de l\'abonnement',
+                  prefixIcon: Icon(LucideIcons.globe, size: 20),
+                ),
+                items: AppCountries.all
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c.code,
+                        child: Row(
+                          children: [
+                            Text(c.flag),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                c.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _country = v ?? ''),
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(

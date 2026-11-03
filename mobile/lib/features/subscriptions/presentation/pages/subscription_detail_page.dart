@@ -119,10 +119,7 @@ class _DetailBody extends StatelessWidget {
               if (sub.provider.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  [
-                    if (sub.providerFlag.isNotEmpty) sub.providerFlag,
-                    sub.provider,
-                  ].join(' '),
+                  sub.provider,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -240,14 +237,13 @@ class _DetailBody extends StatelessWidget {
                     label: 'Fournisseur',
                     value: sub.provider.isEmpty ? '—' : sub.provider,
                   ),
-                  if (sub.providerCountry.isNotEmpty)
+                  if (sub.country.isNotEmpty)
                     (
                       icon: LucideIcons.flag,
-                      label: 'Pays du fournisseur',
+                      label: 'Pays',
                       value: [
-                        sub.providerFlag,
-                        AppCountries.byCode(sub.providerCountry)?.name ??
-                            sub.providerCountry,
+                        sub.countryFlag,
+                        AppCountries.byCode(sub.country)?.name ?? sub.country,
                       ].join(' ').trim(),
                     ),
                   if (sub.description.isNotEmpty)

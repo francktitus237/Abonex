@@ -20,6 +20,11 @@ class Country {
 
   /// Langues principales du pays (codes ISO 639-1), première = défaut.
   final List<String> languages;
+
+  /// Drapeau emoji dérivé du code ISO (indicateurs régionaux).
+  String get flag => String.fromCharCodes(
+    code.codeUnits.map((c) => 0x1F1E6 + c - 0x41),
+  );
 }
 
 abstract final class AppCountries {

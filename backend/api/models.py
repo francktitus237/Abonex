@@ -114,6 +114,9 @@ class Subscription(models.Model):
     # Note libre : ville/lieu du service, référence contrat…
     # Affichée dans les rappels et notifications.
     description = models.CharField(max_length=255, blank=True)
+    # Pays où l'abonnement est actif (ISO alpha-2) — choisi par
+    # l'utilisateur, indépendant du pays d'origine du fournisseur.
+    country = models.CharField(max_length=2, blank=True, default="")
     category = models.CharField(
         max_length=16, choices=CATEGORIES, default="other"
     )

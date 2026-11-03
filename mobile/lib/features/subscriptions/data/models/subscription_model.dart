@@ -15,8 +15,8 @@ class SubscriptionModel extends Subscription {
     required super.status,
     super.currency,
     super.description,
-    super.providerCountry,
-    super.providerFlag,
+    super.country,
+    super.countryFlag,
     super.startDate,
     super.endDate,
     super.dueTime,
@@ -53,8 +53,8 @@ class SubscriptionModel extends Subscription {
       ),
       currency: json['currency'] as String? ?? 'XAF',
       description: json['description'] as String? ?? '',
-      providerCountry: json['provider_country'] as String? ?? '',
-      providerFlag: json['provider_flag'] as String? ?? '',
+      country: json['country'] as String? ?? '',
+      countryFlag: json['country_flag'] as String? ?? '',
       startDate: json['start_date'] is String
           ? DateTime.tryParse(json['start_date'] as String)
           : null,
