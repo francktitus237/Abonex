@@ -13,6 +13,7 @@ import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
@@ -52,7 +53,7 @@ class _ProfileView extends StatelessWidget {
     final theme = Theme.of(context);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20 + AppShell.barInset),
       children: [
         // ---------- Carte identité ----------
         AnimatedFadeIn(child: _IdentityCard(user: user)),

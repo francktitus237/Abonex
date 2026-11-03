@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -90,7 +91,9 @@ class _ReportsPageState extends State<ReportsPage> {
               billed.where((s) => s.currency == active).toList();
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            padding: const EdgeInsets.fromLTRB(
+              20, 8, 20, 32 + AppShell.barInset,
+            ),
             children: [
               if (events.isNotEmpty)
                 AnimatedFadeIn(child: _UpcomingEvents(events: events)),

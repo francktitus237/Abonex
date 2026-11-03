@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -10,14 +12,20 @@ import '../storage/settings_storage.dart';
 /// Coquille de navigation basse — les 5 onglets du cahier des charges :
 /// Accueil · Abonnements · Calendrier · Rapports · Profil.
 ///
-/// Barre flottante "pill" : cartes arrondies, ombre douce, icône
-/// active sur pastille émeraude — style fintech moderne.
+/// Barre flottante "pill" arrondie, fond translucide flouté : le
+/// contenu défile derrière elle et reste visible par transparence.
+/// Icône active sur pastille émeraude — style fintech moderne.
 /// StatefulShellNavigationShell garde l'état de chaque branche
 /// (scroll, formulaires…) quand on change d'onglet.
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
+
+  /// Hauteur totale réservée par la pill (68) + marge basse (12).
+  /// Les pages ajoutent cette valeur au padding bas de leur liste
+  /// pour que le dernier élément reste accessible.
+  static const barInset = 80.0;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -55,42 +63,32 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      // Le contenu passe SOUS la barre flottante — les pages
-      // ont déjà un padding bas dans leurs ListView.
+      // Pas de padding sur le corps : le contenu défile SOUS la pill,
+      // visible par transparence (fond translucide + flou).
       extendBody: true,
-      body: Padding(
-        padding: EdgeInsets.only(
-          bottom: 92 + MediaQuery.viewPaddingOf(context).bottom,
-        ),
-        child: widget.shell,
-      ),
+      body: widget.shell,
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: Container(
-            height: 68,
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(34),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: Theme.of(context).brightness == Brightness.dark
-                        ? 0.4
-                        : 0.10,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(34),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                height: 68,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: dark ? 0.82 : 0.88),
+                  borderRadius: BorderRadius.circular(34),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.5),
                   ),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
                 ),
-              ],
-            ),
-            child: Row(
+                child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 for (var i = 0; i < _items.length; i++)
@@ -109,6 +107,8 @@ class _AppShellState extends State<AppShell> {
                     },
                   ),
               ],
+            ),
+              ),
             ),
           ),
         ),

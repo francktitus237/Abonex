@@ -592,7 +592,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                           radius: 15,
                           backgroundColor:
                               scheme.primary.withValues(alpha: 0.10),
-                          child: const Icon(LucideIcons.badgePlus, size: 16),
+                          child: (p['flag'] as String?)?.isNotEmpty == true
+                              ? Text(
+                                  p['flag'] as String,
+                                  style: const TextStyle(fontSize: 16),
+                                )
+                              : const Icon(LucideIcons.badgePlus, size: 16),
                         ),
                         title: Text(p['name'] as String),
                         subtitle: Text(

@@ -10,6 +10,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -66,7 +67,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       // AU-DESSUS de la barre de navigation pill — plus de
       // chevauchement sur aucun écran.
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 28),
+        padding: const EdgeInsets.only(bottom: 8 + AppShell.barInset),
         child: FloatingActionButton.extended(
           onPressed: () => _showAddSheet(context),
           icon: const Icon(LucideIcons.plus, size: 20),
@@ -192,7 +193,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     return RefreshIndicator(
       onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 96),
+        padding: const EdgeInsets.fromLTRB(
+          20, 0, 20, 96 + AppShell.barInset,
+        ),
         itemCount: filtered.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) => AnimatedFadeIn(
@@ -634,9 +637,21 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       ? 'Chargement des fournisseurs de votre pays…'
                       : 'Selon le pays du compte. Fournisseur absent ? Saisissez son nom.',
                   dropdownMenuEntries: [
-                    for (final name in _providerSuggestions
-                        .map((p) => p['name'] as String).toSet())
-                      DropdownMenuEntry(value: name, label: name),
+                    // Drapeau du pays du fournisseur devant le nom.
+                    for (final p in {
+                      for (final p in _providerSuggestions)
+                        p['name'] as String: p,
+                    }.values)
+                      DropdownMenuEntry(
+                        value: p['name'] as String,
+                        label: p['name'] as String,
+                        leadingIcon: Text(
+                          (p['flag'] as String?)?.isNotEmpty == true
+                              ? p['flag'] as String
+                              : '🌐',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ),
                   ],
                   onSelected: (name) {
                     if (name == null) return;
@@ -748,6 +763,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               if (!_isEvent)
                 DropdownButtonFormField<SubscriptionCategory>(
                 initialValue: _category,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Catégorie',
                   prefixIcon: Icon(LucideIcons.layoutGrid, size: 20),
@@ -760,7 +776,13 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                           children: [
                             Icon(c.icon, size: 18, color: c.color),
                             const SizedBox(width: 10),
-                            Text(c.label),
+                            Expanded(
+                              child: Text(
+                                c.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ],
                         ),
                       ),

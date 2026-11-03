@@ -14,6 +14,7 @@ import '../../../../core/utils/currency_converter.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -168,7 +169,9 @@ class _DashboardPageState extends State<DashboardPage> {
           return RefreshIndicator(
             onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              padding: const EdgeInsets.fromLTRB(
+                20, 8, 20, 32 + AppShell.barInset,
+              ),
               children: [
                 // --- Carte total : navy dégradé du logo ---
                 if (loading)

@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../subscriptions/domain/entities/subscription.dart';
@@ -85,7 +86,9 @@ class _CalendarPageState extends State<CalendarPage> {
               : items.where((s) => _sameDay(s.nextDueDate, selected)).toList();
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+            padding: const EdgeInsets.fromLTRB(
+              20, 4, 20, 32 + AppShell.barInset,
+            ),
             children: [
               AnimatedFadeIn(
                 child: Container(
