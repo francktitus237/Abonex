@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -19,27 +20,28 @@ class NotificationsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      appBar: AppBar(title: Text(context.tr('nav.notifications'))),
       body: BlocBuilder<SubscriptionsCubit, SubscriptionsState>(
         builder: (context, state) {
           if (state is! SubscriptionsLoaded) {
             return const Center(child: CircularProgressIndicator());
           }
-          final overdue = state.items
-              .where((s) => s.status == SubscriptionStatus.overdue)
-              .toList()
-            ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
-          final dueSoon = state.items
-              .where((s) => s.status == SubscriptionStatus.dueSoon)
-              .toList()
-            ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+          final overdue =
+              state.items
+                  .where((s) => s.status == SubscriptionStatus.overdue)
+                  .toList()
+                ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+          final dueSoon =
+              state.items
+                  .where((s) => s.status == SubscriptionStatus.dueSoon)
+                  .toList()
+                ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
 
           if (overdue.isEmpty && dueSoon.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: LucideIcons.bellOff,
-              title: 'Aucune notification',
-              subtitle:
-                  'Toutes vos échéances sont réglées. Nous vous préviendrons dès qu\'un paiement approche.',
+              title: context.tr('notif.empty'),
+              subtitle: context.tr('notif.emptySub'),
             );
           }
 
@@ -49,19 +51,24 @@ class NotificationsPage extends StatelessWidget {
               if (overdue.isNotEmpty) ...[
                 _SectionHeader(
                   icon: LucideIcons.circleAlert,
-                  title: 'En retard',
+                  title: context.tr('status.overdue'),
                   color: context.status.overdue,
                 ),
                 const SizedBox(height: 10),
                 for (final s in overdue)
                   _NotificationTile(
                     subscription: s,
-                    title: s.isEvent ? 'Rendez-vous passé' : 'Échéance dépassée',
+                    title: context.tr(
+                      s.isEvent ? 'notif.pastEvent' : 'notif.duePassed',
+                    ),
                     body: s.isEvent
                         ? (s.dueTime != null
-                            ? AppFormatters.dateTimeLong(s.dueAt)
-                            : AppFormatters.dateLong(s.nextDueDate))
-                        : '${AppFormatters.money(s.amount, s.currency)} — attendue le ${AppFormatters.dateLong(s.nextDueDate)}',
+                              ? AppFormatters.dateTimeLong(s.dueAt)
+                              : AppFormatters.dateLong(s.nextDueDate))
+                        : context.tr('notif.expected', {
+                            'amount': AppFormatters.money(s.amount, s.currency),
+                            'date': AppFormatters.dateLong(s.nextDueDate),
+                          }),
                     color: context.status.overdue,
                     icon: LucideIcons.circleAlert,
                   ),
@@ -70,20 +77,20 @@ class NotificationsPage extends StatelessWidget {
               if (dueSoon.isNotEmpty) ...[
                 _SectionHeader(
                   icon: LucideIcons.clock,
-                  title: 'À venir',
+                  title: context.tr('status.dueSoon'),
                   color: context.status.dueSoon,
                 ),
                 const SizedBox(height: 10),
                 for (final s in dueSoon)
                   _NotificationTile(
                     subscription: s,
-                    title: _dueIn(s),
+                    title: _dueIn(context, s),
                     body: s.isEvent
                         ? (s.dueTime != null
-                            ? AppFormatters.dateTimeLong(s.dueAt)
-                            : AppFormatters.dateLong(s.nextDueDate))
+                              ? AppFormatters.dateTimeLong(s.dueAt)
+                              : AppFormatters.dateLong(s.nextDueDate))
                         : '${AppFormatters.money(s.amount, s.currency)}'
-                            '${s.provider.isEmpty ? '' : ' — ${s.provider}'}',
+                              '${s.provider.isEmpty ? '' : ' — ${s.provider}'}',
                     color: context.status.dueSoon,
                     icon: LucideIcons.bellRing,
                   ),
@@ -98,10 +105,10 @@ class NotificationsPage extends StatelessWidget {
     );
   }
 
-  static String _dueIn(Subscription s) {
+  static String _dueIn(BuildContext context, Subscription s) {
     final days = s.nextDueDate.difference(DateTime.now()).inDays;
-    if (days <= 0) return 'Échéance aujourd\'hui';
-    return 'Échéance dans $days j';
+    if (days <= 0) return context.tr('notif.dueToday');
+    return context.tr('notif.dueIn', {'n': '$days'});
   }
 }
 
@@ -161,8 +168,7 @@ class _NotificationTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radius - 4),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppTheme.radius - 4),
-          onTap: () =>
-              context.push('/subscriptions/${subscription.id}'),
+          onTap: () => context.push('/subscriptions/${subscription.id}'),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -246,14 +252,14 @@ class _UpdateReminderCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Nouvelle facture ou abonnement non suivi ? Ajoutez-le pour des rappels complets.',
+              context.tr('notif.hint'),
               style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
             ),
           ),
           const SizedBox(width: 8),
           TextButton(
             onPressed: () => context.go('/subscriptions'),
-            child: const Text('Ajouter'),
+            child: Text(context.tr('common.add')),
           ),
         ],
       ),

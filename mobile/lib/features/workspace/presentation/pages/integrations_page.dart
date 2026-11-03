@@ -4,10 +4,12 @@ import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -73,17 +75,16 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   Future<void> _resync(Map<String, dynamic> conn) async {
     setState(() => _busy = true);
     try {
-      final detected =
-          await _datasource.resyncConnection(conn['id'] as int);
+      final detected = await _datasource.resyncConnection(conn['id'] as int);
       if (!mounted) return;
       if (detected.isEmpty) {
-        _toast('Aucun service détecté sur ce compte.');
+        _toast(context.tr('int.noneDetected'));
       } else {
         setState(() => _detected = detected);
       }
     } on Exception {
       if (mounted) {
-        _toast('Synchronisation impossible.', error: true);
+        _toast(context.tr('int.syncFail'), error: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -95,12 +96,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     try {
       await _datasource.disconnectConnection(conn['id'] as int);
       if (!mounted) return;
-      setState(
-        () => _connections.removeWhere((c) => c['id'] == conn['id']),
+      setState(() => _connections.removeWhere((c) => c['id'] == conn['id']));
+      _toast(
+        context.tr('int.disconnected', {'name': '${conn['provider_label']}'}),
       );
-      _toast('${conn['provider_label']} déconnecté.');
     } on Exception {
-      if (mounted) _toast('Déconnexion impossible.', error: true);
+      if (mounted) {
+        _toast(context.tr('int.disconnectFail'), error: true);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -130,20 +133,23 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     );
     if (picked.isEmpty || !mounted) return;
     final defaultCurrency = switch (context.read<AuthCubit>().state) {
-      Authenticated(user: final user) => user.workspace?.defaultCurrency ?? 'XAF',
+      Authenticated(user: final user) =>
+        user.workspace?.defaultCurrency ?? 'XAF',
       _ => 'XAF',
     };
     setState(() => _busy = true);
     try {
       final bytes = await picked.first.readAsBytes();
+      if (!mounted) return;
       final content = utf8.decode(bytes);
       final rows = const CsvDecoder().convert(content);
       if (rows.length < 2) {
-        _toast('Fichier vide ou en-têtes manquants.', error: true);
+        _toast(context.tr('int.csvEmpty'), error: true);
         return;
       }
-      final headers =
-          rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
+      final headers = rows.first
+          .map((h) => h.toString().trim().toLowerCase())
+          .toList();
       final items = <Map<String, dynamic>>[];
       for (final row in rows.skip(1)) {
         final map = <String, dynamic>{};
@@ -164,20 +170,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
         });
       }
       if (items.isEmpty) {
-        _toast('Aucune ligne valide dans le fichier.', error: true);
+        _toast(context.tr('int.csvNoRows'), error: true);
         return;
       }
       final result = await _datasource.bulkCreate(items);
       if (!mounted) return;
+      final errors = result['errors'] as List;
       _toast(
-        '${result['created']} abonnement(s) importé(s)'
-        '${(result['errors'] as List).isNotEmpty ? ' — ${(result['errors'] as List).length} ligne(s) ignorée(s)' : ''}.',
+        context.tr('int.csvImported', {
+          'n': '${result['created']}',
+          'skipped': errors.isNotEmpty
+              ? context.tr('int.csvSkipped', {'n': '${errors.length}'})
+              : '',
+        }),
       );
       if (mounted) {
         await context.read<SubscriptionsCubit>().refresh();
       }
     } on Exception {
-      if (mounted) _toast('Fichier illisible. Vérifiez le format CSV.', error: true);
+      if (mounted) _toast(context.tr('int.csvFail'), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -185,13 +196,45 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
 
   // ---------- Connecteurs externes ----------
 
+  /// Agrégation bancaire (Powens / PSD2) : l'utilisateur s'authentifie
+  /// auprès de sa banque dans le webview sécurisé — Abonex ne reçoit
+  /// jamais d'identifiants bancaires, seulement le code OAuth.
+  Future<void> _connectBank() async {
+    setState(() => _busy = true);
+    try {
+      final url = await _datasource.powensLogin();
+      final result = await FlutterWebAuth2.authenticate(
+        url: url,
+        callbackUrlScheme: 'abonex',
+      );
+      final code = Uri.parse(result).queryParameters['code'];
+      if (code == null || code.isEmpty) {
+        if (mounted) _toast(context.tr('bank.fail'), error: true);
+        return;
+      }
+      final detected = await _datasource.powensCallback(code);
+      if (!mounted) return;
+      if (detected.isEmpty) {
+        _toast(context.tr('int.noneDetected'));
+      } else {
+        setState(() => _detected = detected);
+      }
+      await _loadConnections();
+    } on Exception {
+      if (mounted) _toast(context.tr('bank.fail'), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _connect(Map<String, dynamic> connector) async {
-    final fields =
-        (connector['auth_fields'] as List).cast<Map<String, dynamic>>();
+    final fields = (connector['auth_fields'] as List)
+        .cast<Map<String, dynamic>>();
     final controllers = {
-      for (final f in fields) f['key'] as String: TextEditingController(
-        text: f['default']?.toString() ?? '',
-      ),
+      for (final f in fields)
+        f['key'] as String: TextEditingController(
+          text: f['default']?.toString() ?? '',
+        ),
     };
     final formKey = GlobalKey<FormState>();
 
@@ -211,9 +254,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Connecter ${connector['label']}',
-                  style: Theme.of(ctx).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  ctx.tr('int.connectTitle', {'name': '${connector['label']}'}),
+                  style: Theme.of(
+                    ctx,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -229,12 +273,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     obscureText: f['secret'] == true,
                     decoration: InputDecoration(
                       labelText: f['label'] as String,
-                      prefixIcon:
-                          const Icon(LucideIcons.keyRound, size: 18),
+                      prefixIcon: const Icon(LucideIcons.keyRound, size: 18),
                     ),
-                    validator: (v) => (f['secret'] == true &&
-                            (v == null || v.trim().isEmpty))
-                        ? 'Requis'
+                    validator: (v) =>
+                        (f['secret'] == true && (v == null || v.trim().isEmpty))
+                        ? ctx.tr('common.requiredShort')
                         : null,
                   ),
                   const SizedBox(height: 12),
@@ -249,7 +292,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     }
                   },
                   icon: const Icon(LucideIcons.plug, size: 18),
-                  label: const Text('Connecter et analyser'),
+                  label: Text(ctx.tr('int.connectGo')),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -271,14 +314,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       );
       if (!mounted) return;
       if (detected.isEmpty) {
-        _toast('Aucun service détecté sur ce compte.');
+        _toast(context.tr('int.noneDetected'));
       } else {
         setState(() => _detected = detected);
       }
       await _loadConnections();
     } on Exception {
       if (mounted) {
-        _toast('Connexion au fournisseur impossible.', error: true);
+        _toast(context.tr('int.connectFail'), error: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -291,10 +334,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       final result = await _datasource.bulkCreate(_detected);
       if (!mounted) return;
       setState(() => _detected = []);
-      _toast('${result['created']} abonnement(s) importé(s).');
+      _toast(
+        context.tr('int.csvImported', {
+          'n': '${result['created']}',
+          'skipped': '',
+        }),
+      );
       await context.read<SubscriptionsCubit>().refresh();
     } on Exception {
-      if (mounted) _toast('Import impossible. Réessayez.', error: true);
+      if (mounted) _toast(context.tr('int.importFail'), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -311,7 +359,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       if (workspace?.defaultCurrency?.isNotEmpty ?? false)
         workspace!.defaultCurrency!,
       ...?workspace?.extraCurrencies,
-      'XAF', 'EUR', 'USD',
+      'XAF',
+      'EUR',
+      'USD',
     }.toList();
 
     final entry = await showModalBottomSheet<Map<String, dynamic>>(
@@ -325,42 +375,43 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
 
     setState(() => _busy = true);
     final result = await context.read<SubscriptionsCubit>().create(
-          name: preset['name'] as String,
-          provider: preset['name'] as String,
-          category: SubscriptionCategory.parse(preset['category'] as String? ?? ''),
-          amount: entry['amount'] as double,
-          nextDueDate: entry['date'] as DateTime,
-          cycle: entry['cycle'] as BillingCycle,
-          currency: entry['currency'] as String,
-        );
+      name: preset['name'] as String,
+      provider: preset['name'] as String,
+      category: SubscriptionCategory.parse(preset['category'] as String? ?? ''),
+      amount: entry['amount'] as double,
+      nextDueDate: entry['date'] as DateTime,
+      cycle: entry['cycle'] as BillingCycle,
+      currency: entry['currency'] as String,
+    );
     if (!mounted) return;
     setState(() => _busy = false);
-    _toast(
-      switch (result) {
-        Ok() => '${preset['name']} ajouté à vos abonnements.',
-        Err(failure: final f) => f.message,
-      },
-      error: result is Err,
-    );
+    _toast(switch (result) {
+      Ok() => context.tr('int.presetAdded', {'name': '${preset['name']}'}),
+      Err(failure: final f) => f.localizedMessage,
+    }, error: result is Err);
   }
 
   /// Connecteurs regroupés par domaine, dans l'ordre d'affichage.
   List<(String, List<Map<String, dynamic>>, String)> _connectorGroups() {
     const order = ['payments', 'cloud', 'domains', 'other'];
     // Les connecteurs OAuth (banque) ont leur propre carte dédiée.
-    final formConnectors =
-        _connectors.where((c) => c['oauth'] != true).toList();
-    const titles = {
-      'payments': 'Paiements récurrents',
-      'cloud': 'Cloud, serveurs & SaaS',
-      'domains': 'Domaines & registrars',
-      'other': 'Autres',
+    final formConnectors = _connectors
+        .where((c) => c['oauth'] != true)
+        .toList();
+    const titleKeys = {
+      'payments': 'int.groupPayments',
+      'cloud': 'int.groupCloud',
+      'domains': 'int.groupDomains',
+      'other': 'int.groupOther',
     };
     return [
       for (final g in order)
         if (formConnectors.any((c) => c['group'] == g))
-          (titles[g]!,
-              formConnectors.where((c) => c['group'] == g).toList(), g),
+          (
+            context.tr(titleKeys[g]!),
+            formConnectors.where((c) => c['group'] == g).toList(),
+            g,
+          ),
     ];
   }
 
@@ -375,21 +426,27 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   /// classer et présenter par catégorie plutôt qu'une liste plate.
   List<(String, List<Map<String, dynamic>>)> _presetGroups() {
     const order = [
-      'streaming', 'music', 'storage', 'gaming',
-      'productivity', 'security', 'other',
+      'streaming',
+      'music',
+      'storage',
+      'gaming',
+      'productivity',
+      'security',
+      'other',
     ];
-    const titles = {
-      'streaming': 'Streaming & TV',
-      'music': 'Musique',
-      'storage': 'Stockage cloud',
-      'gaming': 'Jeux vidéo',
-      'productivity': 'Productivité & outils pro',
-      'security': 'Sécurité & VPN',
-      'other': 'Autres',
+    const titleKeys = {
+      'streaming': 'int.catStreaming',
+      'music': 'int.catMusic',
+      'storage': 'int.catStorage',
+      'gaming': 'int.catGaming',
+      'productivity': 'int.catProductivity',
+      'security': 'int.catSecurity',
+      'other': 'int.groupOther',
     };
     final filtered = _presets
         .where(
-          (p) => _presetQuery.isEmpty ||
+          (p) =>
+              _presetQuery.isEmpty ||
               (p['name'] as String).toLowerCase().contains(_presetQuery),
         )
         .toList();
@@ -397,7 +454,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       for (final g in order)
         if (filtered.any((p) => (p['group'] ?? 'other') == g))
           (
-            titles[g]!,
+            context.tr(titleKeys[g]!),
             filtered.where((p) => (p['group'] ?? 'other') == g).toList(),
           ),
     ];
@@ -419,21 +476,32 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     final scheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Import & intégrations')),
+      appBar: AppBar(title: Text(context.tr('int.title'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
+          // --- Agrégation bancaire ---
+          _SectionCard(
+            icon: LucideIcons.landmark,
+            title: context.tr('bank.title'),
+            subtitle: context.tr('bank.sub'),
+            child: FilledButton.tonalIcon(
+              onPressed: _busy ? null : _connectBank,
+              icon: const Icon(LucideIcons.building2, size: 18),
+              label: Text(context.tr('bank.connect')),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // --- Import fichier ---
           _SectionCard(
             icon: LucideIcons.fileUp,
-            title: 'Importer un fichier',
-            subtitle:
-                'CSV avec les colonnes : name, provider, category, '
-                'amount, currency, cycle, next_due_date',
+            title: context.tr('int.csvTitle'),
+            subtitle: context.tr('int.csvSub'),
             child: FilledButton.tonalIcon(
               onPressed: _busy ? null : _importCsv,
               icon: const Icon(LucideIcons.upload, size: 18),
-              label: const Text('Choisir un fichier CSV'),
+              label: Text(context.tr('int.csvPick')),
             ),
           ),
           const SizedBox(height: 16),
@@ -442,20 +510,20 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           if (_connections.isNotEmpty)
             _SectionCard(
               icon: LucideIcons.link2,
-              title: 'Comptes connectés',
-              subtitle:
-                  'Re-synchronisez en un tap — vos identifiants '
-                  'restent chiffrés côté serveur.',
+              title: context.tr('int.connections'),
+              subtitle: context.tr('int.connectionsSub'),
               child: Column(
                 children: [
                   for (final conn in _connections)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(
-                        backgroundColor:
-                            scheme.primary.withValues(alpha: 0.12),
-                        child: Icon(LucideIcons.plugZap,
-                            size: 18, color: scheme.primary),
+                        backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                        child: Icon(
+                          LucideIcons.plugZap,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
                       ),
                       title: Text(
                         '${conn['provider_label']} — ${conn['label']}',
@@ -466,18 +534,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Re-synchroniser',
-                            onPressed:
-                                _busy ? null : () => _resync(conn),
-                            icon: const Icon(
-                              LucideIcons.refreshCw,
-                              size: 18,
-                            ),
+                            tooltip: context.tr('int.resync'),
+                            onPressed: _busy ? null : () => _resync(conn),
+                            icon: const Icon(LucideIcons.refreshCw, size: 18),
                           ),
                           IconButton(
-                            tooltip: 'Déconnecter',
-                            onPressed:
-                                _busy ? null : () => _disconnect(conn),
+                            tooltip: context.tr('int.disconnect'),
+                            onPressed: _busy ? null : () => _disconnect(conn),
                             icon: Icon(
                               LucideIcons.unlink,
                               size: 18,
@@ -495,13 +558,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           // --- Connecteurs ---
           _SectionCard(
             icon: LucideIcons.plugZap,
-            title: 'Connexions professionnelles',
-            subtitle:
-                'Ces intégrations nécessitent des clés API du fournisseur, '
-                'pas votre mot de passe habituel. Les données disponibles '
-                'varient selon le service ; certains montants et dates '
-                'restent à compléter. Les connecteurs de paiement '
-                'concernent les abonnements facturés à vos clients.',
+            title: context.tr('int.connectors'),
+            subtitle: context.tr('int.connectorsSub'),
             child: _loadingConnectors
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
@@ -513,8 +571,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                             alignment: Alignment.centerLeft,
                             child: Text(
                               group.$1,
-                              style:
-                                  theme.textTheme.labelMedium?.copyWith(
+                              style: theme.textTheme.labelMedium?.copyWith(
                                 color: scheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -525,8 +582,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
-                              backgroundColor:
-                                  scheme.primary.withValues(alpha: 0.12),
+                              backgroundColor: scheme.primary.withValues(
+                                alpha: 0.12,
+                              ),
                               child: Icon(
                                 _groupIcon(group.$3),
                                 size: 18,
@@ -540,9 +598,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: FilledButton.tonal(
-                              onPressed:
-                                  _busy ? null : () => _connect(c),
-                              child: const Text('Connecter'),
+                              onPressed: _busy ? null : () => _connect(c),
+                              child: Text(context.tr('int.connect')),
                             ),
                           ),
                       ],
@@ -555,18 +612,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
           if (_presets.isNotEmpty)
             _SectionCard(
               icon: LucideIcons.sparkles,
-              title: 'Services populaires',
-              subtitle:
-                  'Netflix, Spotify & co ne publient pas de date de '
-                  'prélèvement via API — choisissez le service, tout est '
-                  'pré-rempli, vous posez juste la date de renouvellement.',
+              title: context.tr('int.popular'),
+              subtitle: context.tr('int.popularSub'),
               child: Column(
                 children: [
                   TextField(
                     onChanged: (v) =>
                         setState(() => _presetQuery = v.trim().toLowerCase()),
-                    decoration: const InputDecoration(
-                      hintText: 'Rechercher un service…',
+                    decoration: InputDecoration(
+                      hintText: context.tr('int.searchService'),
                       prefixIcon: Icon(LucideIcons.search, size: 18),
                       isDense: true,
                     ),
@@ -592,8 +646,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                         dense: true,
                         leading: CircleAvatar(
                           radius: 15,
-                          backgroundColor:
-                              scheme.primary.withValues(alpha: 0.10),
+                          backgroundColor: scheme.primary.withValues(
+                            alpha: 0.10,
+                          ),
                           child: (p['flag'] as String?)?.isNotEmpty == true
                               ? Text(
                                   p['flag'] as String,
@@ -621,10 +676,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
             const SizedBox(height: 16),
             _SectionCard(
               icon: LucideIcons.listChecks,
-              title: '${_detected.length} service(s) détecté(s)',
-              subtitle:
-                  'Vérifiez puis importez — le montant reste à '
-                  'compléter si le fournisseur ne le publie pas.',
+              title: context.tr('int.detected', {'n': '${_detected.length}'}),
+              subtitle: context.tr('int.detectedSub'),
               child: Column(
                 children: [
                   for (final s in _detected.take(10))
@@ -634,19 +687,23 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       leading: const Icon(LucideIcons.server, size: 16),
                       title: Text(s['name']?.toString() ?? ''),
                       subtitle: Text(
-                        '${s['provider'] ?? ''} · ${s['cycle'] ?? ''} · '
-                        'échéance : ${s['next_due_date'] ?? 'à définir'}',
+                        '${s['provider'] ?? ''} · '
+                        '${context.tr('cycle.${s['cycle']}')} · '
+                        '${context.tr('int.due', {'date': '${s['next_due_date'] ?? context.tr('int.dueUndefined')}'})}',
                       ),
                     ),
                   if (_detected.length > 10)
-                    Text('… et ${_detected.length - 10} autre(s)',
-                        style: theme.textTheme.bodySmall),
+                    Text(
+                      context.tr('int.more', {'n': '${_detected.length - 10}'}),
+                      style: theme.textTheme.bodySmall,
+                    ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: _busy ? null : _importDetected,
                     icon: const Icon(LucideIcons.download, size: 18),
-                    label:
-                        Text('Importer ${_detected.length} abonnement(s)'),
+                    label: Text(
+                      context.tr('int.import', {'n': '${_detected.length}'}),
+                    ),
                   ),
                 ],
               ),
@@ -689,8 +746,8 @@ class _PresetSheetState extends State<_PresetSheet> {
     _cycle = plan['cycle'] == 'yearly'
         ? BillingCycle.yearly
         : plan['cycle'] == 'quarterly'
-            ? BillingCycle.quarterly
-            : BillingCycle.monthly;
+        ? BillingCycle.quarterly
+        : BillingCycle.monthly;
     _amount = TextEditingController(
       text: (plan['amount'] as num).toStringAsFixed(2),
     );
@@ -722,14 +779,15 @@ class _PresetSheetState extends State<_PresetSheet> {
       initialDate: _date,
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-      helpText: 'Prochain renouvellement',
+      helpText: context.tr('int.renewal'),
     );
     if (picked != null) setState(() => _date = picked);
   }
 
   void _confirm() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final amount = double.tryParse(
+    final amount =
+        double.tryParse(
           _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
         ) ??
         0;
@@ -754,15 +812,14 @@ class _PresetSheetState extends State<_PresetSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Ajouter ${widget.preset['name']}',
+              context.tr('int.addPreset', {'name': '${widget.preset['name']}'}),
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Montant et cycle pré-remplis — ajustez si votre forfait '
-              'diffère, puis indiquez la date du prochain prélèvement.',
+              context.tr('int.presetSub'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -776,10 +833,7 @@ class _PresetSheetState extends State<_PresetSheet> {
                   ChoiceChip(
                     label: Text(
                       '${_plans[i]['label']} — '
-                      '${AppFormatters.money(
-                        (_plans[i]['amount'] as num).toDouble(),
-                        _plans[i]['currency'] as String? ?? 'EUR',
-                      )}',
+                      '${AppFormatters.money((_plans[i]['amount'] as num).toDouble(), _plans[i]['currency'] as String? ?? 'EUR')}',
                     ),
                     selected: i == _planIndex,
                     showCheckmark: false,
@@ -798,9 +852,8 @@ class _PresetSheetState extends State<_PresetSheet> {
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: 'Montant',
-                      prefixIcon:
-                          const Icon(LucideIcons.banknote, size: 20),
+                      labelText: context.tr('common.amount'),
+                      prefixIcon: const Icon(LucideIcons.banknote, size: 20),
                       suffixIcon: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: widget.currencies.contains(_currency)
@@ -808,26 +861,24 @@ class _PresetSheetState extends State<_PresetSheet> {
                               : widget.currencies.first,
                           items: widget.currencies
                               .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(c),
-                                ),
+                                (c) =>
+                                    DropdownMenuItem(value: c, child: Text(c)),
                               )
                               .toList(),
-                          onChanged: (v) =>
-                              setState(() => _currency = v!),
+                          onChanged: (v) => setState(() => _currency = v!),
                         ),
                       ),
                     ),
-                    validator: (v) => (double.tryParse(
-                              (v ?? '')
-                                  .replaceAll(' ', '')
-                                  .replaceAll(',', '.'),
-                            ) ??
-                            0) >
-                        0
+                    validator: (v) =>
+                        (double.tryParse(
+                                  (v ?? '')
+                                      .replaceAll(' ', '')
+                                      .replaceAll(',', '.'),
+                                ) ??
+                                0) >
+                            0
                         ? null
-                        : 'Montant invalide',
+                        : context.tr('form.amountInvalid'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -836,19 +887,15 @@ class _PresetSheetState extends State<_PresetSheet> {
                   child: DropdownButtonFormField<BillingCycle>(
                     initialValue: _cycle,
                     isExpanded: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Cycle'),
+                    decoration: InputDecoration(
+                      labelText: context.tr('form.cycle'),
+                    ),
                     items: BillingCycle.values
                         .map(
                           (c) => DropdownMenuItem(
                             value: c,
                             child: Text(
-                              switch (c) {
-                                BillingCycle.monthly => 'Mensuel',
-                                BillingCycle.quarterly => 'Trimestriel',
-                                BillingCycle.yearly => 'Annuel',
-                                BillingCycle.once => 'Une seule fois',
-                              },
+                              context.tr('cycle.${c.name}'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -865,14 +912,16 @@ class _PresetSheetState extends State<_PresetSheet> {
               onPressed: _pickDate,
               icon: const Icon(LucideIcons.calendar, size: 18),
               label: Text(
-                'Prochain prélèvement : ${AppFormatters.dateLong(_date)}',
+                context.tr('int.nextDebit', {
+                  'date': AppFormatters.dateLong(_date),
+                }),
               ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: _confirm,
               icon: const Icon(LucideIcons.plus, size: 19),
-              label: const Text('Ajouter à mes abonnements'),
+              label: Text(context.tr('int.addToMine')),
             ),
             const SizedBox(height: 8),
           ],
@@ -908,17 +957,18 @@ class _SectionCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: theme.colorScheme.primary
-                      .withValues(alpha: 0.12),
-                  child: Icon(icon, size: 18,
-                      color: theme.colorScheme.primary),
+                  backgroundColor: theme.colorScheme.primary.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: Icon(icon, size: 18, color: theme.colorScheme.primary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     title,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],

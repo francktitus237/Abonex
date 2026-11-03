@@ -11,46 +11,116 @@ abstract final class AppFormatters {
 
   /// Symboles par code ISO 4217 — couvre les devises des pays cibles.
   static const _symbols = {
-    'XAF': 'FCFA', 'XOF': 'FCFA', 'EUR': '€', 'USD': '\$',
-    'GBP': '£', 'CHF': 'CHF', 'CAD': '\$', 'MAD': 'DH',
-    'DZD': 'DA', 'TND': 'DT', 'NGN': '₦', 'GHS': '₵',
-    'KES': 'KSh', 'ZAR': 'R', 'INR': '₹', 'CNY': '¥',
-    'JPY': '¥', 'SGD': 'S\$', 'AED': 'AED', 'MXN': '\$',
-    'BRL': 'R\$', 'PHP': '₱', 'VND': '₫', 'MGA': 'Ar', 'CDF': 'FC',
+    'XAF': 'FCFA',
+    'XOF': 'FCFA',
+    'EUR': '€',
+    'USD': '\$',
+    'GBP': '£',
+    'CHF': 'CHF',
+    'CAD': '\$',
+    'MAD': 'DH',
+    'DZD': 'DA',
+    'TND': 'DT',
+    'NGN': '₦',
+    'GHS': '₵',
+    'KES': 'KSh',
+    'ZAR': 'R',
+    'INR': '₹',
+    'CNY': '¥',
+    'JPY': '¥',
+    'SGD': 'S\$',
+    'AED': 'AED',
+    'MXN': '\$',
+    'BRL': 'R\$',
+    'PHP': '₱',
+    'VND': '₫',
+    'MGA': 'Ar',
+    'CDF': 'FC',
   };
 
   static String money(num value, [String currency = 'XAF']) {
     final symbol = _symbols[currency] ?? currency;
     return NumberFormat.currency(
-      locale: 'fr_FR',
+      locale: _en ? 'en_US' : 'fr_FR',
       symbol: symbol,
       decimalDigits: (currency == 'XAF' || currency == 'XOF') ? 0 : 2,
     ).format(value);
   }
 
   static const _monthsFr = [
-    'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-    'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+    'janv.',
+    'févr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sept.',
+    'oct.',
+    'nov.',
+    'déc.',
   ];
   static const _monthsEn = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   static const _monthsLongFr = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+    'janvier',
+    'février',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'août',
+    'septembre',
+    'octobre',
+    'novembre',
+    'décembre',
   ];
   static const _monthsLongEn = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   static const _weekdaysFr = [
-    'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+    'lundi',
+    'mardi',
+    'mercredi',
+    'jeudi',
+    'vendredi',
+    'samedi',
+    'dimanche',
   ];
   static const _weekdaysEn = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
     'Sunday',
   ];
 
@@ -87,6 +157,10 @@ abstract final class AppFormatters {
   /// FR `janv.` · EN `Jan`
   static String monthShort(DateTime d) =>
       _en ? _monthsEn[d.month - 1] : _monthsFr[d.month - 1];
+
+  /// FR `octobre` · EN `October`
+  static String monthLong(DateTime d) =>
+      _en ? _monthsLongEn[d.month - 1] : _monthsLongFr[d.month - 1];
 
   /// "Dans 3 j" / "Aujourd'hui" / "En retard de 2 j" (ou équivalent EN)
   static String relativeDay(DateTime d) {

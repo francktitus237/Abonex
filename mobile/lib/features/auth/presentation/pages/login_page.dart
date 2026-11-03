@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/ambient_background.dart';
@@ -66,172 +67,172 @@ class _LoginViewState extends State<_LoginView> {
     return Scaffold(
       body: AmbientBackground(
         child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Center(
-            // Largeur max : propre aussi sur tablette / web / grand écran.
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: AutofillGroup(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 32),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Center(
+              // Largeur max : propre aussi sur tablette / web / grand écran.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: AutofillGroup(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 32),
 
-                      // --- En-tête : marque + slogan ---
-                      const Center(child: AppLogo()),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Bienvenue sur Abonex',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.7,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Connectez-vous pour piloter vos abonnements en toute sérénité.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-
-                      // --- Bandeau d'erreur animé ---
-                      BlocBuilder<LoginCubit, LoginState>(
-                        builder: (context, state) {
-                          return AnimatedSize(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeOut,
-                            child: switch (state) {
-                              LoginFailure(:final message) => Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: _ErrorBanner(message: message),
-                              ),
-                              _ => const SizedBox.shrink(),
-                            },
-                          );
-                        },
-                      ),
-
-                      // --- Champs ---
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.email],
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          hintText: 'vous@entreprise.com',
-                          prefixIcon: Icon(LucideIcons.mail, size: 20),
-                        ),
-                        validator: (value) =>
-                            (value == null || !value.contains('@'))
-                            ? 'Entrez un email valide'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        autofillHints: const [AutofillHints.password],
-                        decoration: InputDecoration(
-                          labelText: 'Mot de passe',
-                          prefixIcon: const Icon(LucideIcons.lock, size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? LucideIcons.eye
-                                  : LucideIcons.eyeOff,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
+                        // --- En-tête : marque + slogan ---
+                        const Center(child: AppLogo()),
+                        const SizedBox(height: 24),
+                        Text(
+                          context.tr('auth.welcome'),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.7,
                           ),
                         ),
-                        validator: (value) =>
-                            (value == null || value.length < 8)
-                            ? '8 caractères minimum'
-                            : null,
-                        onFieldSubmitted: (_) => _submit(),
-                      ),
-
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => _showForgotPasswordDialog(context),
-                          child: const Text('Mot de passe oublié ?'),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // --- Bouton de connexion ---
-                      BlocBuilder<LoginCubit, LoginState>(
-                        builder: (context, state) {
-                          final submitting = state is LoginSubmitting;
-                          return ElevatedButton(
-                            onPressed: submitting ? null : _submit,
-                            child: submitting
-                                ? SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: scheme.onPrimary,
-                                    ),
-                                  )
-                                : const Text('Se connecter'),
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('Nouveau sur Abonex ?'),
-                          TextButton(
-                            onPressed: () => context.go('/register'),
-                            child: const Text('Créer un compte'),
-                          ),
-                        ],
-                      ),
-                      TextButton(
-                        onPressed: () => context.go('/invite'),
-                        child: const Text('J\'ai une invitation'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- Mention de confiance ---
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.shieldCheck,
-                            size: 14,
+                        const SizedBox(height: 6),
+                        Text(
+                          context.tr('auth.loginSub'),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Connexion sécurisée',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 32),
+
+                        // --- Bandeau d'erreur animé ---
+                        BlocBuilder<LoginCubit, LoginState>(
+                          builder: (context, state) {
+                            return AnimatedSize(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeOut,
+                              child: switch (state) {
+                                LoginFailure(:final message) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: _ErrorBanner(message: message),
+                                ),
+                                _ => const SizedBox.shrink(),
+                              },
+                            );
+                          },
+                        ),
+
+                        // --- Champs ---
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.email],
+                          decoration: InputDecoration(
+                            labelText: context.tr('common.email'),
+                            hintText: context.tr('auth.emailHint'),
+                            prefixIcon: const Icon(LucideIcons.mail, size: 20),
+                          ),
+                          validator: (value) =>
+                              (value == null || !value.contains('@'))
+                              ? context.tr('auth.emailInvalid')
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: context.tr('auth.password'),
+                            prefixIcon: const Icon(LucideIcons.lock, size: 20),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? LucideIcons.eye
+                                    : LucideIcons.eyeOff,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
+                          validator: (value) =>
+                              (value == null || value.length < 8)
+                              ? context.tr('auth.passwordMin')
+                              : null,
+                          onFieldSubmitted: (_) => _submit(),
+                        ),
+
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => _showForgotPasswordDialog(context),
+                            child: Text(context.tr('auth.forgot')),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // --- Bouton de connexion ---
+                        BlocBuilder<LoginCubit, LoginState>(
+                          builder: (context, state) {
+                            final submitting = state is LoginSubmitting;
+                            return ElevatedButton(
+                              onPressed: submitting ? null : _submit,
+                              child: submitting
+                                  ? SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: scheme.onPrimary,
+                                      ),
+                                    )
+                                  : Text(context.tr('auth.login')),
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(context.tr('auth.newHere')),
+                            TextButton(
+                              onPressed: () => context.go('/register'),
+                              child: Text(context.tr('auth.createAccount')),
+                            ),
+                          ],
+                        ),
+                        TextButton(
+                          onPressed: () => context.go('/invite'),
+                          child: Text(context.tr('auth.haveInvite')),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // --- Mention de confiance ---
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              LucideIcons.shieldCheck,
+                              size: 14,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              context.tr('auth.secure'),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
         ),
       ),
     );
@@ -249,20 +250,20 @@ class _LoginViewState extends State<_LoginView> {
           LucideIcons.mail,
           color: Theme.of(dialogContext).colorScheme.primary,
         ),
-        title: const Text('Réinitialiser le mot de passe'),
+        title: Text(dialogContext.tr('auth.resetTitle')),
         content: TextField(
           controller: emailController,
           keyboardType: TextInputType.emailAddress,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Email',
-            hintText: 'vous@entreprise.com',
+          decoration: InputDecoration(
+            labelText: dialogContext.tr('common.email'),
+            hintText: dialogContext.tr('auth.emailHint'),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Annuler'),
+            child: Text(dialogContext.tr('common.cancel')),
           ),
           FilledButton(
             onPressed: () async {
@@ -283,14 +284,13 @@ class _LoginViewState extends State<_LoginView> {
                 },
                 style: ToastificationStyle.flat,
                 title: Text(switch (result) {
-                  Ok() =>
-                    'Si un compte existe pour cet email, un lien a été envoyé.',
-                  Err(failure: final f) => f.message,
+                  Ok() => context.tr('auth.resetSent'),
+                  Err(failure: final f) => f.localizedMessage,
                 }),
                 autoCloseDuration: const Duration(seconds: 4),
               );
             },
-            child: const Text('Envoyer'),
+            child: Text(dialogContext.tr('common.send')),
           ),
         ],
       ),

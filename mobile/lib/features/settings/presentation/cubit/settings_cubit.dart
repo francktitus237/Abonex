@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/security/biometric_service.dart';
 import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/utils/formatters.dart';
@@ -47,7 +48,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       final available = await _biometric.isAvailable();
       if (!available) return false;
       final ok = await _biometric.authenticate(
-        reason: 'Confirmez pour activer le déverrouillage biométrique',
+        reason: AppStrings.t(AppFormatters.lang, 'settings.biometricConfirm'),
       );
       if (!ok) return false;
     }

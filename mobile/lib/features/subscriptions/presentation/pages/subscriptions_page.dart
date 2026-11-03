@@ -6,6 +6,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/router/app_router.dart';
 
 import '../../../../core/utils/formatters.dart';
@@ -45,20 +46,20 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Abonnements'),
+        title: Text(context.tr('nav.subscriptions')),
         actions: [
           IconButton(
-            tooltip: 'Import & intégrations',
+            tooltip: context.tr('subs.integrations'),
             onPressed: () => context.push(AppRoutes.integrations),
             icon: const Icon(LucideIcons.plugZap, size: 20),
           ),
           IconButton(
-            tooltip: 'Notifications',
+            tooltip: context.tr('nav.notifications'),
             onPressed: () => context.push(AppRoutes.notifications),
             icon: const Icon(LucideIcons.bell, size: 20),
           ),
           IconButton(
-            tooltip: 'Actualiser',
+            tooltip: context.tr('common.refresh'),
             onPressed: () => context.read<SubscriptionsCubit>().refresh(),
             icon: const Icon(LucideIcons.refreshCw, size: 20),
           ),
@@ -72,7 +73,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         child: FloatingActionButton.extended(
           onPressed: () => _showAddSheet(context),
           icon: const Icon(LucideIcons.plus, size: 20),
-          label: const Text('Ajouter'),
+          label: Text(context.tr('common.add')),
         ),
       ),
       body: Column(
@@ -83,9 +84,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               children: [
                 TextField(
                   onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Rechercher un abonnement…',
-                    prefixIcon: Icon(LucideIcons.search, size: 20),
+                  decoration: InputDecoration(
+                    hintText: context.tr('subs.search'),
+                    prefixIcon: const Icon(LucideIcons.search, size: 20),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -94,26 +95,25 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   child: Row(
                     children: [
                       _FilterChip(
-                        label: 'Tous',
+                        label: context.tr('filter.all'),
                         selected: _filter == null,
                         onTap: () => setState(() => _filter = null),
                       ),
                       _FilterChip(
-                        label: 'Payés',
+                        label: context.tr('filter.paid'),
                         selected: _filter == SubscriptionStatus.paid,
-                        onTap: () => setState(
-                          () => _filter = SubscriptionStatus.paid,
-                        ),
+                        onTap: () =>
+                            setState(() => _filter = SubscriptionStatus.paid),
                       ),
                       _FilterChip(
-                        label: 'À venir',
+                        label: context.tr('filter.dueSoon'),
                         selected: _filter == SubscriptionStatus.dueSoon,
                         onTap: () => setState(
-                          () => _filter = SubscriptionStatus.dueSoon,
+                          () => _filter == SubscriptionStatus.dueSoon,
                         ),
                       ),
                       _FilterChip(
-                        label: 'En retard',
+                        label: context.tr('filter.overdue'),
                         selected: _filter == SubscriptionStatus.overdue,
                         onTap: () => setState(
                           () => _filter = SubscriptionStatus.overdue,
@@ -130,24 +130,26 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
             child: BlocBuilder<SubscriptionsCubit, SubscriptionsState>(
               builder: (context, state) {
                 return switch (state) {
-                  SubscriptionsLoading() || SubscriptionsInitial() =>
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      child: SkeletonListView(),
-                    ),
+                  SubscriptionsLoading() ||
+                  SubscriptionsInitial() => const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: SkeletonListView(),
+                  ),
                   SubscriptionsError(:final message) => EmptyState(
                     icon: LucideIcons.cloudOff,
-                    title: 'Chargement impossible',
+                    title: context.tr('common.loadError'),
                     subtitle: message,
                     action: FilledButton.tonalIcon(
                       onPressed: () =>
                           context.read<SubscriptionsCubit>().refresh(),
                       icon: const Icon(LucideIcons.refreshCw, size: 18),
-                      label: const Text('Réessayer'),
+                      label: Text(context.tr('common.retry')),
                     ),
                   ),
-                  SubscriptionsLoaded(:final items) =>
-                    _buildList(context, items),
+                  SubscriptionsLoaded(:final items) => _buildList(
+                    context,
+                    items,
+                  ),
                 };
               },
             ),
@@ -173,30 +175,27 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       // plutôt que de le laisser sur une page morte.
       return EmptyState(
         icon: LucideIcons.repeat,
-        title: 'Aucun abonnement',
-        subtitle:
-            'Ajoutez votre première échéance récurrente pour commencer le suivi.',
+        title: context.tr('subs.empty'),
+        subtitle: context.tr('subs.emptySub'),
         action: FilledButton.icon(
           onPressed: () => _showAddSheet(context),
           icon: const Icon(LucideIcons.plus, size: 18),
-          label: const Text('Ajouter un abonnement'),
+          label: Text(context.tr('subs.addFirst')),
         ),
       );
     }
     if (filtered.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: LucideIcons.searchX,
-        title: 'Aucun résultat',
-        subtitle: 'Modifiez la recherche ou les filtres.',
+        title: context.tr('subs.noResult'),
+        subtitle: context.tr('subs.noResultSub'),
       );
     }
 
     return RefreshIndicator(
       onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(
-          20, 0, 20, 96 + AppShell.barInset,
-        ),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 96 + AppShell.barInset),
         itemCount: filtered.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) => AnimatedFadeIn(
@@ -204,9 +203,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           child: SubscriptionTile(
             subscription: filtered[index],
             onMarkPaid: () => _markPaid(context, filtered[index]),
-            onTap: () => context.push(
-              AppRoutes.subscriptionDetail(filtered[index].id),
-            ),
+            onTap: () =>
+                context.push(AppRoutes.subscriptionDetail(filtered[index].id)),
           ),
         ),
       ),
@@ -224,8 +222,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       },
       style: ToastificationStyle.flat,
       title: Text(switch (result) {
-        Ok() => '${sub.name} marqué comme payé.',
-        Err(failure: final f) => f.message,
+        Ok() => context.tr('toast.paid', {'name': sub.name}),
+        Err(failure: final f) => f.localizedMessage,
       }),
       autoCloseDuration: const Duration(seconds: 3),
     );
@@ -238,10 +236,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 /// Ouvre le formulaire d'ajout/édition d'abonnement.
 /// Réutilisé par la page détail (bouton Modifier) : passer
 /// [existing] pour éditer, rien pour créer.
-void showSubscriptionFormSheet(
-  BuildContext context, {
-  Subscription? existing,
-}) {
+void showSubscriptionFormSheet(BuildContext context, {Subscription? existing}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -399,7 +394,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       if (workspace?.defaultCurrency?.isNotEmpty ?? false)
         workspace!.defaultCurrency!,
       ...?workspace?.extraCurrencies,
-      'XAF', 'EUR', 'USD',
+      'XAF',
+      'EUR',
+      'USD',
     }.toList();
     return list;
   }
@@ -438,7 +435,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       initialDate: _startDate ?? DateTime.now(),
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-      helpText: 'Date de prise de l\'abonnement',
+      helpText: context.tr('form.pickStart'),
     );
     if (picked != null) {
       setState(() {
@@ -452,11 +449,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   Future<void> _pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate:
-          _endDate ?? DateTime.now().add(const Duration(days: 365)),
+      initialDate: _endDate ?? DateTime.now().add(const Duration(days: 365)),
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 20)),
-      helpText: 'Fin du contrat',
+      helpText: context.tr('form.pickEnd'),
     );
     if (picked != null) setState(() => _endDate = picked);
   }
@@ -467,7 +463,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       initialDate: _firstDue,
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-      helpText: 'Première échéance',
+      helpText: context.tr('form.pickFirstDue'),
     );
     if (picked != null) setState(() => _firstDue = picked);
   }
@@ -476,7 +472,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _dueTime ?? const TimeOfDay(hour: 9, minute: 0),
-      helpText: 'Heure du rendez-vous',
+      helpText: context.tr('form.pickTime'),
     );
     if (picked != null) setState(() => _dueTime = picked);
   }
@@ -487,9 +483,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     final amount = _isEvent
         ? 0.0
         : double.tryParse(
-              _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
-            ) ??
-            0;
+                _amount.text.replaceAll(' ', '').replaceAll(',', '.'),
+              ) ??
+              0;
     final cubit = context.read<SubscriptionsCubit>();
     final existing = widget.existing;
     final result = existing == null
@@ -535,10 +531,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         style: ToastificationStyle.flat,
         title: Text(
           widget.existing != null
-              ? 'Modifications enregistrées.'
+              ? context.tr('form.saved')
               : _isEvent
-                  ? 'Rendez-vous enregistré.'
-                  : 'Abonnement ajouté.',
+              ? context.tr('form.eventSaved')
+              : context.tr('form.subSaved'),
         ),
         autoCloseDuration: const Duration(seconds: 3),
       );
@@ -547,7 +543,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         context: context,
         type: ToastificationType.error,
         style: ToastificationStyle.flat,
-        title: Text(f.message),
+        title: Text(f.localizedMessage),
         autoCloseDuration: const Duration(seconds: 4),
       );
     }
@@ -569,10 +565,12 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             children: [
               Text(
                 widget.existing != null
-                    ? 'Modifier — ${widget.existing!.name}'
+                    ? context.tr('form.editTitle', {
+                        'name': widget.existing!.name,
+                      })
                     : _isEvent
-                        ? 'Nouveau rendez-vous'
-                        : 'Nouvel abonnement',
+                    ? context.tr('form.newEvent')
+                    : context.tr('form.newSub'),
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -581,22 +579,21 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               // Type d'entrée — un abonnement facturé ou un simple
               // rappel d'échéance (entretien, événement, RDV…).
               SegmentedButton<bool>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: false,
-                    icon: Icon(LucideIcons.repeat, size: 17),
-                    label: Text('Abonnement'),
+                    icon: const Icon(LucideIcons.repeat, size: 17),
+                    label: Text(context.tr('form.typeSub')),
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: Icon(LucideIcons.calendarClock, size: 17),
-                    label: Text('Rendez-vous'),
+                    icon: const Icon(LucideIcons.calendarClock, size: 17),
+                    label: Text(context.tr('form.typeEvent')),
                   ),
                 ],
                 selected: {_isEvent},
                 showSelectedIcon: false,
-                onSelectionChanged: (s) =>
-                    setState(() => _isEvent = s.first),
+                onSelectionChanged: (s) => setState(() => _isEvent = s.first),
               ),
               // Raccourci vers l'ajout automatique : connexion à un
               // compte fournisseur ou services populaires pré-remplis —
@@ -611,10 +608,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       router.push(AppRoutes.integrations);
                     },
                     icon: const Icon(LucideIcons.sparkles, size: 17),
-                    label: const Text(
-                      'Importer plusieurs abonnements '
-                      'ou choisir un service',
-                    ),
+                    label: Text(context.tr('form.import')),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(44),
                     ),
@@ -624,10 +618,12 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               TextFormField(
                 controller: _name,
                 decoration: InputDecoration(
-                  labelText: _isEvent ? 'Titre' : 'Nom',
+                  labelText: _isEvent
+                      ? context.tr('form.title')
+                      : context.tr('form.name'),
                   hintText: _isEvent
-                      ? 'Ex. Entretien, réunion, RDV médecin…'
-                      : 'Ex. Loyer siège social',
+                      ? context.tr('form.titleHint')
+                      : context.tr('form.nameHint'),
                   prefixIcon: const Icon(LucideIcons.tag, size: 20),
                 ),
                 validator: _required,
@@ -643,12 +639,12 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   enableSearch: true,
                   requestFocusOnTap: true,
                   menuHeight: 260,
-                  label: const Text('Fournisseur (optionnel)'),
-                  hintText: 'Choisir ou saisir un fournisseur',
+                  label: Text(context.tr('form.provider')),
+                  hintText: context.tr('form.providerHint'),
                   leadingIcon: const Icon(LucideIcons.building2, size: 20),
                   helperText: _loadingProviders
-                      ? 'Chargement des fournisseurs de votre pays…'
-                      : 'Selon le pays du compte. Fournisseur absent ? Saisissez son nom.',
+                      ? context.tr('form.providerLoading')
+                      : context.tr('form.providerHelper'),
                   dropdownMenuEntries: [
                     // Drapeau du pays du fournisseur devant le nom.
                     for (final p in {
@@ -683,7 +679,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   TextButton.icon(
                     onPressed: _loadProviders,
                     icon: const Icon(LucideIcons.refreshCw, size: 16),
-                    label: const Text('Catalogue indisponible — réessayer'),
+                    label: Text(context.tr('form.providerFail')),
                   ),
               ],
               const SizedBox(height: 14),
@@ -692,14 +688,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               TextFormField(
                 controller: _description,
                 decoration: InputDecoration(
-                  labelText: 'Description (optionnel)',
+                  labelText: context.tr('form.description'),
                   hintText: _isEvent
-                      ? 'Ex. Bureaux — Bonanjo, Douala'
-                      : 'Ex. Abonnement EDF — appartement Paris 11e',
-                  prefixIcon: const Icon(
-                    LucideIcons.mapPin,
-                    size: 20,
-                  ),
+                      ? context.tr('form.descHintEvent')
+                      : context.tr('form.descHint'),
+                  prefixIcon: const Icon(LucideIcons.mapPin, size: 20),
                 ),
                 maxLength: 255,
                 maxLines: 1,
@@ -707,143 +700,147 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               if (!_isEvent) const SizedBox(height: 14),
               if (!_isEvent)
                 Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextFormField(
-                      controller: _amount,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Montant',
-                        prefixIcon:
-                            const Icon(LucideIcons.banknote, size: 20),
-                        suffixIcon: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _currency,
-                            items: _currencies
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(c),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => _currency = v!),
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _amount,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: context.tr('common.amount'),
+                          prefixIcon: const Icon(
+                            LucideIcons.banknote,
+                            size: 20,
+                          ),
+                          suffixIcon: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _currency,
+                              items: _currencies
+                                  .map(
+                                    (c) => DropdownMenuItem(
+                                      value: c,
+                                      child: Text(c),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) => setState(() => _currency = v!),
+                            ),
                           ),
                         ),
+                        validator: (v) =>
+                            (double.tryParse(
+                                      (v ?? '')
+                                          .replaceAll(' ', '')
+                                          .replaceAll(',', '.'),
+                                    ) ??
+                                    0) >
+                                0
+                            ? null
+                            : context.tr('form.amountInvalid'),
                       ),
-                      validator: (v) =>
-                          (double.tryParse(
-                                (v ?? '').replaceAll(' ', '').replaceAll(',', '.'),
-                              ) ??
-                              0) >
-                              0
-                          ? null
-                          : 'Montant invalide',
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<BillingCycle>(
-                      initialValue: _cycle,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Cycle'),
-                      items: BillingCycle.values
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                switch (c) {
-                                  BillingCycle.monthly => 'Mensuel',
-                                  BillingCycle.quarterly => 'Trimestriel',
-                                  BillingCycle.yearly => 'Annuel',
-                                  BillingCycle.once => 'Une seule fois',
-                                },
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<BillingCycle>(
+                        initialValue: _cycle,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: context.tr('form.cycle'),
+                        ),
+                        items: BillingCycle.values
+                            .map(
+                              (c) => DropdownMenuItem(
+                                value: c,
+                                child: Text(
+                                  context.tr('cycle.${c.name}'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (c) => setState(() => _cycle = c!),
+                            )
+                            .toList(),
+                        onChanged: (c) => setState(() => _cycle = c!),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
               const SizedBox(height: 14),
               if (!_isEvent)
                 DropdownButtonFormField<SubscriptionCategory>(
-                initialValue: _category,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Catégorie',
-                  prefixIcon: Icon(LucideIcons.layoutGrid, size: 20),
-                ),
-                items: SubscriptionCategory.values
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c,
-                        child: Row(
-                          children: [
-                            Icon(c.icon, size: 18, color: c.color),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                c.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                  initialValue: _category,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: context.tr('form.category'),
+                    prefixIcon: const Icon(LucideIcons.layoutGrid, size: 20),
+                  ),
+                  items: SubscriptionCategory.values
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Row(
+                            children: [
+                              Icon(c.icon, size: 18, color: c.color),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  c.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (c) => setState(() => _category = c!),
-              ),
+                      )
+                      .toList(),
+                  onChanged: (c) => setState(() => _category = c!),
+                ),
               if (!_isEvent) const SizedBox(height: 14),
               // Pays où l'abonnement est actif — n'importe lequel,
               // indépendant du pays du compte ou du fournisseur.
               if (!_isEvent)
                 DropdownButtonFormField<String>(
-                initialValue: _country.isEmpty ? null : _country,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Pays de l\'abonnement',
-                  prefixIcon: Icon(LucideIcons.globe, size: 20),
-                ),
-                items: AppCountries.all
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c.code,
-                        child: Row(
-                          children: [
-                            Text(c.flag),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                c.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                  initialValue: _country.isEmpty ? null : _country,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: context.tr('form.country'),
+                    prefixIcon: const Icon(LucideIcons.globe, size: 20),
+                  ),
+                  items: AppCountries.all
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.code,
+                          child: Row(
+                            children: [
+                              Text(c.flag),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  c.nameFor(AppFormatters.lang),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _country = v ?? ''),
-              ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _country = v ?? ''),
+                ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: _pickDate,
                 icon: const Icon(LucideIcons.calendar, size: 18),
                 label: Text(
                   _isEvent
-                      ? 'Date : ${AppFormatters.dateLong(_firstDue)}'
-                      : 'Première échéance : ${AppFormatters.dateLong(_firstDue)}',
+                      ? context.tr('form.date', {
+                          'date': AppFormatters.dateLong(_firstDue),
+                        })
+                      : context.tr('form.firstDue', {
+                          'date': AppFormatters.dateLong(_firstDue),
+                        }),
                 ),
               ),
               // Heure du rendez-vous — optionnelle, effaçable.
@@ -857,14 +854,19 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         icon: const Icon(LucideIcons.clock, size: 18),
                         label: Text(
                           _dueTime == null
-                              ? 'Heure (optionnel)'
-                              : 'Heure : ${AppFormatters.time(_dueTime!.hour, _dueTime!.minute)}',
+                              ? context.tr('form.time')
+                              : context.tr('form.timeSet', {
+                                  'time': AppFormatters.time(
+                                    _dueTime!.hour,
+                                    _dueTime!.minute,
+                                  ),
+                                }),
                         ),
                       ),
                     ),
                     if (_dueTime != null)
                       IconButton(
-                        tooltip: 'Sans heure',
+                        tooltip: context.tr('form.noTime'),
                         onPressed: () => setState(() => _dueTime = null),
                         icon: const Icon(LucideIcons.x, size: 18),
                       ),
@@ -882,10 +884,14 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   Expanded(
                     child: Text(
                       _isEvent
-                          ? 'Vous serez alerté avant cette date selon vos réglages de rappel.'
+                          ? context.tr('form.reminderInfo')
                           : _cycle == BillingCycle.once
-                              ? 'Échéance unique : ${AppFormatters.dateLong(_firstDue)}'
-                              : 'Prochaine échéance calculée : ${AppFormatters.dateLong(_nextDue)}',
+                          ? context.tr('form.onceDue', {
+                              'date': AppFormatters.dateLong(_firstDue),
+                            })
+                          : context.tr('form.nextDue', {
+                              'date': AppFormatters.dateLong(_nextDue),
+                            }),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -906,11 +912,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   title: Text(
-                    'Options avancées',
+                    context.tr('form.advanced'),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   subtitle: Text(
-                    'Date de prise, fin de contrat…',
+                    context.tr('form.advancedSub'),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -922,8 +928,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       icon: const Icon(LucideIcons.calendarPlus, size: 18),
                       label: Text(
                         _startDate == null
-                            ? 'Date de prise (ex. dimanche dernier)'
-                            : 'Pris le : ${AppFormatters.dateLong(_startDate!)}',
+                            ? context.tr('form.startDate')
+                            : context.tr('form.started', {
+                                'date': AppFormatters.dateLong(_startDate!),
+                              }),
                       ),
                     ),
                     if (_startDate != null)
@@ -931,7 +939,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => setState(() => _startDate = null),
-                          child: const Text('Date inconnue'),
+                          child: Text(context.tr('form.unknownDate')),
                         ),
                       ),
                     const SizedBox(height: 8),
@@ -941,8 +949,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       icon: const Icon(LucideIcons.calendarOff, size: 18),
                       label: Text(
                         _endDate == null
-                            ? 'Fin du contrat'
-                            : 'Fin le : ${AppFormatters.dateLong(_endDate!)}',
+                            ? context.tr('form.endDate')
+                            : context.tr('form.ends', {
+                                'date': AppFormatters.dateLong(_endDate!),
+                              }),
                       ),
                     ),
                     if (_endDate != null)
@@ -950,7 +960,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => setState(() => _endDate = null),
-                          child: const Text('Sans date de fin'),
+                          child: Text(context.tr('form.noEnd')),
                         ),
                       ),
                   ],
@@ -967,12 +977,12 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     : const Icon(LucideIcons.plus, size: 19),
                 label: Text(
                   _submitting
-                      ? 'Enregistrement…'
+                      ? context.tr('form.submitting')
                       : widget.existing != null
-                          ? 'Enregistrer les modifications'
-                          : _isEvent
-                              ? 'Créer le rappel'
-                              : 'Ajouter l\'abonnement',
+                      ? context.tr('form.saveChanges')
+                      : _isEvent
+                      ? context.tr('form.createReminder')
+                      : context.tr('form.add'),
                 ),
               ),
             ],
@@ -983,5 +993,5 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   }
 
   String? _required(String? v) =>
-      v == null || v.trim().isEmpty ? 'Champ obligatoire' : null;
+      v == null || v.trim().isEmpty ? context.tr('common.required') : null;
 }

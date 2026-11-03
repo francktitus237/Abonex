@@ -7,6 +7,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -29,17 +30,17 @@ class SubscriptionDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Détail')),
+      appBar: AppBar(title: Text(context.tr('detail.title'))),
       body: BlocBuilder<SubscriptionsCubit, SubscriptionsState>(
         builder: (context, state) {
           final sub = context.read<SubscriptionsCubit>().byId(subscriptionId);
           if (sub == null) {
             if (state is SubscriptionsLoaded) {
               // Supprimé ou inexistant → retour propre à la liste.
-              return const EmptyState(
+              return EmptyState(
                 icon: LucideIcons.searchX,
-                title: 'Abonnement introuvable',
-                subtitle: 'Il a peut-être été supprimé.',
+                title: context.tr('detail.notFound'),
+                subtitle: context.tr('detail.notFoundSub'),
               );
             }
             return const Center(child: CircularProgressIndicator());
@@ -67,18 +68,18 @@ class _DetailBody extends StatelessWidget {
       SubscriptionStatus.overdue => context.status.overdue,
     };
     final statusLabel = switch (sub.status) {
-      SubscriptionStatus.paid => 'Payé',
-      SubscriptionStatus.dueSoon => 'À venir',
-      SubscriptionStatus.overdue => 'En retard',
+      SubscriptionStatus.paid => context.tr('status.paid'),
+      SubscriptionStatus.dueSoon => context.tr('status.dueSoon'),
+      SubscriptionStatus.overdue => context.tr('status.overdue'),
     };
     final days = sub.nextDueDate.difference(DateTime.now()).inDays;
     final countdown = sub.status == SubscriptionStatus.paid
-        ? (sub.isEvent ? 'Terminé' : 'Réglé')
+        ? context.tr(sub.isEvent ? 'status.done' : 'status.settled')
         : days < 0
-        ? 'En retard de ${-days} j'
+        ? context.tr('date.late', {'n': '${-days}'})
         : days == 0
-        ? "Aujourd'hui"
-        : 'Dans $days j';
+        ? context.tr('date.today')
+        : context.tr('date.in', {'n': '$days'});
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
@@ -136,8 +137,13 @@ class _DetailBody extends StatelessWidget {
                 ),
                 Text(
                   sub.dueTime != null
-                      ? 'à ${AppFormatters.time(sub.dueTime!.hour, sub.dueTime!.minute)}'
-                      : 'Rendez-vous',
+                      ? context.tr('detail.at', {
+                          'time': AppFormatters.time(
+                            sub.dueTime!.hour,
+                            sub.dueTime!.minute,
+                          ),
+                        })
+                      : context.tr('event.label'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -150,7 +156,7 @@ class _DetailBody extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'par ${sub.cycleLabel.toLowerCase().replaceFirst('mensuel', 'mois').replaceFirst('trimestriel', 'trimestre').replaceFirst('annuel', 'an')}',
+                  sub.cyclePeriod,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -185,13 +191,13 @@ class _DetailBody extends StatelessWidget {
               ? [
                   (
                     icon: LucideIcons.calendar,
-                    label: 'Date du rendez-vous',
+                    label: context.tr('detail.eventDate'),
                     value: AppFormatters.dateLong(sub.nextDueDate),
                   ),
                   if (sub.dueTime != null)
                     (
                       icon: LucideIcons.clock,
-                      label: 'Heure',
+                      label: context.tr('detail.time'),
                       value: AppFormatters.time(
                         sub.dueTime!.hour,
                         sub.dueTime!.minute,
@@ -199,57 +205,60 @@ class _DetailBody extends StatelessWidget {
                     ),
                   (
                     icon: LucideIcons.timer,
-                    label: 'Compte à rebours',
+                    label: context.tr('detail.countdown'),
                     value: countdown,
                   ),
                   if (sub.description.isNotEmpty)
                     (
                       icon: LucideIcons.fileText,
-                      label: 'Description',
+                      label: context.tr('detail.description'),
                       value: sub.description,
                     ),
                 ]
               : [
                   (
                     icon: LucideIcons.calendar,
-                    label: 'Prochaine échéance',
+                    label: context.tr('detail.nextDue'),
                     value: sub.dueTime != null
                         ? AppFormatters.dateTimeLong(sub.dueAt)
                         : AppFormatters.dateLong(sub.nextDueDate),
                   ),
                   (
                     icon: LucideIcons.timer,
-                    label: 'Compte à rebours',
+                    label: context.tr('detail.countdown'),
                     value: countdown,
                   ),
                   (
                     icon: LucideIcons.repeat,
-                    label: 'Cycle de facturation',
+                    label: context.tr('detail.billingCycle'),
                     value: sub.cycleLabel,
                   ),
                   (
                     icon: LucideIcons.layoutGrid,
-                    label: 'Catégorie',
+                    label: context.tr('detail.category'),
                     value: sub.category.label,
                   ),
                   (
                     icon: LucideIcons.building2,
-                    label: 'Fournisseur',
+                    label: context.tr('detail.provider'),
                     value: sub.provider.isEmpty ? '—' : sub.provider,
                   ),
                   if (sub.country.isNotEmpty)
                     (
                       icon: LucideIcons.flag,
-                      label: 'Pays',
+                      label: context.tr('detail.country'),
                       value: [
                         sub.countryFlag,
-                        AppCountries.byCode(sub.country)?.name ?? sub.country,
+                        AppCountries.byCode(
+                              sub.country,
+                            )?.nameFor(AppFormatters.lang) ??
+                            sub.country,
                       ].join(' ').trim(),
                     ),
                   if (sub.description.isNotEmpty)
                     (
                       icon: LucideIcons.mapPin,
-                      label: 'Description',
+                      label: context.tr('detail.description'),
                       value: sub.description,
                     ),
                 ],
@@ -269,14 +278,13 @@ class _DetailBody extends StatelessWidget {
           FilledButton.icon(
             onPressed: () => _markPaid(context),
             icon: const Icon(LucideIcons.check, size: 19),
-            label: const Text('Marquer comme payé'),
+            label: Text(context.tr('detail.markPaid')),
           ),
         if (sub.status != SubscriptionStatus.paid) const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () =>
-              showSubscriptionFormSheet(context, existing: sub),
+          onPressed: () => showSubscriptionFormSheet(context, existing: sub),
           icon: const Icon(LucideIcons.pencil, size: 18),
-          label: const Text('Modifier'),
+          label: Text(context.tr('common.edit')),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -287,7 +295,7 @@ class _DetailBody extends StatelessWidget {
             color: context.status.overdue,
           ),
           label: Text(
-            'Supprimer',
+            context.tr('common.delete'),
             style: TextStyle(color: context.status.overdue),
           ),
           style: OutlinedButton.styleFrom(
@@ -313,10 +321,10 @@ class _DetailBody extends StatelessWidget {
       style: ToastificationStyle.flat,
       title: Text(
         result is Ok
-            ? '${subscription.name} marqué comme payé.'
+            ? context.tr('toast.paid', {'name': subscription.name})
             : switch (result) {
-                Err(failure: final f) => f.message,
-                _ => 'Erreur inattendue.',
+                Err(failure: final f) => f.localizedMessage,
+                _ => context.tr('common.unexpected'),
               },
       ),
       autoCloseDuration: const Duration(seconds: 3),
@@ -328,21 +336,19 @@ class _DetailBody extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         icon: Icon(LucideIcons.trash2, color: Theme.of(ctx).colorScheme.error),
-        title: const Text('Supprimer ?'),
-        content: Text(
-          '« ${subscription.name} » sera définitivement retiré de votre suivi.',
-        ),
+        title: Text(ctx.tr('detail.deleteTitle')),
+        content: Text(ctx.tr('detail.deleteBody', {'name': subscription.name})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: Text(ctx.tr('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,
             ),
-            child: const Text('Supprimer'),
+            child: Text(ctx.tr('common.delete')),
           ),
         ],
       ),
@@ -363,10 +369,10 @@ class _DetailBody extends StatelessWidget {
       style: ToastificationStyle.flat,
       title: Text(
         result is Ok
-            ? 'Abonnement supprimé.'
+            ? context.tr('detail.deleted')
             : switch (result) {
-                Err(failure: final f) => f.message,
-                _ => 'Erreur inattendue.',
+                Err(failure: final f) => f.localizedMessage,
+                _ => context.tr('common.unexpected'),
               },
       ),
       autoCloseDuration: const Duration(seconds: 3),
@@ -432,9 +438,9 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
           if (snapshot.hasError) {
             return Row(
               children: [
-                const Expanded(child: Text('Historique indisponible')),
+                Expanded(child: Text(context.tr('detail.historyFail'))),
                 IconButton(
-                  tooltip: 'Réessayer',
+                  tooltip: context.tr('common.retry'),
                   onPressed: () => setState(() => _future = _load()),
                   icon: const Icon(LucideIcons.refreshCw, size: 18),
                 ),
@@ -456,7 +462,7 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
                   Icon(LucideIcons.history, size: 19, color: scheme.primary),
                   const SizedBox(width: 10),
                   Text(
-                    'Historique des paiements',
+                    context.tr('detail.history'),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -466,7 +472,7 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
               const SizedBox(height: 14),
               if (entries.isEmpty)
                 Text(
-                  'Aucun paiement enregistré.',
+                  context.tr('detail.historyEmpty'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -496,7 +502,9 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
                                 ),
                               ),
                               Text(
-                                'Payé le ${AppFormatters.dateLong(entry.paidAt)}',
+                                context.tr('detail.paidOn', {
+                                  'date': AppFormatters.dateLong(entry.paidAt),
+                                }),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                 ),
@@ -505,10 +513,7 @@ class _PaymentHistoryState extends State<_PaymentHistory> {
                           ),
                         ),
                         Text(
-                          AppFormatters.money(
-                            entry.amount,
-                            widget.currency,
-                          ),
+                          AppFormatters.money(entry.amount, widget.currency),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
