@@ -51,18 +51,42 @@ class AuthCubit extends Cubit<AuthState> {
     return result;
   }
 
-  /// Met à jour le profil (prénom, nom, langue) côté serveur
+  /// Met à jour le profil (prénom, nom, email, langue) côté serveur
   /// puis ré-émet l'utilisateur à jour.
   Future<Result<User>> updateProfile({
     String? firstName,
     String? lastName,
+    String? email,
     String? language,
   }) async {
-    final result = await _repository.updateProfile(
-      firstName: firstName,
-      lastName: lastName,
-      language: language,
+    return _emit(
+      _repository.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        language: language,
+      ),
     );
+  }
+
+  /// Upload une nouvelle photo de profil (fichier local).
+  Future<Result<User>> uploadAvatar(String path) =>
+      _emit(_repository.uploadAvatar(path));
+
+  /// Retire la photo de profil.
+  Future<Result<User>> removeAvatar() => _emit(_repository.removeAvatar());
+
+  /// Change la devise de base du workspace (owner/manager).
+  Future<Result<User>> updateWorkspaceCurrency(String currency) =>
+      _emit(_repository.updateWorkspaceCurrency(currency));
+
+  /// Change le mot de passe après vérification de l'ancien.
+  Future<Result<void>> changePassword(String current, String next) =>
+      _repository.changePassword(current, next);
+
+  /// Factorisation : émet l'utilisateur à jour sur un Ok.
+  Future<Result<User>> _emit(Future<Result<User>> call) async {
+    final result = await call;
     if (result case Ok(value: final user)) {
       emit(AuthState.authenticated(user));
     }

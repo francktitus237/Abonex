@@ -85,6 +85,9 @@ abstract class User with _$User {
     String? lastName,
     String? language,
     Workspace? workspace,
+
+    /// URL absolue de la photo de profil (null = initiales).
+    String? avatarUrl,
   }) = _User;
 
   String get fullName => [

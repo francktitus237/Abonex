@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/notifications/notification_service.dart';
@@ -85,6 +87,8 @@ class _ProfileView extends StatelessWidget {
               _RingtoneTile(),
               const Divider(indent: 56),
               _BiometricTile(),
+              const Divider(indent: 56),
+              _PasswordTile(),
             ],
           ),
         ),
@@ -192,13 +196,18 @@ class _IdentityCard extends StatelessWidget {
           CircleAvatar(
             radius: 28,
             backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-            child: Text(
-              _initials(user),
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            backgroundImage: user.avatarUrl != null
+                ? NetworkImage(user.avatarUrl!)
+                : null,
+            child: user.avatarUrl != null
+                ? null
+                : Text(
+                    _initials(user),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -246,11 +255,40 @@ class _IdentityCard extends StatelessWidget {
     return parts.map((p) => p![0].toUpperCase()).join();
   }
 
-  /// Bottom sheet d'édition : prénom, nom, langue — PATCH /auth/me/.
+  /// Bottom sheet d'édition : photo, prénom, nom, email, devise
+  /// de base — PATCH /auth/me/ + /workspace/setup/ pour la devise.
   static void _showEditProfileSheet(BuildContext context, User user) {
     final firstName = TextEditingController(text: user.firstName);
     final lastName = TextEditingController(text: user.lastName);
+    final email = TextEditingController(text: user.email);
+    final canEditCurrency = user.role.canEditFinancials;
+    var currency = user.workspace?.defaultCurrency ?? '';
+    var avatarUrl = user.avatarUrl;
     var saving = false;
+    var photoBusy = false;
+    // Capturé avant les async gaps du sheet.
+    final cubit = context.read<AuthCubit>();
+
+    Future<void> pickPhoto(StateSetter setSheetState) async {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (files.isEmpty) return;
+      final path = files.single.path;
+      if (path == null) return;
+      setSheetState(() => photoBusy = true);
+      try {
+        final shrunk = await _shrinkImage(path);
+        final result = await cubit.uploadAvatar(shrunk);
+        setSheetState(() {
+          photoBusy = false;
+          if (result case Ok(value: final u)) avatarUrl = u.avatarUrl;
+        });
+      } catch (_) {
+        setSheetState(() => photoBusy = false);
+      }
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -260,7 +298,7 @@ class _IdentityCard extends StatelessWidget {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final bottom = MediaQuery.viewInsetsOf(context).bottom;
-          return Padding(
+          return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -273,6 +311,67 @@ class _IdentityCard extends StatelessWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 20),
+                // ---------- Photo de profil ----------
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 32,
+                      backgroundColor: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.12),
+                      backgroundImage: avatarUrl != null
+                          ? NetworkImage(avatarUrl!)
+                          : null,
+                      child: photoBusy
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : avatarUrl == null
+                          ? Icon(
+                              LucideIcons.user,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          TextButton.icon(
+                            onPressed: photoBusy
+                                ? null
+                                : () => pickPhoto(setSheetState),
+                            icon: const Icon(LucideIcons.imagePlus, size: 18),
+                            label: Text(context.tr('profile.photo.change')),
+                          ),
+                          if (avatarUrl != null)
+                            TextButton.icon(
+                              onPressed: photoBusy
+                                  ? null
+                                  : () async {
+                                      setSheetState(() => photoBusy = true);
+                                      await cubit.removeAvatar();
+                                      setSheetState(() {
+                                        photoBusy = false;
+                                        avatarUrl = null;
+                                      });
+                                    },
+                              icon: const Icon(LucideIcons.trash2, size: 18),
+                              label: Text(
+                                context.tr('profile.photo.remove'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
                 TextField(
                   controller: firstName,
                   decoration: InputDecoration(
@@ -288,18 +387,54 @@ class _IdentityCard extends StatelessWidget {
                     prefixIcon: Icon(LucideIcons.userRound, size: 20),
                   ),
                 ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: context.tr('common.email'),
+                    prefixIcon: Icon(LucideIcons.mail, size: 20),
+                  ),
+                ),
+                // ---------- Devise de base du workspace ----------
+                if (canEditCurrency) ...[
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: currency.isEmpty ? null : currency,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: context.tr('profile.currency'),
+                      prefixIcon: Icon(LucideIcons.coins, size: 20),
+                    ),
+                    items: [
+                      for (final c in _currencies)
+                        DropdownMenuItem(value: c, child: Text(c)),
+                    ],
+                    onChanged: (v) =>
+                        setSheetState(() => currency = v ?? currency),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: saving
                       ? null
                       : () async {
                           setSheetState(() => saving = true);
-                          final result = await sheetContext
-                              .read<AuthCubit>()
-                              .updateProfile(
-                                firstName: firstName.text.trim(),
-                                lastName: lastName.text.trim(),
-                              );
+                          final newEmail = email.text.trim();
+                          var result = await cubit.updateProfile(
+                            firstName: firstName.text.trim(),
+                            lastName: lastName.text.trim(),
+                            email: newEmail == user.email ? null : newEmail,
+                          );
+                          // Devise : endpoint workspace dédié —
+                          // enchaîné seulement si le profil a réussi.
+                          if (result is Ok &&
+                              canEditCurrency &&
+                              currency != (user.workspace?.defaultCurrency ?? '')) {
+                            result = await cubit.updateWorkspaceCurrency(
+                              currency,
+                            );
+                          }
                           if (!context.mounted) return;
                           setSheetState(() => saving = false);
                           if (result is Ok) {
@@ -340,6 +475,37 @@ class _IdentityCard extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Devises proposées — union des devises des pays supportés.
+  static final _currencies =
+      ({for (final c in AppCountries.all) c.currency}.toList()..sort());
+}
+
+/// Réduit l'image dans un carré de [max] px (PNG) — les photos de
+/// téléphone dépassent facilement la limite serveur de 5 Mo.
+Future<String> _shrinkImage(String path, {int max = 512}) async {
+  try {
+    final bytes = await File(path).readAsBytes();
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: max,
+      targetHeight: max,
+    );
+    final frame = await codec.getNextFrame();
+    final png = await frame.image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    if (png == null) return path;
+    final dir = await getTemporaryDirectory();
+    final out = File(
+      '${dir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.png',
+    );
+    await out.writeAsBytes(png.buffer.asUint8List());
+    return out.path;
+  } catch (_) {
+    // Fichier illisible → on envoie l'original, le serveur validera.
+    return path;
   }
 }
 
@@ -824,6 +990,124 @@ class _RingtoneTileState extends State<_RingtoneTile> {
             )
           : const Icon(LucideIcons.chevronRight, size: 18),
       onTap: _busy ? null : _choose,
+    );
+  }
+}
+
+/// Changement de mot de passe : le serveur exige l'ancien
+/// (anti-vol de session si le téléphone est déverrouillé).
+class _PasswordTile extends StatelessWidget {
+  Future<void> _change(BuildContext context) async {
+    final cubit = context.read<AuthCubit>();
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final confirm = TextEditingController();
+    var saving = false;
+    String? error;
+
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(ctx.tr('profile.password')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: current,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('profile.password.current'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: next,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('profile.password.new'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirm,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('profile.password.confirm'),
+                ),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (next.text != confirm.text) {
+                        setD(
+                          () => error = ctx.tr('profile.password.mismatch'),
+                        );
+                        return;
+                      }
+                      setD(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final result = await cubit.changePassword(
+                        current.text,
+                        next.text,
+                      );
+                      if (!ctx.mounted) return;
+                      switch (result) {
+                        case Ok():
+                          Navigator.of(ctx).pop(true);
+                        case Err(failure: final f):
+                          setD(() {
+                            saving = false;
+                            error = f.localizedMessage;
+                          });
+                      }
+                    },
+              child: Text(ctx.tr('profile.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (done == true && context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.success,
+        style: ToastificationStyle.flat,
+        title: Text(context.tr('profile.password.changed')),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.keyRound),
+      title: Text(context.tr('profile.password')),
+      subtitle: Text(context.tr('profile.passwordSub')),
+      trailing: const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: () => _change(context),
     );
   }
 }

@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -179,27 +180,98 @@ class RegisterView(APIView):
 
 
 class MeView(APIView):
-    """GET /auth/me/ → user · PATCH → met à jour prénom, nom
-    et langue du profil (champs éditables côté app)."""
+    """GET /auth/me/ → user · PATCH → met à jour prénom, nom,
+    email, langue et photo de profil (multipart pour l'avatar)."""
+
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def _serialize(self, request):
+        # Le contexte request sert à construire l'URL absolue
+        # de l'avatar (build_absolute_uri).
+        return Response(
+            UserSerializer(request.user, context={"request": request}).data
+        )
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return self._serialize(request)
 
     def patch(self, request):
         user = request.user
         data = request.data
-        changed = False
+        errors = {}
+
         for field in ("first_name", "last_name"):
             if field in data:
                 setattr(user, field, str(data[field]).strip()[:150])
-                changed = True
+
+        email = data.get("email")
+        if email is not None:
+            email = str(email).strip().lower()
+            if "@" not in email:
+                errors["email"] = "Email invalide."
+            elif (
+                User.objects.exclude(pk=user.pk)
+                .filter(email=email)
+                .exists()
+            ):
+                errors["email"] = "Un compte existe déjà pour cet email."
+            else:
+                # username == email dans ce projet : les deux bougent
+                # ensemble pour conserver l'authentification par email.
+                user.email = email
+                user.username = email
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        user.save()
+
+        profile = user.profile
         language = data.get("language")
         if language is not None:
-            user.profile.language = str(language).strip()[:8]
-            user.profile.save(update_fields=["language"])
-        if changed:
-            user.save(update_fields=["first_name", "last_name"])
-        return Response(UserSerializer(user).data)
+            profile.language = str(language).strip()[:8]
+
+        # Photo : fichier multipart OU chaîne vide pour la retirer.
+        avatar_file = request.FILES.get("avatar")
+        if avatar_file is not None:
+            if not (avatar_file.content_type or "").startswith("image/"):
+                return Response(
+                    {"avatar": "Le fichier doit être une image."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if avatar_file.size > 5 * 1024 * 1024:
+                return Response(
+                    {"avatar": "Image trop lourde (5 Mo max)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            profile.avatar = avatar_file
+        elif data.get("avatar") == "":
+            profile.avatar = ""
+        profile.save()
+
+        return self._serialize(request)
+
+
+class ChangePasswordView(APIView):
+    """POST /auth/password/change/ {current_password, new_password}
+    → 204. Les JWT existants restent valides (pas de révocation)."""
+
+    def post(self, request):
+        user = request.user
+        current = request.data.get("current_password") or ""
+        new = request.data.get("new_password") or ""
+        if not user.check_password(current):
+            return Response(
+                {"current_password": "Mot de passe actuel incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(new) < 8:
+            return Response(
+                {"new_password": "8 caractères minimum."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LogoutView(APIView):
@@ -426,6 +498,10 @@ class WorkspaceSetupView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request):
+        # La config concerne TOUT l'espace : seuls owner/manager
+        # peuvent la modifier (cohérent avec le budget).
+        if request.user.profile.role not in {"owner", "manager"}:
+            return Response(status=status.HTTP_403_FORBIDDEN)
         workspace = request.user.profile.workspace
         serializer = WorkspaceSerializer(
             workspace, data=request.data, partial=True
