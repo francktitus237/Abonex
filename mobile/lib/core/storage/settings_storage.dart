@@ -71,7 +71,7 @@ class SettingsStorage {
   /// Nombre de jours AVANT l'échéance pour chaque rappel.
   /// 0 = le jour même. Défaut : J-7, J-3 et J.
   List<int> get reminderDays {
-    final raw = _prefs.getString(_kReminderDays) ?? '7,3,0';
+    final raw = _prefs.getString(_kReminderDays) ?? '14,7,3,2,1,0';
     return raw
         .split(',')
         .map(int.tryParse)
@@ -90,4 +90,33 @@ class SettingsStorage {
 
   Future<void> setReminderHour(int hour) =>
       _prefs.setInt(_kReminderHour, hour.clamp(0, 23));
+
+  // Clés publiques : l'isolate de fond des notifications les relit
+  // directement dans SharedPreferences, sans le singleton.
+  static const kAlarmSound = 'alarm_sound';
+  static const kAlarmCustomPath = 'alarm_custom_path';
+  static const kAlarmCustomName = 'alarm_custom_name';
+  static const kAlarmCustomRev = 'alarm_custom_rev';
+
+  /// Sonnerie d'alarme choisie : 'default' (son système), 'classic',
+  /// 'digital', 'chime' (sons intégrés res/raw) ou 'custom' (fichier
+  /// importé par l'utilisateur).
+  String get alarmSound => _prefs.getString(kAlarmSound) ?? 'default';
+
+  Future<void> setAlarmSound(String value) =>
+      _prefs.setString(kAlarmSound, value);
+
+  String? get alarmCustomPath => _prefs.getString(kAlarmCustomPath);
+
+  String get alarmCustomName => _prefs.getString(kAlarmCustomName) ?? '';
+
+  /// Enregistre un fichier importé comme sonnerie. Le numéro de
+  /// révision sert à créer un NOUVEAU canal Android à chaque import —
+  /// le son d'un canal existant est immuable côté système.
+  Future<void> setCustomAlarmSound(String path, String name) async {
+    await _prefs.setInt(kAlarmCustomRev, (_prefs.getInt(kAlarmCustomRev) ?? 0) + 1);
+    await _prefs.setString(kAlarmCustomPath, path);
+    await _prefs.setString(kAlarmCustomName, name);
+    await setAlarmSound('custom');
+  }
 }

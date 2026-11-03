@@ -28,9 +28,9 @@ Future<void> onBackgroundNotificationResponse(NotificationResponse r) async {
 }
 
 /// Rappels locaux d'échéances (CDC : anticiper chaque paiement).
-/// Une notification est programmée 3 jours avant + le jour J
-/// pour chaque abonnement "À venir". Les rendez-vous déclenchent
-/// en plus une ALARME exacte à l'heure prévue.
+/// Chaque échéance reçoit des rappels sonores aux jours choisis,
+/// des rappels rapprochés (3h et 1h avant) quand l'heure est
+/// connue, puis une ALARME plein écran à l'heure exacte.
 class NotificationService {
   NotificationService();
 
@@ -92,9 +92,52 @@ class NotificationService {
     ),
   );
 
-  static NotificationDetails get _urgentDetails => NotificationDetails(
+  /// Canal + son selon la sonnerie choisie par l'utilisateur.
+  /// Android grave le son dans le canal à sa création : un ID
+  /// distinct par choix est requis (le son d'un canal existant
+  /// est immuable côté système).
+  static Future<(String, AndroidNotificationSound?)> _alarmChannelFor(
+    String base,
+  ) async {
+    var sel = 'default';
+    String? customPath;
+    var rev = 0;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      sel = prefs.getString(SettingsStorage.kAlarmSound) ?? 'default';
+      customPath = prefs.getString(SettingsStorage.kAlarmCustomPath);
+      rev = prefs.getInt(SettingsStorage.kAlarmCustomRev) ?? 0;
+    } catch (_) {}
+    return switch (sel) {
+      'classic' || 'digital' || 'chime' => (
+          '${base}_$sel',
+          RawResourceAndroidNotificationSound('alarm_$sel'),
+        ),
+      'custom' when customPath != null => (
+          '${base}_custom_$rev',
+          UriAndroidNotificationSound('file://$customPath'),
+        ),
+      _ => (base, null),
+    };
+  }
+
+  /// Crée le canal Android porteur du son choisi (no-op sur iOS).
+  static Future<void> _createChannel(
+    FlutterLocalNotificationsPlugin plugin,
+    AndroidNotificationChannel channel,
+  ) => plugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(channel) ??
+      Future.value();
+
+  static NotificationDetails _urgentDetails(
+    String channelId,
+    AndroidNotificationSound? sound,
+  ) => NotificationDetails(
     android: AndroidNotificationDetails(
-      _urgentChannelId,
+      channelId,
       _urgentChannelName,
       channelDescription: _urgentChannelDesc,
       importance: Importance.max,
@@ -105,6 +148,7 @@ class NotificationService {
       category: AndroidNotificationCategory.alarm,
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
+      sound: sound,
     ),
     iOS: DarwinNotificationDetails(
       presentAlert: true,
@@ -115,9 +159,12 @@ class NotificationService {
     ),
   );
 
-  static NotificationDetails get _eventAlarmDetails => NotificationDetails(
+  static NotificationDetails _eventAlarmDetails(
+    String channelId,
+    AndroidNotificationSound? sound,
+  ) => NotificationDetails(
     android: AndroidNotificationDetails(
-      _eventChannelId,
+      channelId,
       _eventChannelName,
       channelDescription: _eventChannelDesc,
       importance: Importance.max,
@@ -131,6 +178,7 @@ class NotificationService {
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
       additionalFlags: _insistent,
+      sound: sound,
       actions: [
         AndroidNotificationAction(
           actionSnooze,
@@ -264,6 +312,25 @@ class NotificationService {
     final urgent = settings.soundAlerts;
     final reminderDays = settings.reminderDays;
     final reminderHour = settings.reminderHour;
+    // Canal d'alarme jour J avec la sonnerie choisie (le son se
+    // fixe à la création du canal → un canal par choix).
+    final (urgentChannel, urgentSound) = await _alarmChannelFor(
+      _urgentChannelId,
+    );
+    await _createChannel(
+      _plugin,
+      AndroidNotificationChannel(
+        urgentChannel,
+        _urgentChannelName,
+        description: _urgentChannelDesc,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        sound: urgentSound,
+      ),
+    );
+    final urgentDetails = _urgentDetails(urgentChannel, urgentSound);
     var id = 0;
     // Déduplique les jours choisis (ex. J-7 et J tombant le même
     // jour ne doivent produire qu'UN rappel).
@@ -283,9 +350,9 @@ class NotificationService {
             sub.nextDueDate.year == now.year &&
             sub.nextDueDate.month == now.month &&
             sub.nextDueDate.day == now.day;
-        // Rendez-vous avec heure : le jour J, c'est l'alarme exacte
+        // Échéance à heure fixe : le jour J, c'est l'alarme exacte
         // qui prévient — pas de doublon à l'heure de rappel.
-        if (isToday && sub.isEvent && sub.dueTime != null) continue;
+        if (isToday && sub.dueTime != null) continue;
         if (when.isBefore(now)) {
           // Rappel passé → on le saute SAUF le jour J même,
           // qui mérite une alerte immédiate.
@@ -317,7 +384,7 @@ class NotificationService {
           scheduledDate: when,
           // Jour J + rappels sonores activés → alarme plein écran.
           notificationDetails: urgent && daysBefore == 0
-              ? _urgentDetails
+              ? urgentDetails
               : _notificationDetails,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           payload: 'subscription:${sub.id}',
@@ -325,21 +392,66 @@ class NotificationService {
       }
     }
 
-    // Alarmes de rendez-vous : à l'heure exacte, sonnerie en boucle,
-    // boutons Arrêter / Repousser.
+    // Rappels rapprochés le jour J pour les échéances à heure
+    // fixe : notification sonore 3h puis 1h avant l'heure exacte —
+    // l'anticipation se densifie à mesure que l'échéance approche.
     for (final sub in subs) {
-      if (!sub.isEvent || sub.dueTime == null) continue;
+      if (sub.dueTime == null) continue;
+      if (sub.status == SubscriptionStatus.paid) continue;
+      for (final offset in const [Duration(hours: 3), Duration(hours: 1)]) {
+        final when = tz.TZDateTime.from(
+          sub.dueAt.subtract(offset),
+          tz.local,
+        );
+        if (!when.isAfter(now)) continue;
+        if (id >= 60) break;
+        await _plugin.zonedSchedule(
+          id: id++,
+          title: _t(sub.isEvent ? 'ns.soonEvent' : 'ns.soonDue', {
+            'h': '${offset.inHours} h',
+            'name': sub.name,
+          }),
+          body: sub.isEvent
+              ? AppFormatters.dateTimeLong(sub.dueAt)
+              : _t('ns.payBody', {
+                      'provider': sub.provider,
+                      'amount': AppFormatters.money(sub.amount, sub.currency),
+                    }) +
+                    _descSuffix(sub),
+          scheduledDate: when,
+          notificationDetails: _notificationDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: 'subscription:${sub.id}',
+        );
+      }
+    }
+
+    // Alarme exacte à la date/heure : sonnerie en boucle jusqu'à
+    // Arrêter / Repousser — pour les rendez-vous ET tout abonnement
+    // dont l'échéance précise l'heure.
+    for (final sub in subs) {
+      if (sub.dueTime == null) continue;
       if (sub.status == SubscriptionStatus.paid) continue;
       final when = tz.TZDateTime.from(sub.dueAt, tz.local);
       if (!when.isAfter(now)) continue;
       final numericId = int.tryParse(sub.id) ?? sub.id.hashCode.abs();
+      final title = _t(sub.isEvent ? 'ns.eventTitle' : 'ns.dueAlarmTitle', {
+        'name': sub.name,
+      });
+      final body = sub.isEvent
+          ? _eventBody(sub)
+          : _t('ns.payBody', {
+                  'provider': sub.provider,
+                  'amount': AppFormatters.money(sub.amount, sub.currency),
+                }) +
+                _descSuffix(sub);
       await _scheduleEventAlarm(
         _plugin,
         id: _eventIdBase + numericId % _idRange,
-        title: _t('ns.eventTitle', {'name': sub.name}),
-        body: _eventBody(sub),
+        title: title,
+        body: body,
         when: when,
-        payload: _eventPayload(sub.id, sub.name, _eventBody(sub)),
+        payload: _eventPayload(sub.id, sub.name, title, body),
       );
     }
 
@@ -372,8 +484,12 @@ class NotificationService {
 
   /// Payload auto-suffisant : l'isolate de fond n'a pas accès à la
   /// liste des abonnements pour reconstruire titre et texte.
-  static String _eventPayload(String id, String name, String body) =>
-      'event:$id\u0001$name\u0001$body';
+  static String _eventPayload(
+    String id,
+    String name,
+    String title,
+    String body,
+  ) => 'event:$id\u0001$name\u0001$title\u0001$body';
 
   /// Repousse l'alarme de 10 minutes à partir du payload reçu.
   /// Statique : utilisable depuis l'isolate de fond.
@@ -381,7 +497,12 @@ class NotificationService {
     if (payload == null || !payload.startsWith('event:')) return;
     final parts = payload.substring(6).split('\u0001');
     if (parts.length < 3) return;
-    final [id, name, body] = parts;
+    final id = parts[0];
+    final name = parts[1];
+    // Format v2 : le titre est embarqué (abonnements comme RDV) ;
+    // l'ancien format à 3 champs garde le titre de rendez-vous.
+    final title = parts.length >= 4 ? parts[2] : null;
+    final body = parts.length >= 4 ? parts[3] : parts[2];
     final numericId = int.tryParse(id) ?? id.hashCode.abs();
     // Isolate de fond : la langue est relue depuis les préférences
     // plutôt que le singleton de l'UI.
@@ -393,7 +514,8 @@ class NotificationService {
     await _scheduleEventAlarm(
       FlutterLocalNotificationsPlugin(),
       id: _snoozeIdBase + numericId % _idRange,
-      title: AppStrings.t(lang, 'ns.eventTitle', {'name': name}),
+      title:
+          title ?? AppStrings.t(lang, 'ns.eventTitle', {'name': name}),
       body: body,
       when: tz.TZDateTime.now(tz.local).add(_snoozeDuration),
       payload: payload,
@@ -401,7 +523,9 @@ class NotificationService {
   }
 
   /// Alarme exacte si autorisée, sinon repli sur le mode inexact
-  /// (le système peut décaler de quelques minutes).
+  /// (le système peut décaler de quelques minutes). Le canal porte
+  /// la sonnerie choisie — recréé à chaque appel car un changement
+  /// de sonnerie implique un nouvel ID de canal.
   static Future<void> _scheduleEventAlarm(
     FlutterLocalNotificationsPlugin plugin, {
     required int id,
@@ -410,12 +534,27 @@ class NotificationService {
     required tz.TZDateTime when,
     required String payload,
   }) async {
+    final (channelId, sound) = await _alarmChannelFor(_eventChannelId);
+    await _createChannel(
+      plugin,
+      AndroidNotificationChannel(
+        channelId,
+        _eventChannelName,
+        description: _eventChannelDesc,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        sound: sound,
+      ),
+    );
+    final details = _eventAlarmDetails(channelId, sound);
     Future<void> schedule(AndroidScheduleMode mode) => plugin.zonedSchedule(
       id: id,
       title: title,
       body: body,
       scheduledDate: when,
-      notificationDetails: _eventAlarmDetails,
+      notificationDetails: details,
       androidScheduleMode: mode,
       payload: payload,
     );
@@ -424,6 +563,52 @@ class NotificationService {
     } on PlatformException {
       await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
     }
+  }
+
+  /// Aperçu : joue la sonnerie choisie une seule fois (réglages).
+  Future<void> previewAlarmSound() async {
+    await init();
+    final (channelId, sound) = await _alarmChannelFor(
+      'abonex_alarm_preview',
+    );
+    await _createChannel(
+      _plugin,
+      AndroidNotificationChannel(
+        channelId,
+        _eventChannelName,
+        description: _eventChannelDesc,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        sound: sound,
+      ),
+    );
+    await _plugin.show(
+      id: 3000,
+      title: _t('alarm.previewTitle'),
+      body: _t('alarm.previewBody'),
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          _eventChannelName,
+          channelDescription: _eventChannelDesc,
+          importance: Importance.max,
+          priority: Priority.max,
+          playSound: true,
+          enableVibration: true,
+          category: AndroidNotificationCategory.alarm,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+          sound: sound,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+    );
   }
 
   /// Prochain [weekday] à [hour]h — DateTime monday=1 … sunday=7.

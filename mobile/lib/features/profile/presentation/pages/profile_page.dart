@@ -1,13 +1,18 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/notifications/notification_service.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/settings_storage.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -76,6 +81,8 @@ class _ProfileView extends StatelessWidget {
               _SoundAlertsTile(),
               const Divider(indent: 56),
               _ReminderScheduleTile(),
+              const Divider(indent: 56),
+              _RingtoneTile(),
               const Divider(indent: 56),
               _BiometricTile(),
             ],
@@ -571,7 +578,7 @@ class _ReminderScheduleTile extends StatefulWidget {
 }
 
 class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
-  static const _choices = [14, 7, 3, 1, 0];
+  static const _choices = [14, 7, 3, 2, 1, 0];
   late List<int> _days = getIt<SettingsStorage>().reminderDays;
   late int _hour = getIt<SettingsStorage>().reminderHour;
 
@@ -689,6 +696,134 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
       subtitle: Text(_summary(context)),
       trailing: const Icon(LucideIcons.chevronRight, size: 18),
       onTap: _configure,
+    );
+  }
+}
+
+/// Sonnerie des alarmes : sons intégrés ou fichier audio importé
+/// par l'utilisateur. Le choix est relu par le planificateur à
+/// chaque programmation — il s'applique aux prochaines alarmes.
+class _RingtoneTile extends StatefulWidget {
+  @override
+  State<_RingtoneTile> createState() => _RingtoneTileState();
+}
+
+class _RingtoneTileState extends State<_RingtoneTile> {
+  static const _builtin = ['default', 'classic', 'digital', 'chime'];
+  SettingsStorage get _storage => getIt<SettingsStorage>();
+  late String _selected = _storage.alarmSound;
+  bool _busy = false;
+
+  String _labelFor(BuildContext context, String value) => switch (value) {
+    'classic' => context.tr('alarm.opt.classic'),
+    'digital' => context.tr('alarm.opt.digital'),
+    'chime' => context.tr('alarm.opt.chime'),
+    'custom' => context.tr('alarm.opt.custom', {
+      'name': _storage.alarmCustomName,
+    }),
+    _ => context.tr('alarm.opt.default'),
+  };
+
+  Future<void> _import() async {
+    setState(() => _busy = true);
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.audio);
+      if (files.isEmpty) return;
+      final picked = files.single;
+      final path = picked.path;
+      if (path == null) return;
+      // Copie en zone privée : le chemin source (cache du picker)
+      // peut être nettoyé par le système.
+      final dir = await getApplicationSupportDirectory();
+      final ext = path.contains('.') ? path.split('.').last : 'mp3';
+      final dest = File('${dir.path}/alarm_custom.$ext');
+      await File(path).copy(dest.path);
+      await _storage.setCustomAlarmSound(dest.path, picked.name);
+      if (!mounted) return;
+      setState(() => _selected = 'custom');
+      toastification.show(
+        context: context,
+        type: ToastificationType.success,
+        style: ToastificationStyle.flat,
+        title: Text(context.tr('alarm.imported', {'name': picked.name})),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _choose() async {
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('alarm.choose')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioGroup<String>(
+              groupValue: _selected,
+              onChanged: (val) => Navigator.of(ctx).pop(val),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final v in _builtin)
+                    RadioListTile<String>(
+                      value: v,
+                      title: Text(_labelFor(ctx, v)),
+                    ),
+                  if (_storage.alarmCustomName.isNotEmpty)
+                    RadioListTile<String>(
+                      value: 'custom',
+                      title: Text(_labelFor(ctx, 'custom')),
+                    ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.fileAudio, size: 20),
+              title: Text(ctx.tr('alarm.import')),
+              onTap: () => Navigator.of(ctx).pop('__import__'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            // Aperçu : joue la sonnerie une fois sur le canal d'alarme.
+            onPressed: () =>
+                getIt<NotificationService>().previewAlarmSound(),
+            child: Text(ctx.tr('alarm.test')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(ctx.tr('common.cancel')),
+          ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    if (chosen == '__import__') {
+      await _import();
+      return;
+    }
+    await _storage.setAlarmSound(chosen);
+    setState(() => _selected = chosen);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.music),
+      title: Text(context.tr('alarm.title')),
+      subtitle: Text(_labelFor(context, _selected)),
+      trailing: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: _busy ? null : _choose,
     );
   }
 }
