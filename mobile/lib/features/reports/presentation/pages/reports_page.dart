@@ -396,6 +396,7 @@ class _MonthlyForecast extends StatelessWidget {
         child: BarChart(
           BarChartData(
             maxY: maxY == 0 ? 1 : maxY * 1.2,
+            alignment: BarChartAlignment.spaceAround,
             gridData: const FlGridData(show: false),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
@@ -405,17 +406,24 @@ class _MonthlyForecast extends StatelessWidget {
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
+                  reservedSize: 30,
+                  interval: 1,
                   getTitlesWidget: (value, _) {
                     final i = value.toInt();
                     if (i < 0 || i >= months.length) {
                       return const SizedBox.shrink();
                     }
                     return Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        AppFormatters.monthYear(months[i]).split(' ').first,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      padding: const EdgeInsets.only(top: 8),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          AppFormatters.monthShort(months[i]),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     );

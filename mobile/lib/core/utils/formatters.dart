@@ -84,6 +84,10 @@ abstract final class AppFormatters {
       ? '${_monthsLongEn[d.month - 1]} ${d.year}'
       : '${_monthsLongFr[d.month - 1]} ${d.year}';
 
+  /// FR `janv.` · EN `Jan`
+  static String monthShort(DateTime d) =>
+      _en ? _monthsEn[d.month - 1] : _monthsFr[d.month - 1];
+
   /// "Dans 3 j" / "Aujourd'hui" / "En retard de 2 j" (ou équivalent EN)
   static String relativeDay(DateTime d) {
     final now = DateTime.now();

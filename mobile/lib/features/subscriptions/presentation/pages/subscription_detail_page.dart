@@ -71,6 +71,13 @@ class _DetailBody extends StatelessWidget {
       SubscriptionStatus.overdue => 'En retard',
     };
     final days = sub.nextDueDate.difference(DateTime.now()).inDays;
+    final countdown = sub.status == SubscriptionStatus.paid
+        ? (sub.isEvent ? 'Terminé' : 'Réglé')
+        : days < 0
+        ? 'En retard de ${-days} j'
+        : days == 0
+        ? "Aujourd'hui"
+        : 'Dans $days j';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
@@ -173,54 +180,78 @@ class _DetailBody extends StatelessWidget {
 
         // --- Informations ---
         _InfoCard(
-          rows: [
-            (
-              icon: LucideIcons.calendar,
-              label: sub.isEvent ? 'Date du rendez-vous' : 'Prochaine échéance',
-              value: sub.dueTime != null
-                  ? AppFormatters.dateTimeLong(sub.dueAt)
-                  : AppFormatters.dateLong(sub.nextDueDate),
-            ),
-            (
-              icon: LucideIcons.timer,
-              label: 'Compte à rebours',
-              value: sub.status == SubscriptionStatus.paid
-                  ? 'Réglé'
-                  : days < 0
-                  ? 'En retard de ${-days} j'
-                  : days == 0
-                  ? "Aujourd'hui"
-                  : 'Dans $days j',
-            ),
-            (
-              icon: LucideIcons.repeat,
-              label: 'Cycle de facturation',
-              value: sub.cycleLabel,
-            ),
-            (
-              icon: LucideIcons.layoutGrid,
-              label: 'Catégorie',
-              value: sub.category.label,
-            ),
-            (
-              icon: LucideIcons.building2,
-              label: 'Fournisseur',
-              value: sub.provider.isEmpty ? '—' : sub.provider,
-            ),
-            if (sub.description.isNotEmpty)
-              (
-                icon: LucideIcons.mapPin,
-                label: 'Description',
-                value: sub.description,
-              ),
-          ],
+          rows: sub.isEvent
+              ? [
+                  (
+                    icon: LucideIcons.calendar,
+                    label: 'Date du rendez-vous',
+                    value: AppFormatters.dateLong(sub.nextDueDate),
+                  ),
+                  if (sub.dueTime != null)
+                    (
+                      icon: LucideIcons.clock,
+                      label: 'Heure',
+                      value: AppFormatters.time(
+                        sub.dueTime!.hour,
+                        sub.dueTime!.minute,
+                      ),
+                    ),
+                  (
+                    icon: LucideIcons.timer,
+                    label: 'Compte à rebours',
+                    value: countdown,
+                  ),
+                  if (sub.description.isNotEmpty)
+                    (
+                      icon: LucideIcons.fileText,
+                      label: 'Description',
+                      value: sub.description,
+                    ),
+                ]
+              : [
+                  (
+                    icon: LucideIcons.calendar,
+                    label: 'Prochaine échéance',
+                    value: sub.dueTime != null
+                        ? AppFormatters.dateTimeLong(sub.dueAt)
+                        : AppFormatters.dateLong(sub.nextDueDate),
+                  ),
+                  (
+                    icon: LucideIcons.timer,
+                    label: 'Compte à rebours',
+                    value: countdown,
+                  ),
+                  (
+                    icon: LucideIcons.repeat,
+                    label: 'Cycle de facturation',
+                    value: sub.cycleLabel,
+                  ),
+                  (
+                    icon: LucideIcons.layoutGrid,
+                    label: 'Catégorie',
+                    value: sub.category.label,
+                  ),
+                  (
+                    icon: LucideIcons.building2,
+                    label: 'Fournisseur',
+                    value: sub.provider.isEmpty ? '—' : sub.provider,
+                  ),
+                  if (sub.description.isNotEmpty)
+                    (
+                      icon: LucideIcons.mapPin,
+                      label: 'Description',
+                      value: sub.description,
+                    ),
+                ],
         ),
-        const SizedBox(height: 16),
-        _PaymentHistory(
-          key: ValueKey('${sub.id}-${sub.status.name}'),
-          subscriptionId: sub.id,
-          currency: sub.currency,
-        ),
+        if (!sub.isEvent) ...[
+          const SizedBox(height: 16),
+          _PaymentHistory(
+            key: ValueKey('${sub.id}-${sub.status.name}'),
+            subscriptionId: sub.id,
+            currency: sub.currency,
+          ),
+        ],
         const SizedBox(height: 24),
 
         // --- Actions ---
