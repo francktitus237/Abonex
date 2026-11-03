@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -48,10 +49,10 @@ class _CalendarPageState extends State<CalendarPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calendrier'),
+        title: Text(context.tr('nav.calendar')),
         actions: [
           IconButton(
-            tooltip: 'Actualiser',
+            tooltip: context.tr('common.refresh'),
             onPressed: () => context.read<SubscriptionsCubit>().refresh(),
             icon: const Icon(LucideIcons.refreshCw, size: 20),
           ),
@@ -74,7 +75,7 @@ class _CalendarPageState extends State<CalendarPage> {
           if (state is SubscriptionsError) {
             return EmptyState(
               icon: LucideIcons.cloudOff,
-              title: 'Chargement impossible',
+              title: context.tr('common.loadError'),
               subtitle: state.message,
             );
           }
@@ -87,7 +88,10 @@ class _CalendarPageState extends State<CalendarPage> {
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(
-              20, 4, 20, 32 + AppShell.barInset,
+              20,
+              4,
+              20,
+              32 + AppShell.barInset,
             ),
             children: [
               AnimatedFadeIn(
@@ -140,17 +144,26 @@ class _CalendarPageState extends State<CalendarPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _Legend(color: context.status.dueSoon, label: 'À venir'),
+                  _Legend(
+                    color: context.status.dueSoon,
+                    label: context.tr('status.dueSoon'),
+                  ),
                   const SizedBox(width: 16),
-                  _Legend(color: context.status.paid, label: 'Payé'),
+                  _Legend(
+                    color: context.status.paid,
+                    label: context.tr('status.paid'),
+                  ),
                   const SizedBox(width: 16),
-                  _Legend(color: context.status.overdue, label: 'En retard'),
+                  _Legend(
+                    color: context.status.overdue,
+                    label: context.tr('status.overdue'),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
               Text(
                 selected == null
-                    ? 'Sélectionnez un jour'
+                    ? context.tr('cal.select')
                     : AppFormatters.dateLong(selected),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
@@ -158,10 +171,10 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
               const SizedBox(height: 12),
               if (selected != null && dayItems.isEmpty)
-                const EmptyState(
+                EmptyState(
                   icon: LucideIcons.calendarOff,
-                  title: 'Aucune échéance',
-                  subtitle: 'Rien à payer ce jour-là.',
+                  title: context.tr('cal.none'),
+                  subtitle: context.tr('cal.noneSub'),
                 )
               else
                 ...dayItems.map(
@@ -207,7 +220,7 @@ class _MonthGrid extends StatelessWidget {
     final cells = leading + daysInMonth;
     final rows = (cells / 7).ceil();
 
-    const labels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    final labels = context.tr('cal.weekdays').split(' ');
 
     return Column(
       children: [
@@ -240,7 +253,12 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  Widget _cell(int index, DateTime today, ThemeData theme, BuildContext context) {
+  Widget _cell(
+    int index,
+    DateTime today,
+    ThemeData theme,
+    BuildContext context,
+  ) {
     final leading = DateTime(month.year, month.month).weekday - 1;
     final dayNumber = index - leading + 1;
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;

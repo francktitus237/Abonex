@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
@@ -55,14 +56,21 @@ class _UsersPageState extends State<UsersPage> {
       if (!mounted) return;
       setState(() => _future = _load());
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${user.email} est maintenant ${role.label}.')),
+        SnackBar(
+          content: Text(
+            context.tr('users.roleChanged', {
+              'email': user.email,
+              'role': context.tr(role.labelKey),
+            }),
+          ),
+        ),
       );
     } on DioException catch (error) {
       if (!mounted) return;
       final data = error.response?.data;
       final message = data is Map<String, dynamic> && data['role'] is List
           ? (data['role'] as List).first.toString()
-          : 'Impossible de modifier ce rôle.';
+          : context.tr('users.roleFail');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -89,7 +97,7 @@ class _UsersPageState extends State<UsersPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => AlertDialog(
-          title: const Text('Inviter un collaborateur'),
+          title: Text(ctx.tr('users.inviteTitle')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -97,29 +105,29 @@ class _UsersPageState extends State<UsersPage> {
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'email@entreprise.com',
-                  prefixIcon: Icon(LucideIcons.mail, size: 18),
+                decoration: InputDecoration(
+                  labelText: ctx.tr('common.email'),
+                  hintText: ctx.tr('auth.emailHint'),
+                  prefixIcon: const Icon(LucideIcons.mail, size: 18),
                 ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: role,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Rôle'),
-                items: const [
+                decoration: InputDecoration(labelText: ctx.tr('users.role')),
+                items: [
                   DropdownMenuItem(
                     value: 'manager',
-                    child: Text('Gestionnaire — tout gérer'),
+                    child: Text(ctx.tr('users.roleManager')),
                   ),
                   DropdownMenuItem(
                     value: 'assistant',
-                    child: Text('Assistant — marquer payé'),
+                    child: Text(ctx.tr('users.roleAssistant')),
                   ),
                   DropdownMenuItem(
                     value: 'viewer',
-                    child: Text('Lecteur — consultation'),
+                    child: Text(ctx.tr('users.roleViewer')),
                   ),
                 ],
                 onChanged: (v) => setSheetState(() => role = v!),
@@ -129,11 +137,11 @@ class _UsersPageState extends State<UsersPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Annuler'),
+              child: Text(ctx.tr('common.cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Envoyer'),
+              child: Text(ctx.tr('common.send')),
             ),
           ],
         ),
@@ -143,30 +151,29 @@ class _UsersPageState extends State<UsersPage> {
     emailController.dispose();
     if (sent != true || !email.contains('@') || !mounted) return;
     try {
-      await getIt<WorkspaceRemoteDataSource>().invite(
-        email: email,
-        role: role,
-      );
+      await getIt<WorkspaceRemoteDataSource>().invite(email: email, role: role);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invitation envoyée à $email.')),
+        SnackBar(
+          content: Text(context.tr('users.inviteSent', {'email': email})),
+        ),
       );
     } on DioException {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Envoi de l\'invitation impossible.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr('users.inviteFail'))));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Utilisateurs & rôles')),
+      appBar: AppBar(title: Text(context.tr('profile.users'))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _invite,
         icon: const Icon(LucideIcons.userPlus, size: 20),
-        label: const Text('Inviter'),
+        label: Text(context.tr('users.invite')),
       ),
       body: FutureBuilder<List<User>>(
         future: _future,
@@ -178,12 +185,12 @@ class _UsersPageState extends State<UsersPage> {
                 children: [
                   const Icon(LucideIcons.cloudOff, size: 40),
                   const SizedBox(height: 12),
-                  const Text('Impossible de charger les utilisateurs.'),
+                  Text(context.tr('users.loadFail')),
                   const SizedBox(height: 16),
                   FilledButton.tonalIcon(
                     onPressed: () => setState(() => _future = _load()),
                     icon: const Icon(LucideIcons.refreshCw, size: 18),
-                    label: const Text('Réessayer'),
+                    label: Text(context.tr('common.retry')),
                   ),
                 ],
               ),
@@ -224,7 +231,7 @@ class _UsersPageState extends State<UsersPage> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Les droits sont vérifiés côté serveur à chaque action.',
+                          context.tr('users.info'),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
@@ -318,19 +325,22 @@ class _UserTile extends StatelessWidget {
             _RoleBadge(role: user.role)
           else
             PopupMenuButton<UserRole>(
-              tooltip: 'Modifier le rôle',
+              tooltip: context.tr('users.changeRole'),
               initialValue: user.role,
               onSelected: onRoleChanged,
-              itemBuilder: (_) => const [
+              itemBuilder: (ctx) => [
                 PopupMenuItem(
                   value: UserRole.manager,
-                  child: Text('Gestionnaire'),
+                  child: Text(ctx.tr('role.manager')),
                 ),
                 PopupMenuItem(
                   value: UserRole.assistant,
-                  child: Text('Assistant'),
+                  child: Text(ctx.tr('role.assistant')),
                 ),
-                PopupMenuItem(value: UserRole.viewer, child: Text('Lecteur')),
+                PopupMenuItem(
+                  value: UserRole.viewer,
+                  child: Text(ctx.tr('role.viewer')),
+                ),
               ],
               child: _RoleBadge(role: user.role, editable: true),
             ),
@@ -360,7 +370,7 @@ class _RoleBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            role.label,
+            context.tr(role.labelKey),
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.primary,
               fontWeight: FontWeight.w600,

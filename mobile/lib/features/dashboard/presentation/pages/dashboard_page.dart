@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -70,10 +71,10 @@ class _DashboardPageState extends State<DashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Bonjour, $name',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  context.tr('dash.greeting', {'name': name}),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 Text(
                   AppFormatters.dateLong(DateTime.now()),
@@ -96,7 +97,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   .where((s) => s.status != SubscriptionStatus.paid)
                   .length;
               return IconButton(
-                tooltip: 'Notifications',
+                tooltip: context.tr('nav.notifications'),
                 onPressed: () => context.push(AppRoutes.notifications),
                 icon: Badge.count(
                   count: count,
@@ -120,9 +121,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
           // Totaux regroupés PAR DEVISE — jamais de somme mêlant
           // FCFA et USD (ex. Starlink facturé en $ au Cameroun).
-          Map<String, double> sumByCurrency(
-            Iterable<Subscription> subs,
-          ) {
+          Map<String, double> sumByCurrency(Iterable<Subscription> subs) {
             final map = <String, double>{};
             for (final s in subs) {
               map[s.currency] = (map[s.currency] ?? 0) + s.amount;
@@ -146,7 +145,8 @@ class _DashboardPageState extends State<DashboardPage> {
               u.workspace?.defaultCurrency ?? 'XAF',
             _ => 'XAF',
           };
-          final spentMain = (spentByCurrency[mainCurrency] ?? 0) +
+          final spentMain =
+              (spentByCurrency[mainCurrency] ?? 0) +
               (dueByCurrency[mainCurrency] ?? 0);
           final overdueSubs = items
               .where((s) => s.status == SubscriptionStatus.overdue)
@@ -154,15 +154,16 @@ class _DashboardPageState extends State<DashboardPage> {
           // Échéances à venir + rendez-vous non passés (quel que
           // soit leur statut), triés par date/heure.
           final now = DateTime.now();
-          final upcoming = items
-              .where(
-                (s) => s.isEvent
-                    ? s.status != SubscriptionStatus.overdue &&
-                        !s.dueAt.isBefore(DateUtils.dateOnly(now))
-                    : s.status == SubscriptionStatus.dueSoon,
-              )
-              .toList()
-            ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
+          final upcoming =
+              items
+                  .where(
+                    (s) => s.isEvent
+                        ? s.status != SubscriptionStatus.overdue &&
+                              !s.dueAt.isBefore(DateUtils.dateOnly(now))
+                        : s.status == SubscriptionStatus.dueSoon,
+                  )
+                  .toList()
+                ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
 
           if (!loading) _maybeShowReminder(overdueSubs);
 
@@ -170,7 +171,10 @@ class _DashboardPageState extends State<DashboardPage> {
             onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
-                20, 8, 20, 32 + AppShell.barInset,
+                20,
+                8,
+                20,
+                32 + AppShell.barInset,
               ),
               children: [
                 // --- Carte total : navy dégradé du logo ---
@@ -188,15 +192,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 14),
 
                 // --- Rappel : tenir la liste à jour ---
-                if (!loading)
-                  const AnimatedFadeIn(child: _UpdateHintCard()),
+                if (!loading) const AnimatedFadeIn(child: _UpdateHintCard()),
                 if (!loading) const SizedBox(height: 14),
 
                 // --- Alerte retards ---
                 if (!loading && overdueSubs.isNotEmpty)
-                  AnimatedFadeIn(
-                    child: _OverdueBanner(subs: overdueSubs),
-                  ),
+                  AnimatedFadeIn(child: _OverdueBanner(subs: overdueSubs)),
                 if (!loading && overdueSubs.isNotEmpty)
                   const SizedBox(height: 14),
 
@@ -206,9 +207,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 else
                   AnimatedFadeIn(
                     delay: const Duration(milliseconds: 60),
-                    child: _BudgetCard(
-                      spent: spentMain,
-                    ),
+                    child: _BudgetCard(spent: spentMain),
                   ),
                 const SizedBox(height: 14),
 
@@ -222,30 +221,38 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 const SizedBox(height: 8),
                 Text(
-                  'Prochaines échéances',
+                  context.tr('dash.upcoming'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 12),
                 if (loading)
-                  const SizedBox(height: 320, child: SkeletonListView(itemCount: 4))
+                  const SizedBox(
+                    height: 320,
+                    child: SkeletonListView(itemCount: 4),
+                  )
                 else
-                  ...upcoming.take(4).toList().asMap().entries.map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: AnimatedFadeIn(
-                        delay: Duration(milliseconds: 60 * entry.key),
-                        child: SubscriptionTile(
-                          subscription: entry.value,
-                          onMarkPaid: () => _markPaid(context, entry.value),
-                          onTap: () => context.push(
-                            AppRoutes.subscriptionDetail(entry.value.id),
+                  ...upcoming
+                      .take(4)
+                      .toList()
+                      .asMap()
+                      .entries
+                      .map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: AnimatedFadeIn(
+                            delay: Duration(milliseconds: 60 * entry.key),
+                            child: SubscriptionTile(
+                              subscription: entry.value,
+                              onMarkPaid: () => _markPaid(context, entry.value),
+                              onTap: () => context.push(
+                                AppRoutes.subscriptionDetail(entry.value.id),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
                 // Retards : affichés sous les échéances pour action rapide.
                 if (!loading)
                   ...overdueSubs.map(
@@ -254,9 +261,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       child: SubscriptionTile(
                         subscription: s,
                         onMarkPaid: () => _markPaid(context, s),
-                        onTap: () => context.push(
-                          AppRoutes.subscriptionDetail(s.id),
-                        ),
+                        onTap: () =>
+                            context.push(AppRoutes.subscriptionDetail(s.id)),
                       ),
                     ),
                   ),
@@ -267,6 +273,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
+
   Future<void> _markPaid(BuildContext context, Subscription sub) async {
     final result = await context.read<SubscriptionsCubit>().markPaid(sub);
     if (!context.mounted) return;
@@ -278,8 +285,8 @@ class _DashboardPageState extends State<DashboardPage> {
       },
       style: ToastificationStyle.flat,
       title: Text(switch (result) {
-        Ok() => '${sub.name} marqué comme payé.',
-        Err(failure: final f) => f.message,
+        Ok() => context.tr('toast.paid', {'name': sub.name}),
+        Err(failure: final f) => f.localizedMessage,
       }),
       autoCloseDuration: const Duration(seconds: 3),
     );
@@ -316,7 +323,7 @@ class _UpdateHintCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Facture d\'eau, d\'électricité, salaire ou nouvel abonnement à suivre ? Pensez à mettre votre liste à jour.',
+              context.tr('dash.updateHint'),
               style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
             ),
           ),
@@ -357,7 +364,11 @@ class _OverdueBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${subs.length} échéance${subs.length > 1 ? 's' : ''} en retard${totalText.isEmpty ? '' : ' — $totalText'}',
+              context.tr('dash.overdue', {
+                'n': '${subs.length}',
+                's': subs.length > 1 ? 's' : '',
+                'total': totalText.isEmpty ? '' : ' — $totalText',
+              }),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -408,8 +419,7 @@ class _BudgetCardState extends State<_BudgetCard> {
 
   /// Le budget est saisi dans la devise principale du workspace.
   String get _mainCurrency => switch (context.read<AuthCubit>().state) {
-    Authenticated(user: final u) =>
-      u.workspace?.defaultCurrency ?? 'XAF',
+    Authenticated(user: final u) => u.workspace?.defaultCurrency ?? 'XAF',
     _ => 'XAF',
   };
 
@@ -424,20 +434,20 @@ class _BudgetCardState extends State<_BudgetCard> {
           LucideIcons.wallet,
           color: Theme.of(ctx).colorScheme.primary,
         ),
-        title: const Text('Budget mensuel'),
+        title: Text(ctx.tr('dash.budgetTitle')),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: 'Montant',
+            labelText: ctx.tr('common.amount'),
             suffixText: _mainCurrency,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
+            child: Text(ctx.tr('common.cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(
@@ -445,7 +455,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                 controller.text.replaceAll(' ', '').replaceAll(',', '.'),
               ),
             ),
-            child: const Text('Enregistrer'),
+            child: Text(ctx.tr('common.save')),
           ),
         ],
       ),
@@ -457,9 +467,9 @@ class _BudgetCardState extends State<_BudgetCard> {
         if (mounted) setState(() => _budget = value);
       } catch (_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Budget non enregistré. Réessayez.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('dash.budgetFail'))));
       }
     }
   }
@@ -468,9 +478,7 @@ class _BudgetCardState extends State<_BudgetCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final ratio = _budget > 0
-        ? (widget.spent / _budget).clamp(0.0, 1.0)
-        : 0.0;
+    final ratio = _budget > 0 ? (widget.spent / _budget).clamp(0.0, 1.0) : 0.0;
     final over = _budget > 0 && widget.spent > _budget;
 
     return Container(
@@ -491,7 +499,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                   Icon(LucideIcons.wallet, size: 18, color: scheme.primary),
                   const SizedBox(width: 8),
                   Text(
-                    'Budget du mois',
+                    context.tr('dash.budget'),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -499,15 +507,23 @@ class _BudgetCardState extends State<_BudgetCard> {
                 ],
               ),
               TextButton.icon(
-                onPressed: _loadingBudget || _budgetFailed ||
-                    switch (context.read<AuthCubit>().state) {
-                      Authenticated(user: final u) =>
-                        u.role != UserRole.owner && u.role != UserRole.manager,
-                      _ => true,
-                    }
-                    ? null : _editBudget,
+                onPressed:
+                    _loadingBudget ||
+                        _budgetFailed ||
+                        switch (context.read<AuthCubit>().state) {
+                          Authenticated(user: final u) =>
+                            u.role != UserRole.owner &&
+                                u.role != UserRole.manager,
+                          _ => true,
+                        }
+                    ? null
+                    : _editBudget,
                 icon: const Icon(LucideIcons.pencil, size: 14),
-                label: Text(_budget > 0 ? 'Modifier' : 'Définir'),
+                label: Text(
+                  context.tr(
+                    _budget > 0 ? 'dash.budgetEdit' : 'dash.budgetSet',
+                  ),
+                ),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                 ),
@@ -521,11 +537,11 @@ class _BudgetCardState extends State<_BudgetCard> {
             TextButton.icon(
               onPressed: _loadBudget,
               icon: const Icon(LucideIcons.refreshCw, size: 16),
-              label: const Text('Budget indisponible — réessayer'),
+              label: Text(context.tr('dash.budgetUnavailable')),
             )
           else if (_budget <= 0)
             Text(
-              'Définissez votre budget mensuel pour suivre la consommation de vos dépenses.',
+              context.tr('dash.budgetHint'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -545,14 +561,19 @@ class _BudgetCardState extends State<_BudgetCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${AppFormatters.money(widget.spent, _mainCurrency)} engagés',
+                  context.tr('dash.committed', {
+                    'amount': AppFormatters.money(widget.spent, _mainCurrency),
+                  }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: over ? context.status.overdue : null,
                   ),
                 ),
                 Text(
-                  '${(ratio * 100).round()} % de ${AppFormatters.money(_budget, _mainCurrency)}',
+                  context.tr('dash.budgetPct', {
+                    'pct': '${(ratio * 100).round()}',
+                    'amount': AppFormatters.money(_budget, _mainCurrency),
+                  }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -563,7 +584,12 @@ class _BudgetCardState extends State<_BudgetCard> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Dépassement de ${AppFormatters.money(widget.spent - _budget, _mainCurrency)}',
+                  context.tr('dash.over', {
+                    'amount': AppFormatters.money(
+                      widget.spent - _budget,
+                      _mainCurrency,
+                    ),
+                  }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: context.status.overdue,
                     fontWeight: FontWeight.w600,
@@ -610,53 +636,55 @@ class _CategorySpend extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Dépenses par catégorie',
+            context.tr('dash.byCategory'),
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 16),
-          ...entries.take(5).map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                children: [
-                  Row(
+          ...entries
+              .take(5)
+              .map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
                     children: [
-                      Icon(e.key.$1.icon, size: 15, color: e.key.$1.color),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          e.key.$1.label,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+                      Row(
+                        children: [
+                          Icon(e.key.$1.icon, size: 15, color: e.key.$1.color),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              e.key.$1.label,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
+                          Text(
+                            AppFormatters.money(e.value, e.key.$2),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        AppFormatters.money(e.value, e.key.$2),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(
+                          value: (e.value / max).clamp(0.0, 1.0),
+                          minHeight: 6,
+                          backgroundColor: scheme.outlineVariant.withValues(
+                            alpha: 0.35,
+                          ),
+                          color: e.key.$1.color,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(99),
-                    child: LinearProgressIndicator(
-                      value: (e.value / max).clamp(0.0, 1.0),
-                      minHeight: 6,
-                      backgroundColor: scheme.outlineVariant.withValues(
-                        alpha: 0.35,
-                      ),
-                      color: e.key.$1.color,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
         ],
       ),
     );
@@ -689,172 +717,175 @@ class _TotalCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppTheme.radius + 4),
       child: Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0B1F44), Color(0xFF14306B)],
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0B1F44), Color(0xFF14306B)],
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radius + 4),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.navy.withValues(alpha: 0.35),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(AppTheme.radius + 4),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.navy.withValues(alpha: 0.35),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Halos décoratifs — profondeur façon carte bancaire premium.
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 190,
-              height: 190,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppColors.emerald.withValues(alpha: 0.28),
-                    AppColors.emerald.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -90,
-            left: -60,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0.07),
-                    Colors.white.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
+        child: Stack(
+          children: [
+            // Halos décoratifs — profondeur façon carte bancaire premium.
+            Positioned(
+              top: -70,
+              right: -50,
+              child: Container(
+                width: 190,
+                height: 190,
                 decoration: BoxDecoration(
-                  color: AppColors.emerald.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  AppFormatters.monthYear(DateTime.now()).toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.emerald,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      AppColors.emerald.withValues(alpha: 0.28),
+                      AppColors.emerald.withValues(alpha: 0),
+                    ],
                   ),
                 ),
               ),
-              const Spacer(),
-              Icon(
-                LucideIcons.wallet,
-                color: Colors.white.withValues(alpha: 0.5),
-                size: 20,
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Dépensé ce mois',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    _ConvertedAmount(
-                      byCurrency: spentByCurrency,
-                      target: mainCurrency,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    if (spentByCurrency.length > 1)
-                      Text(
-                        _breakdown(spentByCurrency),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 44,
-                color: Colors.white.withValues(alpha: 0.15),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Reste à payer',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.emerald.withValues(alpha: 0.9),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    _ConvertedAmount(
-                      byCurrency: dueByCurrency,
-                      target: mainCurrency,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    if (dueByCurrency.length > 1)
-                      Text(
-                        _breakdown(dueByCurrency),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '$count abonnement${count > 1 ? 's' : ''} suivi${count > 1 ? 's' : ''}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.white.withValues(alpha: 0.55),
             ),
-          ),
-        ],
-      ),
-        ],
-      ),
+            Positioned(
+              bottom: -90,
+              left: -60,
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.07),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.emerald.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        AppFormatters.monthYear(DateTime.now()).toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.emerald,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      LucideIcons.wallet,
+                      color: Colors.white.withValues(alpha: 0.5),
+                      size: 20,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr('dash.spent'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          _ConvertedAmount(
+                            byCurrency: spentByCurrency,
+                            target: mainCurrency,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          if (spentByCurrency.length > 1)
+                            Text(
+                              _breakdown(spentByCurrency),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 44,
+                      color: Colors.white.withValues(alpha: 0.15),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr('dash.toPay'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.emerald.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          _ConvertedAmount(
+                            byCurrency: dueByCurrency,
+                            target: mainCurrency,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          if (dueByCurrency.length > 1)
+                            Text(
+                              _breakdown(dueByCurrency),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  context.tr('dash.count', {
+                    'n': '$count',
+                    's': count > 1 ? 's' : '',
+                  }),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -878,7 +909,7 @@ class _ErrorView extends StatelessWidget {
           FilledButton.tonalIcon(
             onPressed: () => context.read<SubscriptionsCubit>().refresh(),
             icon: const Icon(LucideIcons.refreshCw, size: 18),
-            label: const Text('Réessayer'),
+            label: Text(context.tr('common.retry')),
           ),
         ],
       ),
@@ -922,14 +953,18 @@ class _ReminderDialog extends StatelessWidget {
             child: Icon(LucideIcons.bellRing, color: color, size: 26),
           ),
           const SizedBox(height: 14),
-          const Text('Rappel de paiement', textAlign: TextAlign.center),
+          Text(context.tr('reminder.dialogTitle'), textAlign: TextAlign.center),
         ],
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '${overdue.length} échéance${overdue.length > 1 ? 's' : ''} en retard${totalText.isEmpty ? '' : ' — $totalText au total'}.',
+            context.tr('reminder.overdueBody', {
+              'n': '${overdue.length}',
+              's': overdue.length > 1 ? 's' : '',
+              'total': totalText.isEmpty ? '' : ' — $totalText',
+            }),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -968,8 +1003,8 @@ class _ReminderDialog extends StatelessWidget {
                   Text(
                     s.isEvent
                         ? (s.dueTime != null
-                            ? AppFormatters.dateTimeLong(s.dueAt)
-                            : AppFormatters.dateLong(s.nextDueDate))
+                              ? AppFormatters.dateTimeLong(s.dueAt)
+                              : AppFormatters.dateLong(s.nextDueDate))
                         : AppFormatters.money(s.amount, s.currency),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w700,
@@ -980,7 +1015,10 @@ class _ReminderDialog extends StatelessWidget {
             ),
           if (overdue.length > 3)
             Text(
-              'et ${overdue.length - 3} autre${overdue.length - 3 > 1 ? 's' : ''}…',
+              context.tr('reminder.more', {
+                'n': '${overdue.length - 3}',
+                's': overdue.length - 3 > 1 ? 's' : '',
+              }),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -991,14 +1029,14 @@ class _ReminderDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Plus tard'),
+          child: Text(context.tr('common.later')),
         ),
         FilledButton(
           onPressed: () {
             Navigator.of(context).pop();
             context.push(AppRoutes.notifications);
           },
-          child: const Text('Voir les échéances'),
+          child: Text(context.tr('reminder.viewDue')),
         ),
       ],
     );
@@ -1036,9 +1074,7 @@ class _ConvertedAmount extends StatelessWidget {
     }
     return FutureBuilder<double>(
       future: getIt<CurrencyConverter>().convertAll(
-        byCurrency.entries.map(
-          (e) => (amount: e.value, currency: e.key),
-        ),
+        byCurrency.entries.map((e) => (amount: e.value, currency: e.key)),
         target,
       ),
       builder: (context, snapshot) {
@@ -1048,10 +1084,7 @@ class _ConvertedAmount extends StatelessWidget {
           final e = byCurrency.entries.first;
           return Text(AppFormatters.money(e.value, e.key), style: style);
         }
-        return Text(
-          AppFormatters.money(snapshot.data!, target),
-          style: style,
-        );
+        return Text(AppFormatters.money(snapshot.data!, target), style: style);
       },
     );
   }

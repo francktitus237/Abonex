@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
@@ -42,7 +43,7 @@ class _ReportsPageState extends State<ReportsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Rapports')),
+      appBar: AppBar(title: Text(context.tr('nav.reports'))),
       body: BlocBuilder<SubscriptionsCubit, SubscriptionsState>(
         builder: (context, state) {
           if (state is SubscriptionsLoading || state is SubscriptionsInitial) {
@@ -60,17 +61,17 @@ class _ReportsPageState extends State<ReportsPage> {
           if (state is SubscriptionsError) {
             return EmptyState(
               icon: LucideIcons.cloudOff,
-              title: 'Chargement impossible',
+              title: context.tr('common.loadError'),
               subtitle: state.message,
             );
           }
 
           final all = (state as SubscriptionsLoaded).items;
           if (all.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: LucideIcons.chartColumn,
-              title: 'Pas de données',
-              subtitle: 'Ajoutez des abonnements pour voir les rapports.',
+              title: context.tr('reports.noData'),
+              subtitle: context.tr('reports.noDataSub'),
             );
           }
 
@@ -87,51 +88,51 @@ class _ReportsPageState extends State<ReportsPage> {
               ? _currency!
               : (currencies.isNotEmpty ? currencies.first : null);
           // Toutes les analyses ne portent que sur cette devise.
-          final items =
-              billed.where((s) => s.currency == active).toList();
+          final items = billed.where((s) => s.currency == active).toList();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(
-              20, 8, 20, 32 + AppShell.barInset,
+              20,
+              8,
+              20,
+              32 + AppShell.barInset,
             ),
             children: [
               if (events.isNotEmpty)
                 AnimatedFadeIn(child: _UpcomingEvents(events: events)),
               if (events.isNotEmpty) const SizedBox(height: 20),
               if (active == null)
-                const EmptyState(
+                EmptyState(
                   icon: LucideIcons.chartColumn,
-                  title: 'Pas de dépenses',
-                  subtitle:
-                      'Ajoutez des abonnements facturés pour voir les rapports.',
+                  title: context.tr('reports.noExpenses'),
+                  subtitle: context.tr('reports.noExpensesSub'),
                 )
               else ...[
-              // Sélecteur de devise — visible seulement si >1.
-              if (currencies.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final c in currencies)
-                        ChoiceChip(
-                          label: Text(c),
-                          selected: c == active,
-                          showCheckmark: false,
-                          onSelected: (_) =>
-                              setState(() => _currency = c),
-                        ),
-                    ],
+                // Sélecteur de devise — visible seulement si >1.
+                if (currencies.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final c in currencies)
+                          ChoiceChip(
+                            label: Text(c),
+                            selected: c == active,
+                            showCheckmark: false,
+                            onSelected: (_) => setState(() => _currency = c),
+                          ),
+                      ],
+                    ),
                   ),
+                AnimatedFadeIn(
+                  child: _CategoryDonut(items: items, currency: active),
                 ),
-              AnimatedFadeIn(
-                child: _CategoryDonut(items: items, currency: active),
-              ),
-              const SizedBox(height: 20),
-              AnimatedFadeIn(
-                delay: const Duration(milliseconds: 100),
-                child: _MonthlyForecast(items: items, currency: active),
-              ),
+                const SizedBox(height: 20),
+                AnimatedFadeIn(
+                  delay: const Duration(milliseconds: 100),
+                  child: _MonthlyForecast(items: items, currency: active),
+                ),
               ],
             ],
           );
@@ -152,7 +153,7 @@ class _UpcomingEvents extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return _ChartCard(
-      title: 'Rendez-vous',
+      title: context.tr('reports.events'),
       child: Column(
         children: [
           for (final e in events)
@@ -268,7 +269,7 @@ class _CategoryDonut extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return _ChartCard(
-      title: 'Répartition par catégorie',
+      title: context.tr('reports.byCategory'),
       child: Column(
         children: [
           SizedBox(
@@ -301,7 +302,7 @@ class _CategoryDonut extends StatelessWidget {
             ),
           ),
           Text(
-            'par mois (équivalent)',
+            context.tr('reports.perMonth'),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -352,8 +353,8 @@ class _CategoryDonut extends StatelessWidget {
 bool _dueInMonth(Subscription s, DateTime m) {
   final d = s.nextDueDate;
   final end = s.endDate;
-  if (end != null && DateTime(m.year, m.month)
-      .isAfter(DateTime(end.year, end.month))) {
+  if (end != null &&
+      DateTime(m.year, m.month).isAfter(DateTime(end.year, end.month))) {
     return false;
   }
   // Jamais avant la prochaine échéance connue.
@@ -393,7 +394,7 @@ class _MonthlyForecast extends StatelessWidget {
     final maxY = totals.fold(0.0, (a, b) => a > b ? a : b);
 
     return _ChartCard(
-      title: 'Échéances des 6 prochains mois',
+      title: context.tr('reports.forecast'),
       child: SizedBox(
         height: 200,
         child: BarChart(

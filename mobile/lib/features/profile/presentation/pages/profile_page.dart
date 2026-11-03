@@ -261,9 +261,9 @@ class _IdentityCard extends StatelessWidget {
               children: [
                 Text(
                   context.tr('profile.edit'),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 20),
                 TextField(
@@ -308,7 +308,8 @@ class _IdentityCard extends StatelessWidget {
                               result is Ok
                                   ? context.tr('profile.updated')
                                   : switch (result) {
-                                      Err(failure: final f) => f.message,
+                                      Err(failure: final f) =>
+                                        f.localizedMessage,
                                       _ => context.tr('profile.unexpected'),
                                     },
                             ),
@@ -322,7 +323,9 @@ class _IdentityCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(LucideIcons.check, size: 19),
-                  label: Text(context.tr(saving ? 'profile.saving' : 'profile.save')),
+                  label: Text(
+                    context.tr(saving ? 'profile.saving' : 'profile.save'),
+                  ),
                 ),
               ],
             ),
@@ -564,8 +567,7 @@ class _SoundAlertsTileState extends State<_SoundAlertsTile> {
 /// L'utilisateur personnalise sa cadence de rappel.
 class _ReminderScheduleTile extends StatefulWidget {
   @override
-  State<_ReminderScheduleTile> createState() =>
-      _ReminderScheduleTileState();
+  State<_ReminderScheduleTile> createState() => _ReminderScheduleTileState();
 }
 
 class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
@@ -630,8 +632,7 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
                         max: 22,
                         divisions: 16,
                         label: '${hour}h',
-                        onChanged: (v) =>
-                            setDialog(() => hour = v.round()),
+                        onChanged: (v) => setDialog(() => hour = v.round()),
                       ),
                     ),
                     Text(
@@ -691,6 +692,7 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
     );
   }
 }
+
 /// Mise à jour de l'application : compare la version installée
 /// (package_info) avec la dernière publiée par le serveur
 /// (/meta/app-version/) et propose le téléchargement.
@@ -713,10 +715,8 @@ class _UpdateTileState extends State<_UpdateTile> {
 
   /// "1.10.0" > "1.9.9" — comparaison sémantique par segments.
   static bool _isNewer(String latest, String current) {
-    List<int> parts(String v) => v
-        .split(RegExp(r'[.\-+]'))
-        .map((s) => int.tryParse(s) ?? 0)
-        .toList();
+    List<int> parts(String v) =>
+        v.split(RegExp(r'[.\-+]')).map((s) => int.tryParse(s) ?? 0).toList();
     final a = parts(latest), b = parts(current);
     for (var i = 0; i < a.length || i < b.length; i++) {
       final x = i < a.length ? a[i] : 0;
@@ -730,8 +730,7 @@ class _UpdateTileState extends State<_UpdateTile> {
     if (_checking) return;
     setState(() => _checking = true);
     try {
-      final remote =
-          await getIt<WorkspaceRemoteDataSource>().appVersion();
+      final remote = await getIt<WorkspaceRemoteDataSource>().appVersion();
       final latest = remote['latest_version'] as String? ?? _current;
       final url = remote['update_url'] as String? ?? '';
       if (!mounted) return;
@@ -742,7 +741,7 @@ class _UpdateTileState extends State<_UpdateTile> {
           context: context,
           type: ToastificationType.success,
           style: ToastificationStyle.flat,
-          title: const Text('Abonex est déjà à jour.'),
+          title: Text(context.tr('update.upToDate')),
           autoCloseDuration: const Duration(seconds: 3),
         );
       }
@@ -752,7 +751,7 @@ class _UpdateTileState extends State<_UpdateTile> {
         context: context,
         type: ToastificationType.error,
         style: ToastificationStyle.flat,
-        title: const Text('Vérification impossible — réessayez.'),
+        title: Text(context.tr('update.checkFail')),
         autoCloseDuration: const Duration(seconds: 3),
       );
     } finally {
@@ -768,30 +767,24 @@ class _UpdateTileState extends State<_UpdateTile> {
           LucideIcons.arrowDownToLine,
           color: Theme.of(ctx).colorScheme.primary,
         ),
-        title: const Text('Mise à jour disponible'),
+        title: Text(ctx.tr('update.available')),
         content: Text(
-          'La version $latest est disponible '
-          '(installée : $_current).\n\n'
-          'Voulez-vous télécharger la mise à jour '
-          'maintenant, ou rester sur la version actuelle ?',
+          ctx.tr('update.body', {'latest': latest, 'current': _current}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Plus tard'),
+            child: Text(ctx.tr('common.later')),
           ),
           FilledButton.icon(
             onPressed: () {
               Navigator.of(ctx).pop();
               if (url.isNotEmpty) {
-                launchUrl(
-                  Uri.parse(url),
-                  mode: LaunchMode.externalApplication,
-                );
+                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
               }
             },
             icon: const Icon(LucideIcons.download, size: 18),
-            label: const Text('Mettre à jour'),
+            label: Text(ctx.tr('update.action')),
           ),
         ],
       ),
@@ -802,8 +795,8 @@ class _UpdateTileState extends State<_UpdateTile> {
   Widget build(BuildContext context) {
     return ListTile(
       leading: _TileIcon(icon: LucideIcons.arrowDownToLine),
-      title: const Text('Mise à jour de l\'application'),
-      subtitle: Text('Version installée : $_current'),
+      title: Text(context.tr('update.title')),
+      subtitle: Text(context.tr('update.installed', {'v': _current})),
       trailing: _checking
           ? const SizedBox(
               width: 18,

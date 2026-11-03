@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/subscriptions/domain/entities/subscription.dart';
 import '../di/injection.dart';
+import '../l10n/app_strings.dart';
 import '../storage/settings_storage.dart';
 import '../utils/formatters.dart';
 
@@ -35,24 +37,26 @@ class NotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
+  /// Texte traduit sans BuildContext — les notifications sont
+  /// construites hors de l'arbre de widgets.
+  static String _t(String key, [Map<String, String>? args]) =>
+      AppStrings.t(AppFormatters.lang, key, args);
+
   static const _channelId = 'abonex_due_reminders_v2';
-  static const _channelName = 'Rappels importants';
-  static const _channelDesc =
-      'Alertes sonores avant les paiements et rappels de suivi.';
+  static String get _channelName => _t('ns.channelReminders');
+  static String get _channelDesc => _t('ns.channelRemindersDesc');
 
   // Canal "alarme" : notification plein écran par-dessus
   // l'écran verrouillé, sonnerie forte — impossible à manquer.
   static const _urgentChannelId = 'abonex_urgent';
-  static const _urgentChannelName = 'Alarmes d\'échéance';
-  static const _urgentChannelDesc =
-      'Rappels plein écran avec sonnerie pour les paiements du jour.';
+  static String get _urgentChannelName => _t('ns.channelUrgent');
+  static String get _urgentChannelDesc => _t('ns.channelUrgentDesc');
 
   // Canal dédié aux rendez-vous : sonnerie d'alarme en boucle
   // jusqu'à ce que l'utilisateur arrête ou repousse.
   static const _eventChannelId = 'abonex_event_alarm';
-  static const _eventChannelName = 'Alarmes de rendez-vous';
-  static const _eventChannelDesc =
-      'Sonne à l\'heure exacte du rendez-vous jusqu\'à arrêt ou report.';
+  static String get _eventChannelName => _t('ns.channelEvent');
+  static String get _eventChannelDesc => _t('ns.channelEventDesc');
 
   static const actionStop = 'stop';
   static const actionSnooze = 'snooze';
@@ -67,7 +71,7 @@ class NotificationService {
   // FLAG_INSISTENT : le son se répète jusqu'à fermeture.
   static final _insistent = Int32List.fromList(const <int>[4]);
 
-  static const _notificationDetails = NotificationDetails(
+  static NotificationDetails get _notificationDetails => NotificationDetails(
     android: AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -88,7 +92,7 @@ class NotificationService {
     ),
   );
 
-  static const _urgentDetails = NotificationDetails(
+  static NotificationDetails get _urgentDetails => NotificationDetails(
     android: AndroidNotificationDetails(
       _urgentChannelId,
       _urgentChannelName,
@@ -111,7 +115,7 @@ class NotificationService {
     ),
   );
 
-  static final _eventAlarmDetails = NotificationDetails(
+  static NotificationDetails get _eventAlarmDetails => NotificationDetails(
     android: AndroidNotificationDetails(
       _eventChannelId,
       _eventChannelName,
@@ -127,16 +131,16 @@ class NotificationService {
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
       additionalFlags: _insistent,
-      actions: const [
+      actions: [
         AndroidNotificationAction(
           actionSnooze,
-          'Repousser 10 min',
+          _t('ns.snooze'),
           showsUserInterface: false,
           cancelNotification: true,
         ),
         AndroidNotificationAction(
           actionStop,
-          'Arrêter',
+          _t('ns.stop'),
           showsUserInterface: false,
           cancelNotification: true,
         ),
@@ -169,13 +173,10 @@ class NotificationService {
             DarwinNotificationCategory(
               _eventChannelId,
               actions: [
-                DarwinNotificationAction.plain(
-                  actionSnooze,
-                  'Repousser 10 min',
-                ),
+                DarwinNotificationAction.plain(actionSnooze, _t('ns.snooze')),
                 DarwinNotificationAction.plain(
                   actionStop,
-                  'Arrêter',
+                  _t('ns.stop'),
                   options: {DarwinNotificationActionOption.destructive},
                 ),
               ],
@@ -192,7 +193,7 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
     await android?.createNotificationChannel(
-      const AndroidNotificationChannel(
+      AndroidNotificationChannel(
         _channelId,
         _channelName,
         description: _channelDesc,
@@ -202,7 +203,7 @@ class NotificationService {
       ),
     );
     await android?.createNotificationChannel(
-      const AndroidNotificationChannel(
+      AndroidNotificationChannel(
         _urgentChannelId,
         _urgentChannelName,
         description: _urgentChannelDesc,
@@ -212,7 +213,7 @@ class NotificationService {
       ),
     );
     await android?.createNotificationChannel(
-      const AndroidNotificationChannel(
+      AndroidNotificationChannel(
         _eventChannelId,
         _eventChannelName,
         description: _eventChannelDesc,
@@ -258,6 +259,8 @@ class NotificationService {
     // Réglages personnalisés : jours d'anticipation + heure +
     // mode alarme — tout vient du profil utilisateur.
     final settings = getIt<SettingsStorage>();
+    // Les textes des notifications suivent la langue persistée.
+    AppFormatters.lang = settings.locale.languageCode;
     final urgent = settings.soundAlerts;
     final reminderDays = settings.reminderDays;
     final reminderHour = settings.reminderHour;
@@ -275,7 +278,8 @@ class NotificationService {
           sub.nextDueDate.day - daysBefore,
           reminderHour,
         );
-        final isToday = daysBefore == 0 &&
+        final isToday =
+            daysBefore == 0 &&
             sub.nextDueDate.year == now.year &&
             sub.nextDueDate.month == now.month &&
             sub.nextDueDate.day == now.day;
@@ -292,19 +296,24 @@ class NotificationService {
         await _plugin.zonedSchedule(
           id: id++,
           title: daysBefore == 0
-              ? (sub.isEvent
-                  ? 'Rendez-vous aujourd\'hui : ${sub.name}'
-                  : 'Échéance aujourd\'hui : ${sub.name}')
+              ? _t(sub.isEvent ? 'ns.eventToday' : 'ns.dueToday', {
+                  'name': sub.name,
+                })
               : daysBefore == 1
-              ? (sub.isEvent
-                  ? 'Rendez-vous demain : ${sub.name}'
-                  : 'Échéance demain : ${sub.name}')
-              : (sub.isEvent
-                  ? 'Rendez-vous dans $daysBefore j : ${sub.name}'
-                  : 'Échéance dans $daysBefore j : ${sub.name}'),
+              ? _t(sub.isEvent ? 'ns.eventTomorrow' : 'ns.dueTomorrow', {
+                  'name': sub.name,
+                })
+              : _t(sub.isEvent ? 'ns.eventIn' : 'ns.dueIn', {
+                  'n': '$daysBefore',
+                  'name': sub.name,
+                }),
           body: sub.isEvent
               ? _eventBody(sub)
-              : '${sub.provider} — ${AppFormatters.money(sub.amount, sub.currency)} à payer.${_descSuffix(sub)}',
+              : _t('ns.payBody', {
+                      'provider': sub.provider,
+                      'amount': AppFormatters.money(sub.amount, sub.currency),
+                    }) +
+                    _descSuffix(sub),
           scheduledDate: when,
           // Jour J + rappels sonores activés → alarme plein écran.
           notificationDetails: urgent && daysBefore == 0
@@ -327,7 +336,7 @@ class NotificationService {
       await _scheduleEventAlarm(
         _plugin,
         id: _eventIdBase + numericId % _idRange,
-        title: 'Rendez-vous : ${sub.name}',
+        title: _t('ns.eventTitle', {'name': sub.name}),
         body: _eventBody(sub),
         when: when,
         payload: _eventPayload(sub.id, sub.name, _eventBody(sub)),
@@ -339,9 +348,8 @@ class NotificationService {
     var next = _nextWeekday(DateTime.monday, reminderHour);
     await _plugin.zonedSchedule(
       id: 999,
-      title: 'Abonex — liste à jour ?',
-      body:
-          'Pensez à ajouter vos nouvelles factures et abonnements pour un suivi complet.',
+      title: _t('ns.weeklyTitle'),
+      body: _t('ns.weeklyBody'),
       scheduledDate: next,
       notificationDetails: _notificationDetails,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -352,9 +360,9 @@ class NotificationService {
 
   static String _eventBody(Subscription sub) =>
       (sub.dueTime != null
-              ? 'C\'est l\'heure — ${AppFormatters.dateTimeLong(sub.dueAt)}'
-              : AppFormatters.dateLong(sub.nextDueDate)) +
-          _descSuffix(sub);
+          ? _t('ns.eventTime', {'date': AppFormatters.dateTimeLong(sub.dueAt)})
+          : AppFormatters.dateLong(sub.nextDueDate)) +
+      _descSuffix(sub);
 
   /// Note libre (ville, lieu, référence…) rappelée dans l'alerte.
   static String _descSuffix(Subscription sub) {
@@ -375,10 +383,17 @@ class NotificationService {
     if (parts.length < 3) return;
     final [id, name, body] = parts;
     final numericId = int.tryParse(id) ?? id.hashCode.abs();
+    // Isolate de fond : la langue est relue depuis les préférences
+    // plutôt que le singleton de l'UI.
+    String lang = 'fr';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lang = prefs.getString('locale') ?? 'fr';
+    } catch (_) {}
     await _scheduleEventAlarm(
       FlutterLocalNotificationsPlugin(),
       id: _snoozeIdBase + numericId % _idRange,
-      title: 'Rendez-vous : $name',
+      title: AppStrings.t(lang, 'ns.eventTitle', {'name': name}),
       body: body,
       when: tz.TZDateTime.now(tz.local).add(_snoozeDuration),
       payload: payload,
@@ -417,13 +432,7 @@ class NotificationService {
   tz.TZDateTime _nextWeekday(int weekday, int hour) {
     final now = tz.TZDateTime.now(tz.local);
     var delta = (weekday - now.weekday) % DateTime.daysPerWeek;
-    var d = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day + delta,
-      hour,
-    );
+    var d = tz.TZDateTime(tz.local, now.year, now.month, now.day + delta, hour);
     if (!d.isAfter(now)) {
       // Créneau du jour déjà passé → semaine prochaine.
       d = d.add(const Duration(days: DateTime.daysPerWeek));

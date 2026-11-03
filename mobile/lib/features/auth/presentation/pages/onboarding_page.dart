@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/storage/settings_storage.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_logo.dart';
@@ -21,30 +23,24 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _controller = PageController();
   int _index = 0;
 
-  static const _pages = [
+  List<_OnboardingData> _pages(BuildContext context) => [
     _OnboardingData(
       art: _Art.expenses,
-      badge: 'Suivi des dépenses',
-      title: 'Maîtrisez chaque franc\ndépensé',
-      description:
-          'Abonex centralise vos abonnements, factures, loyers et salaires '
-          '— entreprise ou foyer, vous savez toujours où va votre argent.',
+      badge: context.tr('onb.1.badge'),
+      title: context.tr('onb.1.title'),
+      description: context.tr('onb.1.desc'),
     ),
     _OnboardingData(
       art: _Art.reminders,
-      badge: 'Rappels intelligents',
-      title: 'Zéro échéance\noubliée',
-      description:
-          'Rappels automatiques avant chaque paiement, alerte plein écran '
-          'le jour J : ne payez plus jamais de pénalité de retard.',
+      badge: context.tr('onb.2.badge'),
+      title: context.tr('onb.2.title'),
+      description: context.tr('onb.2.desc'),
     ),
     _OnboardingData(
       art: _Art.team,
-      badge: 'Équipe & sécurité',
-      title: 'Collaborez en toute\nsérénité',
-      description:
-          'Invitez vos collaborateurs avec des rôles précis : chacun voit '
-          'et fait exactement ce que vous avez décidé.',
+      badge: context.tr('onb.3.badge'),
+      title: context.tr('onb.3.title'),
+      description: context.tr('onb.3.desc'),
     ),
   ];
 
@@ -64,6 +60,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
+    final pages = _pages(context);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -74,17 +72,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const AppLogo(size: 42),
-                  TextButton(onPressed: _finish, child: const Text('Passer')),
+                  TextButton(
+                    onPressed: _finish,
+                    child: Text(context.tr('onb.skip')),
+                  ),
                 ],
               ),
             ),
             Expanded(
               child: PageView.builder(
                 controller: _controller,
-                itemCount: _pages.length,
+                itemCount: pages.length,
                 onPageChanged: (value) => setState(() => _index = value),
                 itemBuilder: (context, index) {
-                  final page = _pages[index];
+                  final page = pages[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
@@ -133,7 +134,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      _pages.length,
+                      pages.length,
                       (index) => AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         width: index == _index ? 28 : 8,
@@ -151,7 +152,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   const SizedBox(height: 28),
                   FilledButton.icon(
                     onPressed: () {
-                      if (_index == _pages.length - 1) {
+                      if (_index == pages.length - 1) {
                         _finish();
                       } else {
                         _controller.nextPage(
@@ -161,12 +162,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       }
                     },
                     icon: Icon(
-                      _index == _pages.length - 1
+                      _index == pages.length - 1
                           ? LucideIcons.check
                           : LucideIcons.arrowRight,
                     ),
                     label: Text(
-                      _index == _pages.length - 1 ? 'Commencer' : 'Continuer',
+                      _index == pages.length - 1
+                          ? context.tr('onb.start')
+                          : context.tr('onb.next'),
                     ),
                   ),
                 ],
@@ -270,11 +273,7 @@ class _Illustration extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          bottom: -12,
-          right: 20,
-          child: _FloatingBadge(badge: badge),
-        ),
+        Positioned(bottom: -12, right: 20, child: _FloatingBadge(badge: badge)),
       ],
     );
   }
@@ -301,11 +300,11 @@ class _ExpensesArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const legend = [
-      ('Abonnements', AppColors.emerald),
-      ('Loyers', _blue),
-      ('Salaires', _orange),
-      ('Factures', _red),
+    final legend = [
+      (context.tr('nav.subscriptions'), AppColors.emerald),
+      (context.tr('onb.rent'), _blue),
+      (context.tr('onb.salary'), _orange),
+      (context.tr('onb.bills'), _red),
     ];
     return Stack(
       children: [
@@ -320,7 +319,10 @@ class _ExpensesArt extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Dépenses du mois', style: _t(14, FontWeight.w600, _grey)),
+                Text(
+                  context.tr('onb.expenses'),
+                  style: _t(14, FontWeight.w600, _grey),
+                ),
                 const SizedBox(height: 6),
                 Text('1 250 000', style: _t(38, FontWeight.w800, _navy)),
                 const SizedBox(height: 2),
@@ -422,7 +424,10 @@ class _ExpensesArt extends StatelessWidget {
               children: [
                 const Icon(Icons.check_rounded, size: 18, color: _navy),
                 const SizedBox(width: 6),
-                Text('Payé', style: _t(14, FontWeight.w800, _navy)),
+                Text(
+                  context.tr('status.paid'),
+                  style: _t(14, FontWeight.w800, _navy),
+                ),
               ],
             ),
           ),
@@ -475,7 +480,7 @@ class _RemindersArt extends StatelessWidget {
       [20, 21, 22, 23, 24, 25, 26],
       [27, 28, 29, 30, 31, 1, 2],
     ];
-    const letters = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    final letters = context.tr('cal.weekdays').split(' ');
 
     Widget cell(Widget child) => Expanded(child: Center(child: child));
 
@@ -502,7 +507,7 @@ class _RemindersArt extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'OCTOBRE',
+                    AppFormatters.monthLong(DateTime.now()).toUpperCase(),
                     style: _t(16, FontWeight.w800, Colors.white),
                   ),
                 ),
@@ -515,7 +520,9 @@ class _RemindersArt extends StatelessWidget {
                         Row(
                           children: [
                             for (final l in letters)
-                              cell(Text(l, style: _t(11, FontWeight.w700, _grey))),
+                              cell(
+                                Text(l, style: _t(11, FontWeight.w700, _grey)),
+                              ),
                           ],
                         ),
                         for (final week in weeks)
@@ -599,7 +606,10 @@ class _RemindersArt extends StatelessWidget {
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
-                    child: Text('1', style: _t(12, FontWeight.w800, Colors.white)),
+                    child: Text(
+                      '1',
+                      style: _t(12, FontWeight.w800, Colors.white),
+                    ),
                   ),
                 ),
               ],
@@ -635,7 +645,10 @@ class _RemindersArt extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Loyer demain', style: _t(17, FontWeight.w800, _navy)),
+                    Text(
+                      context.tr('onb.rentTomorrow'),
+                      style: _t(17, FontWeight.w800, _navy),
+                    ),
                     const SizedBox(height: 4),
                     Text('150 000 FCFA', style: _t(13, FontWeight.w600, _grey)),
                   ],
@@ -670,7 +683,7 @@ class _RemindersArt extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Échéance du jour',
+                  context.tr('onb.dueToday'),
                   style: _t(14, FontWeight.w800, _navy),
                 ),
               ],
@@ -844,11 +857,7 @@ class _FloatingBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            LucideIcons.check,
-            size: 14,
-            color: Color(0xFF0B1F44),
-          ),
+          const Icon(LucideIcons.check, size: 14, color: Color(0xFF0B1F44)),
           const SizedBox(width: 6),
           Text(
             badge,

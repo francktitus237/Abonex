@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/utils/formatters.dart';
+
 /// Statut métier d'une échéance — règle produit du CDC :
 /// vert = payé, orange = bientôt dû, rouge = en retard.
 enum SubscriptionStatus { paid, dueSoon, overdue }
@@ -20,18 +23,11 @@ enum SubscriptionCategory {
   event,
   other;
 
-  String get label => switch (this) {
-    software => 'Logiciels',
-    rent => 'Loyers',
-    insurance => 'Assurances',
-    telecom => 'Télécom',
-    energy => 'Énergie',
-    water => 'Eau',
-    payroll => 'Salaires',
-    transport => 'Transport',
-    event => 'Événement',
-    other => 'Autre (alimentation, santé…)',
-  };
+  /// Clé de traduction — `context.tr(category.labelKey)`.
+  String get labelKey => 'category.$name';
+
+  /// Libellé dans la langue courante (via AppFormatters.lang).
+  String get label => AppStrings.t(AppFormatters.lang, labelKey);
 
   IconData get icon => switch (this) {
     software => LucideIcons.cloud,
@@ -128,10 +124,17 @@ class Subscription {
     dueTime?.minute ?? 0,
   );
 
-  String get cycleLabel => switch (cycle) {
-    BillingCycle.monthly => 'Mensuel',
-    BillingCycle.quarterly => 'Trimestriel',
-    BillingCycle.yearly => 'Annuel',
-    BillingCycle.once => 'Une seule fois',
+  String get cycleLabel =>
+      AppStrings.t(AppFormatters.lang, 'cycle.${cycle.name}');
+
+  /// "par mois" / "per month" — sous-titre du montant au détail.
+  String get cyclePeriod =>
+      AppStrings.t(AppFormatters.lang, 'cycle.per$_cycleKey');
+
+  String get _cycleKey => switch (cycle) {
+    BillingCycle.monthly => 'Monthly',
+    BillingCycle.quarterly => 'Quarterly',
+    BillingCycle.yearly => 'Yearly',
+    BillingCycle.once => 'Once',
   };
 }

@@ -34,7 +34,7 @@ class LoginCubit extends Cubit<LoginState> {
       case Err(failure: final failure):
         emit(
           LoginState.failure(
-            message: failure.message,
+            message: failure.localizedMessage,
             fieldErrors: failure is ValidationFailure
                 ? failure.fieldErrors
                 : const {},

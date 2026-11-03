@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
 
+import '../l10n/app_strings.dart';
+import '../utils/formatters.dart';
+
 /// Exception technique de la couche réseau.
 /// Les repositories la convertissent en `Failure` (couche domaine) —
 /// les widgets ne voient jamais de DioException.
@@ -26,10 +29,8 @@ class ApiException implements Exception {
 
     // Pas de réponse = problème réseau pur (timeout, DNS, hors-ligne).
     if (response == null) {
-      return const ApiException(
-        message:
-            'Impossible de joindre le serveur. Vérifiez votre connexion '
-            'et réessayez.',
+      return ApiException(
+        message: AppStrings.t(AppFormatters.lang, 'error.networkLong'),
       );
     }
 
@@ -66,16 +67,16 @@ class ApiException implements Exception {
     return ApiException(
       statusCode: code,
       message: switch (code) {
-        400 => 'Requête invalide. Vérifiez les informations saisies.',
-        401 => 'Session expirée ou identifiants incorrects.',
-        403 => 'Action non autorisée pour votre rôle.',
-        404 => 'Service introuvable. L\'adresse du serveur a peut-être changé.',
-        409 => 'Ces données existent déjà.',
-        422 => 'Données invalides. Vérifiez le formulaire.',
-        429 => 'Trop de tentatives. Patientez quelques instants.',
-        500 || 502 || 503 =>
-          'Le serveur rencontre un problème. Réessayez dans un moment.',
-        _ => 'Une erreur est survenue (code $code). Réessayez.',
+        400 ||
+        401 ||
+        403 ||
+        404 ||
+        409 ||
+        422 ||
+        429 => AppStrings.t(AppFormatters.lang, 'error.$code'),
+        500 || 502 || 503 => AppStrings.t(AppFormatters.lang, 'error.500'),
+        null => AppStrings.t(AppFormatters.lang, 'error.unexpected'),
+        _ => AppStrings.t(AppFormatters.lang, 'error.other', {'code': '$code'}),
       },
     );
   }
