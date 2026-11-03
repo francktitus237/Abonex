@@ -61,6 +61,7 @@ class UserSerializer(serializers.ModelSerializer):
 class SubscriptionSerializer(serializers.ModelSerializer):
     provider_country = serializers.SerializerMethodField()
     provider_flag = serializers.SerializerMethodField()
+    country_flag = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
@@ -70,6 +71,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "provider",
             "provider_country",
             "provider_flag",
+            "country",
+            "country_flag",
             "description",
             "category",
             "amount",
@@ -81,7 +84,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "cycle",
             "status",
         ]
-        read_only_fields = ["id", "provider_country", "provider_flag"]
+        read_only_fields = [
+            "id", "provider_country", "provider_flag", "country_flag",
+        ]
 
     def _provider_origin(self, obj):
         from .catalog import provider_origin
@@ -95,6 +100,20 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         from .catalog import flag_emoji
 
         return flag_emoji(self._provider_origin(obj))
+
+    def get_country_flag(self, obj):
+        from .catalog import flag_emoji
+
+        # Pays choisi par l'utilisateur ; à défaut celui du workspace.
+        return flag_emoji(obj.country or obj.workspace.country)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Les anciens enregistrements n'ont pas de pays : on sert
+        # celui du workspace pour que l'app ait toujours un drapeau.
+        if not data.get("country"):
+            data["country"] = instance.workspace.country or ""
+        return data
 
 
 class PaymentSerializer(serializers.ModelSerializer):

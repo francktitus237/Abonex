@@ -88,7 +88,7 @@ class SubscriptionTile extends StatelessWidget {
                       : [
                           if (sub.provider.isNotEmpty)
                             [
-                              if (sub.providerFlag.isNotEmpty) sub.providerFlag,
+                              if (sub.countryFlag.isNotEmpty) sub.countryFlag,
                               sub.provider,
                             ].join(' '),
                           sub.cycleLabel,

@@ -36,6 +36,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required BillingCycle cycle,
     String? currency,
     String? description,
+    String? country,
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? dueTime,
@@ -54,6 +55,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'cycle': cycle.name,
           'currency': currency ?? 'XAF',
           'description': ?description,
+          'country': ?country,
         }),
       );
     } on DioException catch (e) {
@@ -74,6 +76,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     BillingCycle? cycle,
     String? currency,
     String? description,
+    String? country,
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? dueTime,
@@ -97,6 +100,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'cycle': ?cycle?.name,
           'currency': ?currency,
           'description': ?description,
+          'country': ?country,
           if (clearStartDate)
             'start_date': null
           else if (startDate != null)
