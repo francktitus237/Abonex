@@ -33,6 +33,9 @@ class Profile(models.Model):
     )
     role = models.CharField(max_length=16, choices=ROLES, default="viewer")
     language = models.CharField(max_length=8, blank=True, default="fr")
+    # Photo de profil uploadée par l'utilisateur (FileField :
+    # aucune dépendance Pillow — validation type/taille à la vue).
+    avatar = models.FileField(upload_to="avatars/", blank=True)
 
 
 class Invitation(models.Model):

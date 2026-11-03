@@ -22,13 +22,27 @@ abstract class AuthRepository {
   /// (permet d'ouvrir l'app hors-ligne avec le dernier profil connu).
   Future<Result<User>> currentUser();
 
-  /// Met à jour le profil (prénom, nom, langue) et renvoie
+  /// Met à jour le profil (prénom, nom, email, langue) et renvoie
   /// l'utilisateur à jour.
   Future<Result<User>> updateProfile({
     String? firstName,
     String? lastName,
+    String? email,
     String? language,
   });
+
+  /// Upload une photo de profil — [path] pointe un fichier image
+  /// local (déjà redimensionné par la présentation).
+  Future<Result<User>> uploadAvatar(String path);
+
+  /// Retire la photo de profil (avatar = chaîne vide côté API).
+  Future<Result<User>> removeAvatar();
+
+  /// Met à jour la devise de base du workspace (owner/manager).
+  Future<Result<User>> updateWorkspaceCurrency(String currency);
+
+  /// Change le mot de passe : le serveur vérifie l'ancien.
+  Future<Result<void>> changePassword(String current, String next);
 
   /// Un refresh token existe-t-il localement ?
   Future<bool> hasSession();

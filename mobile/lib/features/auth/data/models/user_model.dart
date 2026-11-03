@@ -22,6 +22,7 @@ abstract class UserModel with _$UserModel {
     String? lastName,
     String? language,
     WorkspaceModel? workspace,
+    String? avatarUrl,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -36,6 +37,7 @@ abstract class UserModel with _$UserModel {
     lastName: lastName,
     language: language,
     workspace: workspace?.toEntity(),
+    avatarUrl: avatarUrl,
   );
 }
 

@@ -26,8 +26,18 @@ abstract class AuthRemoteDataSource {
   /// GET /auth/me/ → user
   Future<UserModel> me();
 
-  /// PATCH /auth/me/ {first_name?, last_name?, language?} → user
+  /// PATCH /auth/me/ {first_name?, last_name?, email?, language?,
+  /// avatar: '' pour retirer la photo} → user
   Future<UserModel> updateMe(Map<String, dynamic> payload);
+
+  /// PATCH /auth/me/ multipart {avatar: fichier} → user
+  Future<UserModel> uploadAvatar(String path);
+
+  /// POST /auth/password/change/ → 204
+  Future<void> changePassword(String current, String next);
+
+  /// PATCH /workspace/setup/ {default_currency} → user complet
+  Future<UserModel> updateWorkspace(Map<String, dynamic> payload);
 
   /// POST /auth/logout/ {refresh} → blacklist du refresh token.
   Future<void> logout(String refreshToken);
@@ -98,6 +108,37 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<UserModel> updateMe(Map<String, dynamic> payload) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       ApiEndpoints.me,
+      data: payload,
+    );
+    return UserModel.fromJson(res.data!);
+  }
+
+  @override
+  Future<UserModel> uploadAvatar(String path) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.me,
+      data: FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(
+          path,
+          filename: 'avatar.png',
+        ),
+      }),
+    );
+    return UserModel.fromJson(res.data!);
+  }
+
+  @override
+  Future<void> changePassword(String current, String next) async {
+    await _dio.post<void>(
+      ApiEndpoints.changePassword,
+      data: {'current_password': current, 'new_password': next},
+    );
+  }
+
+  @override
+  Future<UserModel> updateWorkspace(Map<String, dynamic> payload) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      ApiEndpoints.workspaceSetup,
       data: payload,
     );
     return UserModel.fromJson(res.data!);

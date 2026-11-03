@@ -15,6 +15,7 @@ abstract final class ApiEndpoints {
   static const refresh = 'auth/token/refresh/';
   static const logout = 'auth/logout/';
   static const me = 'auth/me/';
+  static const changePassword = 'auth/password/change/';
   static const forgotPassword = 'auth/password/forgot/';
   static const resetPassword = 'auth/password/reset/';
 

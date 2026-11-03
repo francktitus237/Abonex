@@ -16,6 +16,7 @@ _UserModel _$UserModelFromJson(Map<String, dynamic> json) => _UserModel(
   workspace: json['workspace'] == null
       ? null
       : WorkspaceModel.fromJson(json['workspace'] as Map<String, dynamic>),
+  avatarUrl: json['avatar_url'] as String?,
 );
 
 Map<String, dynamic> _$UserModelToJson(_UserModel instance) =>
@@ -27,6 +28,7 @@ Map<String, dynamic> _$UserModelToJson(_UserModel instance) =>
       'last_name': instance.lastName,
       'language': instance.language,
       'workspace': instance.workspace,
+      'avatar_url': instance.avatarUrl,
     };
 
 const _$UserRoleEnumMap = {

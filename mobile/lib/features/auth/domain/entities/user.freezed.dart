@@ -293,7 +293,8 @@ as bool,
 /// @nodoc
 mixin _$User {
 
- String get id; String get email; UserRole get role; String? get firstName; String? get lastName; String? get language; Workspace? get workspace;
+ String get id; String get email; UserRole get role; String? get firstName; String? get lastName; String? get language; Workspace? get workspace;/// URL absolue de la photo de profil (null = initiales).
+ String? get avatarUrl;
 /// Create a copy of User
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -304,16 +305,16 @@ $UserCopyWith<User> get copyWith => _$UserCopyWithImpl<User>(this as User, _$ide
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is User&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is User&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace);
+int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace,avatarUrl);
 
 @override
 String toString() {
-  return 'User(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace)';
+  return 'User(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace, avatarUrl: $avatarUrl)';
 }
 
 
@@ -324,7 +325,7 @@ abstract mixin class $UserCopyWith<$Res>  {
   factory $UserCopyWith(User value, $Res Function(User) _then) = _$UserCopyWithImpl;
 @useResult
 $Res call({
- String id, String email, UserRole role, String? firstName, String? lastName, String? language, Workspace? workspace
+ String id, String email, UserRole role, String? firstName, String? lastName, String? language, Workspace? workspace, String? avatarUrl
 });
 
 
@@ -341,7 +342,7 @@ class _$UserCopyWithImpl<$Res>
 
 /// Create a copy of User
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,Object? avatarUrl = freezed,}) {
   return _then(User(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
@@ -350,7 +351,8 @@ as UserRole,firstName: freezed == firstName ? _self.firstName : firstName // ign
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
 as String?,language: freezed == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String?,workspace: freezed == workspace ? _self.workspace : workspace // ignore: cast_nullable_to_non_nullable
-as Workspace?,
+as Workspace?,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of User
@@ -447,10 +449,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace,  String? avatarUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _User() when $default != null:
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   return orElse();
 
 }
@@ -468,10 +470,10 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace,  String? avatarUrl)  $default,) {final _that = this;
 switch (_that) {
 case _User():
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -488,10 +490,10 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email,  UserRole role,  String? firstName,  String? lastName,  String? language,  Workspace? workspace,  String? avatarUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _User() when $default != null:
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   return null;
 
 }
@@ -503,7 +505,7 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 
 
 class _User extends User {
-  const _User({required this.id, required this.email, required this.role, this.firstName, this.lastName, this.language, this.workspace}): super._();
+  const _User({required this.id, required this.email, required this.role, this.firstName, this.lastName, this.language, this.workspace, this.avatarUrl}): super._();
   
 
 @override final  String id;
@@ -513,6 +515,8 @@ class _User extends User {
 @override final  String? lastName;
 @override final  String? language;
 @override final  Workspace? workspace;
+/// URL absolue de la photo de profil (null = initiales).
+@override final  String? avatarUrl;
 
 /// Create a copy of User
 /// with the given fields replaced by the non-null parameter values.
@@ -524,16 +528,16 @@ _$UserCopyWith<_User> get copyWith => __$UserCopyWithImpl<_User>(this, _$identit
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _User&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _User&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace);
+int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace,avatarUrl);
 
 @override
 String toString() {
-  return 'User(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace)';
+  return 'User(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace, avatarUrl: $avatarUrl)';
 }
 
 
@@ -544,7 +548,7 @@ abstract mixin class _$UserCopyWith<$Res> implements $UserCopyWith<$Res> {
   factory _$UserCopyWith(_User value, $Res Function(_User) _then) = __$UserCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String email, UserRole role, String? firstName, String? lastName, String? language, Workspace? workspace
+ String id, String email, UserRole role, String? firstName, String? lastName, String? language, Workspace? workspace, String? avatarUrl
 });
 
 
@@ -561,7 +565,7 @@ class __$UserCopyWithImpl<$Res>
 
 /// Create a copy of User
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,Object? avatarUrl = freezed,}) {
   return _then(_User(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
@@ -570,7 +574,8 @@ as UserRole,firstName: freezed == firstName ? _self.firstName : firstName // ign
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
 as String?,language: freezed == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String?,workspace: freezed == workspace ? _self.workspace : workspace // ignore: cast_nullable_to_non_nullable
-as Workspace?,
+as Workspace?,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

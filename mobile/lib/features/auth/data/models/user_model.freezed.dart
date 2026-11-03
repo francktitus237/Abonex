@@ -18,7 +18,7 @@ mixin _$UserModel {
 
  String get id; String get email;/// Le rôle arrive en string ("owner", "manager"…) — parse() applique
 /// le principe de moindre privilège sur une valeur inconnue.
-@JsonKey(fromJson: UserRole.parse) UserRole get role; String? get firstName; String? get lastName; String? get language; WorkspaceModel? get workspace;
+@JsonKey(fromJson: UserRole.parse) UserRole get role; String? get firstName; String? get lastName; String? get language; WorkspaceModel? get workspace; String? get avatarUrl;
 /// Create a copy of UserModel
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -31,16 +31,16 @@ $UserModelCopyWith<UserModel> get copyWith => _$UserModelCopyWithImpl<UserModel>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserModel&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserModel&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace);
+int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace,avatarUrl);
 
 @override
 String toString() {
-  return 'UserModel(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace)';
+  return 'UserModel(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace, avatarUrl: $avatarUrl)';
 }
 
 
@@ -51,7 +51,7 @@ abstract mixin class $UserModelCopyWith<$Res>  {
   factory $UserModelCopyWith(UserModel value, $Res Function(UserModel) _then) = _$UserModelCopyWithImpl;
 @useResult
 $Res call({
- String id, String email,@JsonKey(fromJson: UserRole.parse) UserRole role, String? firstName, String? lastName, String? language, WorkspaceModel? workspace
+ String id, String email,@JsonKey(fromJson: UserRole.parse) UserRole role, String? firstName, String? lastName, String? language, WorkspaceModel? workspace, String? avatarUrl
 });
 
 
@@ -68,7 +68,7 @@ class _$UserModelCopyWithImpl<$Res>
 
 /// Create a copy of UserModel
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,Object? avatarUrl = freezed,}) {
   return _then(UserModel(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
@@ -77,7 +77,8 @@ as UserRole,firstName: freezed == firstName ? _self.firstName : firstName // ign
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
 as String?,language: freezed == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String?,workspace: freezed == workspace ? _self.workspace : workspace // ignore: cast_nullable_to_non_nullable
-as WorkspaceModel?,
+as WorkspaceModel?,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of UserModel
@@ -174,10 +175,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace,  String? avatarUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserModel() when $default != null:
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   return orElse();
 
 }
@@ -195,10 +196,10 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace,  String? avatarUrl)  $default,) {final _that = this;
 switch (_that) {
 case _UserModel():
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -215,10 +216,10 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String email, @JsonKey(fromJson: UserRole.parse)  UserRole role,  String? firstName,  String? lastName,  String? language,  WorkspaceModel? workspace,  String? avatarUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _UserModel() when $default != null:
-return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace);case _:
+return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_that.language,_that.workspace,_that.avatarUrl);case _:
   return null;
 
 }
@@ -230,7 +231,7 @@ return $default(_that.id,_that.email,_that.role,_that.firstName,_that.lastName,_
 @JsonSerializable()
 
 class _UserModel extends UserModel {
-  const _UserModel({required this.id, required this.email, @JsonKey(fromJson: UserRole.parse) required this.role, this.firstName, this.lastName, this.language, this.workspace}): super._();
+  const _UserModel({required this.id, required this.email, @JsonKey(fromJson: UserRole.parse) required this.role, this.firstName, this.lastName, this.language, this.workspace, this.avatarUrl}): super._();
   factory _UserModel.fromJson(Map<String, dynamic> json) => _$UserModelFromJson(json);
 
 @override final  String id;
@@ -242,6 +243,7 @@ class _UserModel extends UserModel {
 @override final  String? lastName;
 @override final  String? language;
 @override final  WorkspaceModel? workspace;
+@override final  String? avatarUrl;
 
 /// Create a copy of UserModel
 /// with the given fields replaced by the non-null parameter values.
@@ -256,16 +258,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserModel&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserModel&&(identical(other.id, id) || other.id == id)&&(identical(other.email, email) || other.email == email)&&(identical(other.role, role) || other.role == role)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.language, language) || other.language == language)&&(identical(other.workspace, workspace) || other.workspace == workspace)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace);
+int get hashCode => Object.hash(runtimeType,id,email,role,firstName,lastName,language,workspace,avatarUrl);
 
 @override
 String toString() {
-  return 'UserModel(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace)';
+  return 'UserModel(id: $id, email: $email, role: $role, firstName: $firstName, lastName: $lastName, language: $language, workspace: $workspace, avatarUrl: $avatarUrl)';
 }
 
 
@@ -276,7 +278,7 @@ abstract mixin class _$UserModelCopyWith<$Res> implements $UserModelCopyWith<$Re
   factory _$UserModelCopyWith(_UserModel value, $Res Function(_UserModel) _then) = __$UserModelCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String email,@JsonKey(fromJson: UserRole.parse) UserRole role, String? firstName, String? lastName, String? language, WorkspaceModel? workspace
+ String id, String email,@JsonKey(fromJson: UserRole.parse) UserRole role, String? firstName, String? lastName, String? language, WorkspaceModel? workspace, String? avatarUrl
 });
 
 
@@ -293,7 +295,7 @@ class __$UserModelCopyWithImpl<$Res>
 
 /// Create a copy of UserModel
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? email = null,Object? role = null,Object? firstName = freezed,Object? lastName = freezed,Object? language = freezed,Object? workspace = freezed,Object? avatarUrl = freezed,}) {
   return _then(_UserModel(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
@@ -302,7 +304,8 @@ as UserRole,firstName: freezed == firstName ? _self.firstName : firstName // ign
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
 as String?,language: freezed == language ? _self.language : language // ignore: cast_nullable_to_non_nullable
 as String?,workspace: freezed == workspace ? _self.workspace : workspace // ignore: cast_nullable_to_non_nullable
-as WorkspaceModel?,
+as WorkspaceModel?,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

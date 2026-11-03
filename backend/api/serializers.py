@@ -34,16 +34,31 @@ class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="profile.role")
     language = serializers.CharField(source="profile.language")
     workspace = WorkspaceSerializer(source="profile.workspace")
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "email", "role", "first_name", "last_name",
-            "language", "workspace",
+            "language", "workspace", "avatar_url",
         ]
         read_only_fields = [
             "id", "email", "first_name", "last_name", "workspace",
+            "avatar_url",
         ]
+
+    def get_avatar_url(self, obj):
+        """URL absolue de la photo — le mobile l'affiche telle
+        quelle (aucune recomposition de domaine à faire côté app)."""
+        avatar = getattr(obj.profile, "avatar", None)
+        if not avatar:
+            return None
+        request = self.context.get("request")
+        return (
+            request.build_absolute_uri(avatar.url)
+            if request is not None
+            else avatar.url
+        )
 
     def update(self, instance, validated_data):
         profile_data = validated_data.get("profile", {})

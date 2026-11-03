@@ -78,16 +78,71 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Result<User>> updateProfile({
     String? firstName,
     String? lastName,
+    String? email,
     String? language,
   }) async {
     try {
       final model = await _remote.updateMe({
         'first_name': ?firstName,
         'last_name': ?lastName,
+        'email': ?email,
         'language': ?language,
       });
       await _local.saveUser(model);
       return Ok(model.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Result<User>> uploadAvatar(String path) async {
+    try {
+      final model = await _remote.uploadAvatar(path);
+      await _local.saveUser(model);
+      return Ok(model.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Result<User>> removeAvatar() async {
+    try {
+      final model = await _remote.updateMe({'avatar': ''});
+      await _local.saveUser(model);
+      return Ok(model.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Result<User>> updateWorkspaceCurrency(String currency) async {
+    try {
+      final model = await _remote.updateWorkspace({
+        'default_currency': currency,
+      });
+      await _local.saveUser(model);
+      return Ok(model.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Result<void>> changePassword(String current, String next) async {
+    try {
+      await _remote.changePassword(current, next);
+      return const Ok(null);
     } on DioException catch (e) {
       return Err(_toFailure(ApiException.fromDio(e)));
     } catch (_) {
