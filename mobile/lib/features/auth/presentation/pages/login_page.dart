@@ -262,6 +262,15 @@ class _LoginViewState extends State<_LoginView> {
         ),
         actions: [
           TextButton(
+            onPressed: () {
+              // L'utilisateur a déjà reçu le lien par email →
+              // directement vers le formulaire de nouveau mot de passe.
+              Navigator.of(dialogContext).pop();
+              context.push('/reset-password');
+            },
+            child: Text(dialogContext.tr('reset.haveLink')),
+          ),
+          TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(dialogContext.tr('common.cancel')),
           ),

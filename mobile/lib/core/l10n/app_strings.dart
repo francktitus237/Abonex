@@ -106,6 +106,7 @@ abstract final class AppStrings {
     'dash.spent': 'Dépensé ce mois',
     'dash.toPay': 'Reste à payer',
     'dash.count': '{n} abonnement{s} suivi{s}',
+    'dash.events': '{n} rendez-vous',
     'dash.updateHint':
         'Facture d\'eau, d\'électricité, salaire ou nouvel abonnement '
         'à suivre ? Pensez à mettre votre liste à jour.',
@@ -129,6 +130,7 @@ abstract final class AppStrings {
     'reminder.more': 'et {n} autre{s}…',
     'reminder.viewDue': 'Voir les échéances',
     'toast.paid': '{name} marqué comme payé.',
+    'toast.done': '{name} marqué comme terminé.',
 
     // Abonnements — liste
     'subs.search': 'Rechercher un abonnement…',
@@ -213,6 +215,7 @@ abstract final class AppStrings {
     'detail.description': 'Description',
     'detail.at': 'à {time}',
     'detail.markPaid': 'Marquer comme payé',
+    'detail.markDone': 'Marquer comme terminé',
     'detail.deleteTitle': 'Supprimer ?',
     'detail.deleteBody':
         '« {name} » sera définitivement retiré de votre suivi.',
@@ -271,6 +274,7 @@ abstract final class AppStrings {
     'ns.weeklyBody':
         'Pensez à ajouter vos nouvelles factures et abonnements pour '
         'un suivi complet.',
+    'ns.overdueTitle': 'Toujours en retard : {name}',
     'ns.channelReminders': 'Rappels importants',
     'ns.channelRemindersDesc':
         'Alertes sonores avant les paiements et rappels de suivi.',
@@ -365,7 +369,7 @@ abstract final class AppStrings {
     'users.inviteTitle': 'Inviter un collaborateur',
     'users.role': 'Rôle',
     'users.roleManager': 'Gestionnaire — tout gérer',
-    'users.roleAssistant': 'Assistant — marquer payé',
+    'users.roleAssistant': 'Assistant — marquer payé/terminé',
     'users.roleViewer': 'Lecteur — consultation',
     'users.inviteSent': 'Invitation envoyée à {email}.',
     'users.inviteFail': 'Envoi de l\'invitation impossible.',
@@ -417,6 +421,20 @@ abstract final class AppStrings {
     'invite.linkRequired': 'Lien requis',
     'invite.invalid': 'Lien d\'invitation invalide ou expiré.',
     'invite.join': 'Rejoindre l\'espace',
+
+    // Réinitialisation du mot de passe (lien abonex://reset/…)
+    'reset.title': 'Nouveau mot de passe',
+    'reset.sub':
+        'Collez le lien reçu par email et choisissez un nouveau '
+        'mot de passe.',
+    'reset.link': 'Lien de réinitialisation',
+    'reset.linkHint': 'abonex://reset/…',
+    'reset.linkRequired': 'Lien requis',
+    'reset.newPassword': 'Nouveau mot de passe',
+    'reset.submit': 'Réinitialiser',
+    'reset.done': 'Mot de passe réinitialisé — connectez-vous.',
+    'reset.invalid': 'Lien invalide ou expiré.',
+    'reset.haveLink': 'J\'ai un lien de réinitialisation',
 
     // Onboarding
     'onb.skip': 'Passer',
@@ -519,6 +537,25 @@ abstract final class AppStrings {
     'alarm.test': 'Écouter',
     'alarm.previewTitle': 'Test de la sonnerie',
     'alarm.previewBody': 'Voici la sonnerie de vos alarmes.',
+    'alarm.disabled':
+        'Notifications désactivées — les alarmes ne sonneront pas.',
+    'alarm.enable': 'Activer',
+    'alarm.blocked':
+        'Notifications bloquées — activez-les pour Abonex dans les '
+        'paramètres du téléphone.',
+    'alarm.battery': 'Fiabiliser les alarmes',
+    'alarm.batterySub': 'Exclure Abonex des économies d\'énergie',
+    'alarm.exactWarn':
+        'Alarmes exactes refusées — les sonneries peuvent être retardées.',
+    'alarm.exactEnable': 'Autoriser les alarmes exactes',
+    'alarm.testRing': 'Tester l\'alarme',
+    'alarm.testScheduled': 'Alarme de test dans 30 s — quittez l\'app !',
+    'alarm.testTitle': 'Test de l\'alarme Abonex',
+    'alarm.testBody':
+        'Si vous entendez ceci, les sonneries d\'échéance fonctionnent.',
+    'alarm.volumeHint':
+        'Le son des alarmes suit le volume « Alarme » du téléphone '
+        '(distinct du volume sonnerie).',
 
     // Mise à jour
     'update.title': 'Mise à jour de l\'application',
@@ -616,6 +653,7 @@ abstract final class AppStrings {
     'dash.spent': 'Spent this month',
     'dash.toPay': 'Left to pay',
     'dash.count': '{n} subscription{s} tracked',
+    'dash.events': '{n} appointment{s}',
     'dash.updateHint':
         'Water bill, electricity bill, salary or a new subscription '
         'to track? Remember to keep your list up to date.',
@@ -637,6 +675,7 @@ abstract final class AppStrings {
     'reminder.more': 'and {n} other{s}…',
     'reminder.viewDue': 'View due dates',
     'toast.paid': '{name} marked as paid.',
+    'toast.done': '{name} marked as done.',
 
     'subs.search': 'Search a subscription…',
     'subs.integrations': 'Import & integrations',
@@ -716,6 +755,7 @@ abstract final class AppStrings {
     'detail.description': 'Description',
     'detail.at': 'at {time}',
     'detail.markPaid': 'Mark as paid',
+    'detail.markDone': 'Mark as done',
     'detail.deleteTitle': 'Delete?',
     'detail.deleteBody': '"{name}" will be permanently removed from tracking.',
     'detail.deleted': 'Subscription deleted.',
@@ -767,6 +807,7 @@ abstract final class AppStrings {
     'ns.weeklyBody':
         'Remember to add your new bills and subscriptions for '
         'complete tracking.',
+    'ns.overdueTitle': 'Still overdue: {name}',
     'ns.channelReminders': 'Important reminders',
     'ns.channelRemindersDesc':
         'Sound alerts before payments and tracking reminders.',
@@ -856,7 +897,7 @@ abstract final class AppStrings {
     'users.inviteTitle': 'Invite a collaborator',
     'users.role': 'Role',
     'users.roleManager': 'Manager — manage everything',
-    'users.roleAssistant': 'Assistant — mark as paid',
+    'users.roleAssistant': 'Assistant — mark as paid/done',
     'users.roleViewer': 'Viewer — read only',
     'users.inviteSent': 'Invitation sent to {email}.',
     'users.inviteFail': 'Could not send the invitation.',
@@ -902,6 +943,19 @@ abstract final class AppStrings {
     'invite.linkRequired': 'Link required',
     'invite.invalid': 'Invalid or expired invitation link.',
     'invite.join': 'Join the workspace',
+
+    'reset.title': 'New password',
+    'reset.sub':
+        'Paste the link received by email and choose a new '
+        'password.',
+    'reset.link': 'Reset link',
+    'reset.linkHint': 'abonex://reset/…',
+    'reset.linkRequired': 'Link required',
+    'reset.newPassword': 'New password',
+    'reset.submit': 'Reset password',
+    'reset.done': 'Password reset — you can sign in.',
+    'reset.invalid': 'Invalid or expired link.',
+    'reset.haveLink': 'I have a reset link',
 
     'onb.skip': 'Skip',
     'onb.next': 'Continue',
@@ -999,6 +1053,22 @@ abstract final class AppStrings {
     'alarm.test': 'Listen',
     'alarm.previewTitle': 'Ringtone preview',
     'alarm.previewBody': 'This is your alarm ringtone.',
+    'alarm.disabled': 'Notifications are off — alarms will not ring.',
+    'alarm.enable': 'Enable',
+    'alarm.blocked':
+        'Notifications blocked — enable them for Abonex in '
+        'the phone settings.',
+    'alarm.battery': 'Make alarms reliable',
+    'alarm.batterySub': 'Exclude Abonex from battery saving',
+    'alarm.exactWarn': 'Exact alarms denied — ringtones may be delayed.',
+    'alarm.exactEnable': 'Allow exact alarms',
+    'alarm.testRing': 'Test the alarm',
+    'alarm.testScheduled': 'Test alarm in 30 s — leave the app!',
+    'alarm.testTitle': 'Abonex alarm test',
+    'alarm.testBody': 'If you can hear this, due-time alarms work.',
+    'alarm.volumeHint':
+        'Alarm sound follows the phone\'s Alarm volume '
+        '(separate from ringtone volume).',
 
     'update.title': 'App update',
     'update.installed': 'Installed version: {v}',

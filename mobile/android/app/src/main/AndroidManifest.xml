@@ -14,11 +14,23 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Alarme de rendez-vous à l'heure exacte (Android 12+). -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- Exclusion de l'optimisation batterie (OEM agressifs :
+         Xiaomi, Infinix, Oppo…) — sinon les alarmes sont tuées
+         en arrière-plan sur certains téléphones. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Écriture MediaStore pour les sonneries importées —
+         requis uniquement avant Android 10 (scoped storage). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <application
         android:label="Abonex"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:enableOnBackInvokedCallback="true">
+        <!-- usesCleartextTraffic : volontairement retiré d'ici — il
+             n'est activé que dans src/debug (API locale en http).
+             La release n'accepte que du chiffré. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -40,6 +52,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep links applicatifs : invitation d'espace
+                 (abonex://invite/<token>) et réinitialisation du mot
+                 de passe (abonex://reset/<uid>/<token>). L'hôte est
+                 restreint pour ne pas capter le callback Powens. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="abonex" android:host="invite" />
+                <data android:scheme="abonex" android:host="reset" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -57,7 +80,10 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="abonex" />
+                <!-- Hôte restreint : sans host="powens", TOUS les liens
+                     abonex://* (invitations comprises) étaient avalés
+                     ici et traités comme un OAuth annulé. -->
+                <data android:scheme="abonex" android:host="powens" />
             </intent-filter>
         </activity>
         <!-- Boutons "Arrêter" / "Repousser" sur l'alarme de rendez-vous. -->

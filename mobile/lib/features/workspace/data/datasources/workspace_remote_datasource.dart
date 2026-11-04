@@ -83,20 +83,28 @@ class WorkspaceRemoteDataSource {
     return res.data!;
   }
 
-  /// GET /connectors/powens/login/ → URL du webview bancaire (OAuth).
-  Future<String> powensLogin() async {
+  /// GET /connectors/powens/login/ → (URL du webview, state anti-CSRF).
+  /// Le `state` est renvoyé par Powens dans le callback et doit
+  /// être retransmis au serveur pour prouver la liaison de session.
+  Future<(String, String)> powensLogin() async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.powensLogin,
     );
-    return res.data!['auth_url'] as String;
+    return (
+      res.data!['auth_url'] as String,
+      res.data!['state'] as String? ?? '',
+    );
   }
 
-  /// POST /connectors/powens/callback/ {code} → abonnements détectés
-  /// à partir des prélèvements récurrents du relevé bancaire.
-  Future<List<Map<String, dynamic>>> powensCallback(String code) async {
+  /// POST /connectors/powens/callback/ {code, state} → abonnements
+  /// détectés à partir des prélèvements récurrents du relevé.
+  Future<List<Map<String, dynamic>>> powensCallback(
+    String code,
+    String state,
+  ) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.powensCallback,
-      data: {'code': code},
+      data: {'code': code, 'state': state},
     );
     return (res.data!['subscriptions'] as List<dynamic>)
         .cast<Map<String, dynamic>>();

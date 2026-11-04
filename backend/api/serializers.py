@@ -49,8 +49,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         """URL absolue de la photo — le mobile l'affiche telle
-        quelle (aucune recomposition de domaine à faire côté app)."""
-        avatar = getattr(obj.profile, "avatar", None)
+        quelle (aucune recomposition de domaine à faire côté app).
+        Un utilisateur sans Profile (compte créé hors app) ne doit
+        pas lever RelatedObjectDoesNotExist → 500."""
+        avatar = getattr(getattr(obj, "profile", None), "avatar", None)
         if not avatar:
             return None
         request = self.context.get("request")

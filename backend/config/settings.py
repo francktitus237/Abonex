@@ -83,7 +83,19 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+        "api.permissions.HasProfile",
+    ),
+    # Anti force brute : les vues sensibles déclarent un
+    # `throttle_scope` (login, password…) — les autres passent.
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/minute",
+        "password": "5/minute",
+    },
     "DEFAULT_PAGINATION_CLASS": None,
 }
 
@@ -119,6 +131,23 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # par nginx en production (volume partagé media_data).
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Email : mot de passe oublié, invitations. En dev, les messages
+# sont imprimés dans la console du runserver ; en production
+# configurer un vrai SMTP via les variables EMAIL_*.
+if os.getenv("EMAIL_HOST"):
+    EMAIL_BACKEND = os.getenv(
+        "DJANGO_EMAIL_BACKEND",
+        "django.core.mail.backends.smtp.EmailBackend",
+    )
+    EMAIL_HOST = os.environ["EMAIL_HOST"]
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Abonex <no-reply@abonex.app>")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"

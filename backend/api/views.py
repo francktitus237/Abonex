@@ -2,15 +2,20 @@ import json
 import os
 import secrets
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -34,34 +39,16 @@ from .serializers import (
 )
 
 
-class IsOwner(BasePermission):
-    def has_permission(self, request, view):
-        profile = getattr(request.user, "profile", None)
-        return bool(profile and profile.role == "owner")
-
-
-class SubscriptionPermission(BasePermission):
-    def has_permission(self, request, view):
-        profile = getattr(request.user, "profile", None)
-        if not profile:
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        if request.method == "DELETE":
-            return profile.role == "owner"
-        if request.method == "POST":
-            return profile.role in {"owner", "manager"}
-        if request.method in {"PATCH", "PUT"}:
-            if profile.role in {"owner", "manager"}:
-                return True
-            return profile.role == "assistant" and set(request.data) == {"status"} and request.data.get("status") == "paid"
-        return False
+from .permissions import (
+    IsOwner, SubscriptionPermission,
+)
 
 
 class LoginView(APIView):
     """POST /auth/login/ {email, password} → {access, refresh, user}"""
 
     permission_classes = [AllowAny]
+    throttle_scope = "login"  # anti force brute (voir REST_FRAMEWORK)
 
     def post(self, request):
         email = (request.data.get("email") or "").strip().lower()
@@ -70,6 +57,8 @@ class LoginView(APIView):
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             user = None
+        except User.MultipleObjectsReturned:
+            user = User.objects.filter(email=email).first()
         if user is None:
             auth_user = None
         else:
@@ -86,7 +75,9 @@ class LoginView(APIView):
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(auth_user).data,
+                "user": UserSerializer(
+                    auth_user, context={"request": request}
+                ).data,
             }
         )
 
@@ -173,7 +164,9 @@ class RegisterView(APIView):
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(user).data,
+                "user": UserSerializer(
+                    user, context={"request": request}
+                ).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -221,6 +214,16 @@ class MeView(APIView):
                 user.email = email
                 user.username = email
 
+        # Validation de l'avatar AVANT toute écriture : un fichier
+        # refusé ne doit pas laisser les autres champs à moitié
+        # enregistrés alors que la réponse est un 400.
+        avatar_file = request.FILES.get("avatar")
+        if avatar_file is not None:
+            if not (avatar_file.content_type or "").startswith("image/"):
+                errors["avatar"] = "Le fichier doit être une image."
+            elif avatar_file.size > 5 * 1024 * 1024:
+                errors["avatar"] = "Image trop lourde (5 Mo max)."
+
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
         user.save()
@@ -231,20 +234,13 @@ class MeView(APIView):
             profile.language = str(language).strip()[:8]
 
         # Photo : fichier multipart OU chaîne vide pour la retirer.
-        avatar_file = request.FILES.get("avatar")
         if avatar_file is not None:
-            if not (avatar_file.content_type or "").startswith("image/"):
-                return Response(
-                    {"avatar": "Le fichier doit être une image."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if avatar_file.size > 5 * 1024 * 1024:
-                return Response(
-                    {"avatar": "Image trop lourde (5 Mo max)."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            if profile.avatar:
+                # L'ancien fichier serait sinon orphelin sur le disque.
+                profile.avatar.delete(save=False)
             profile.avatar = avatar_file
         elif data.get("avatar") == "":
+            profile.avatar.delete(save=False)
             profile.avatar = ""
         profile.save()
 
@@ -254,6 +250,8 @@ class MeView(APIView):
 class ChangePasswordView(APIView):
     """POST /auth/password/change/ {current_password, new_password}
     → 204. Les JWT existants restent valides (pas de révocation)."""
+
+    throttle_scope = "password"
 
     def post(self, request):
         user = request.user
@@ -290,18 +288,83 @@ class LogoutView(APIView):
 
 
 class ForgotPasswordView(APIView):
-    """POST /auth/password/forgot/ → toujours 204 (anti-énumération)."""
+    """POST /auth/password/forgot/ {email} → envoie un lien de
+    réinitialisation (deep link `abonex://reset/<uid>/<token>`).
+    Retourne toujours 204 — anti-énumération des comptes."""
 
     permission_classes = [AllowAny]
+    throttle_scope = "password"
 
     def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        if email:
+            # filter() et non get() : l'unicité de l'email est
+            # applicative, pas une contrainte SQL — plusieurs lignes
+            # ne doivent pas lever de 500.
+            for user in User.objects.filter(email=email, is_active=True):
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                link = f"abonex://reset/{uid}/{token}"
+                send_mail(
+                    "Abonex — Réinitialisation du mot de passe",
+                    (
+                        "Bonjour,\n\n"
+                        "Une demande de réinitialisation de mot de passe "
+                        "a été faite pour votre compte Abonex.\n\n"
+                        "Ouvrez ce lien dans l'application pour choisir "
+                        "un nouveau mot de passe :\n"
+                        f"{link}\n\n"
+                        "Si vous n'êtes pas à l'origine de cette "
+                        "demande, ignorez simplement cet email — "
+                        "votre mot de passe reste inchangé.\n\n"
+                        "— L'équipe Abonex"
+                    ),
+                    None,
+                    [user.email],
+                    fail_silently=True,
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ResetPasswordView(APIView):
+    """POST /auth/password/reset/ {uid, token, password} → 204.
+    Le token est celui du lien envoyé par /auth/password/forgot/ —
+    à usage unique : changer le mot de passe l'invalide."""
+
     permission_classes = [AllowAny]
+    throttle_scope = "password"
 
     def post(self, request):
+        uid = request.data.get("uid") or ""
+        token = request.data.get("token") or ""
+        password = request.data.get("password") or ""
+        errors = {}
+        user = None
+        try:
+            # urlsafe_base64_decode renvoie des bytes — force_str
+            # obligatoire avant le lookup pk.
+            user = User.objects.get(
+                pk=force_str(urlsafe_base64_decode(uid))
+            )
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+        if user is None or not default_token_generator.check_token(
+            user, token
+        ):
+            errors["token"] = "Lien invalide ou expiré."
+        if len(password) < 8:
+            errors["password"] = "8 caractères minimum."
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(password)
+        user.save(update_fields=["password"])
+        # Sécurité : toutes les sessions existantes sont invalidées —
+        # le reset peut suivre un compromission du compte.
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken, OutstandingToken,
+        )
+        for outstanding in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -345,12 +408,13 @@ class UserDetailView(generics.UpdateAPIView):
 def _refresh_statuses(qs):
     """Recalcule les statuts selon la date du jour :
     dueSoon dont l'échéance est passée → overdue ;
-    paid dont la date est dépassée (nouvelle période) → overdue.
-    """
+    paid RÉCURRENT dont la date est dépassée (nouvelle période) →
+    overdue. Un événement 'once' payé est TERMINAL : sa date reste
+    dans le passé mais il ne doit jamais redevenir en retard."""
     today = date.today()
     qs.filter(
         status__in=["dueSoon", "paid"], next_due_date__lt=today
-    ).update(status="overdue")
+    ).exclude(status="paid", cycle="once").update(status="overdue")
 
 
 def _advance_due(subscription):
@@ -475,7 +539,6 @@ class PaymentHistoryView(generics.ListAPIView):
 # ------------------------------------------------------------------
 
 class WorkspaceBudgetView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response(WorkspaceBudgetSerializer(request.user.profile.workspace).data)
@@ -495,7 +558,6 @@ class WorkspaceSetupView(APIView):
     """PATCH /workspace/setup/ — configure pays + devises.
     Marque le workspace comme configuré."""
 
-    permission_classes = [IsAuthenticated]
 
     def patch(self, request):
         # La config concerne TOUT l'espace : seuls owner/manager
@@ -508,7 +570,13 @@ class WorkspaceSetupView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save(configured=True)
-        return Response(UserSerializer(request.user).data)
+        # contexte request → avatar_url absolue (sinon l'app reçoit
+        # "/media/…" sans hôte et NetworkImage échoue).
+        return Response(
+            UserSerializer(
+                request.user, context={"request": request}
+            ).data
+        )
 
 
 # ------------------------------------------------------------------
@@ -519,7 +587,6 @@ class InviteListCreateView(generics.ListCreateAPIView):
     """GET /invites/ (liste) · POST /invites/ {email, role}.
     Réservé owner/manager — l'invité confirme via le lien reçu."""
 
-    permission_classes = [IsAuthenticated]
 
     def _allowed(self, request):
         return request.user.profile.role in {"owner", "manager"}
@@ -559,12 +626,9 @@ class InviteListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         workspace = request.user.profile.workspace
-        # Un compte actif existe déjà → on refuse l'invite.
-        if User.objects.filter(email=email).exists():
-            return Response(
-                {"email": "Cet utilisateur a déjà un compte."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # Un compte existant PEUT être invité : l'acceptation le
+        # rattache à cet espace (il quitte l'ancien).
+        existing_user = User.objects.filter(email=email).exists()
         invite, _ = Invitation.objects.update_or_create(
             workspace=workspace,
             email=email,
@@ -598,6 +662,9 @@ class InviteListCreateView(generics.ListCreateAPIView):
                 # Renvoyé aussi à l'appelant pour partage manuel
                 # (WhatsApp…) — l'email SMTP n'est pas garanti.
                 "invite_url": link,
+                # True si l'invité a déjà un compte Abonex : il sera
+                # rattaché à cet espace en acceptant.
+                "existing_user": existing_user,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -608,26 +675,50 @@ class InviteAcceptView(APIView):
     → crée le compte invité dans l'espace qui l'a invité."""
 
     permission_classes = [AllowAny]
+    throttle_scope = "password"
 
     def post(self, request):
         token = request.data.get("token") or ""
         password = request.data.get("password") or ""
-        invite = get_object_or_404(Invitation, token=token, status="pending")
-        if len(password) < 8:
+        invite = get_object_or_404(
+            Invitation.objects.select_related("workspace"),
+            token=token,
+            status="pending",
+        )
+        # Le lien n'est pas éternel : 7 jours comme tout jeton
+        # d'invitation raisonnable.
+        if timezone.now() - invite.created_at > timedelta(days=7):
             return Response(
-                {"password": "8 caractères minimum."},
+                {"token": "Invitation expirée — demandez-en une "
+                          "nouvelle à l'invitant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        user = User.objects.create_user(
-            username=invite.email,
-            email=invite.email,
-            password=password,
-            first_name=(request.data.get("first_name") or "").strip(),
-            last_name=(request.data.get("last_name") or "").strip(),
-        )
-        Profile.objects.create(
-            user=user, workspace=invite.workspace, role=invite.role
-        )
+        # Un compte peut déjà exister pour cet email (invité déjà
+        # inscrit ailleurs) : on le rattache à l'espace invité au
+        # lieu de crasher sur la contrainte d'unicité.
+        user = User.objects.filter(email=invite.email).first()
+        if user is None:
+            if len(password) < 8:
+                return Response(
+                    {"password": "8 caractères minimum."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user = User.objects.create_user(
+                username=invite.email,
+                email=invite.email,
+                password=password,
+                first_name=(request.data.get("first_name") or "").strip(),
+                last_name=(request.data.get("last_name") or "").strip(),
+            )
+        profile = getattr(user, "profile", None)
+        if profile is None:
+            Profile.objects.create(
+                user=user, workspace=invite.workspace, role=invite.role
+            )
+        else:
+            profile.workspace = invite.workspace
+            profile.role = invite.role
+            profile.save(update_fields=["workspace", "role"])
         invite.status = "accepted"
         invite.save(update_fields=["status"])
         refresh = RefreshToken.for_user(user)
@@ -635,7 +726,9 @@ class InviteAcceptView(APIView):
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(user).data,
+                "user": UserSerializer(
+                    user, context={"request": request}
+                ).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -649,7 +742,6 @@ class ProviderCatalogView(APIView):
     """GET /providers/catalog/ → fournisseurs suggérés pour le pays
     du workspace (ou ?country=XX)."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         country = (
@@ -668,7 +760,6 @@ class ConnectorListView(APIView):
     Inclut groupe d'affichage, pays couverts et indicateur de
     disponibilité pour le pays du workspace."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         country = (request.user.profile.workspace.country or "").upper()
@@ -695,7 +786,6 @@ class ConnectorSyncView(APIView):
     → appelle l'API externe et renvoie les abonnements détectés.
     Les credentials sont chiffrés et stockés pour les syncs futures."""
 
-    permission_classes = [IsAuthenticated]
 
     def post(self, request, slug):
         connector = get_connector(slug)
@@ -740,7 +830,6 @@ class PowensLoginView(APIView):
     URL du webview bancaire Powens à ouvrir côté app (OAuth PSD2 —
     les identifiants bancaires ne passent jamais par Abonex)."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not powens_configured():
@@ -755,21 +844,37 @@ class PowensLoginView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         country = request.user.profile.workspace.country or "fr"
-        return Response({"auth_url": powens_auth_url(country)})
+        # Nonce anti-CSRF : le callback doit le renvoyer pour prouver
+        # qu'il prolonge CETTE demande de connexion, pas une autre.
+        state = secrets.token_urlsafe(24)
+        cache.set(f"powens_state:{request.user.pk}", state, timeout=600)
+        return Response(
+            {"auth_url": powens_auth_url(country, state), "state": state}
+        )
 
 
 class PowensCallbackView(APIView):
-    """POST /connectors/powens/callback/ {code}
+    """POST /connectors/powens/callback/ {code, state}
     Échange le code OAuth → access_token, mémorise la connexion
     chiffrée et renvoie les abonnements détectés dans le relevé."""
 
-    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         code = request.data.get("code")
         if not code:
             return Response(
                 {"code": "Code manquant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Le state lie le callback à la demande de connexion —
+        # usage unique, on le consomme quoi qu'il arrive.
+        state_key = f"powens_state:{request.user.pk}"
+        expected = cache.get(state_key)
+        cache.delete(state_key)
+        if not expected or request.data.get("state") != expected:
+            return Response(
+                {"state": "Session OAuth expirée — recommencez "
+                          "la connexion bancaire."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if not powens_configured():
@@ -806,7 +911,6 @@ class ConnectionListView(APIView):
     Les identifiants ne sont JAMAIS renvoyés — id + libellé seulement.
     DELETE /connections/<id>/ → déconnecte le compte."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         conns = ProviderConnection.objects.filter(
@@ -833,7 +937,6 @@ class ConnectionResyncView(APIView):
     credentials chiffrés stockés — re-synchronisation en un tap.
     DELETE /connections/<id>/resync/ → supprime la connexion."""
 
-    permission_classes = [IsAuthenticated]
 
     def _get_connection(self, request, pk):
         return get_object_or_404(
@@ -873,7 +976,6 @@ class ExchangeRatesView(APIView):
     Permet à l'app de convertir les montants étrangers
     dans la devise locale de l'utilisateur."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         base = request.query_params.get("base") or (
@@ -894,7 +996,6 @@ class AppVersionView(APIView):
     installée et propose la mise à jour.
     Config : APP_LATEST_VERSION / APP_UPDATE_URL (env)."""
 
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response(
@@ -915,7 +1016,6 @@ class SubscriptionBulkCreateView(APIView):
     """POST /subscriptions/bulk/ {items:[{...}]} → import en masse
     (CSV côté app ou résultat d'un connecteur)."""
 
-    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         profile = request.user.profile
@@ -927,26 +1027,56 @@ class SubscriptionBulkCreateView(APIView):
                 {"items": "Liste vide."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        created, errors = [], []
+        # Déduplication : ré-importer le même CSV ou re-synchroniser
+        # un connecteur ne doit pas recréer les mêmes abonnements.
+        # Clé : fournisseur (ou nom à défaut) + montant + devise.
+        existing = {
+            (
+                (s.provider or s.name).strip().lower(),
+                str(s.amount),
+                s.currency,
+            )
+            for s in Subscription.objects.filter(
+                workspace=profile.workspace
+            )
+        }
+        created, errors, skipped = [], [], []
+        truncated = max(0, len(items) - 500)
         for i, raw in enumerate(items[:500]):
             if not raw.get("next_due_date"):
                 # Import : une échéance est obligatoire — par défaut
                 # dans 30 jours pour ne pas bloquer l'utilisateur.
-                from datetime import date, timedelta
                 raw = {**raw,
                        "next_due_date": (
                            date.today() + timedelta(days=30)
                        ).isoformat()}
             serializer = SubscriptionSerializer(data=raw)
-            if serializer.is_valid():
-                serializer.save(
-                    owner=request.user, workspace=profile.workspace
-                )
-                created.append(serializer.data)
-            else:
+            if not serializer.is_valid():
                 errors.append({"index": i, "errors": serializer.errors})
+                continue
+            data = serializer.validated_data
+            key = (
+                str(data.get("provider") or data.get("name") or "")
+                .strip().lower(),
+                str(data.get("amount")),
+                data.get("currency"),
+            )
+            if key in existing:
+                skipped.append({"index": i, "name": data.get("name")})
+                continue
+            serializer.save(
+                owner=request.user, workspace=profile.workspace
+            )
+            existing.add(key)
+            created.append(serializer.data)
         return Response(
-            {"created": len(created), "errors": errors},
-            status=status.HTTP_201_CREATED if created
+            {
+                "created": len(created),
+                "skipped": len(skipped),
+                "duplicates": skipped,
+                "truncated": truncated,
+                "errors": errors,
+            },
+            status=status.HTTP_201_CREATED if created or skipped
             else status.HTTP_400_BAD_REQUEST,
         )

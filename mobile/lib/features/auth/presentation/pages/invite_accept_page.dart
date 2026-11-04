@@ -17,7 +17,11 @@ import '../../data/models/user_model.dart';
 /// définit son mot de passe, et entre directement dans l'espace
 /// de travail de l'invitant avec le rôle assigné.
 class InviteAcceptPage extends StatefulWidget {
-  const InviteAcceptPage({super.key});
+  const InviteAcceptPage({super.key, this.initialToken});
+
+  /// Token pré-rempli par le deep link `abonex://invite/<token>` —
+  /// l'invité n'a plus à coller le lien à la main.
+  final String? initialToken;
 
   @override
   State<InviteAcceptPage> createState() => _InviteAcceptPageState();
@@ -25,12 +29,18 @@ class InviteAcceptPage extends StatefulWidget {
 
 class _InviteAcceptPageState extends State<InviteAcceptPage> {
   final _formKey = GlobalKey<FormState>();
-  final _token = TextEditingController();
+  late final TextEditingController _token;
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _password = TextEditingController();
   bool _submitting = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _token = TextEditingController(text: widget.initialToken ?? '');
+  }
 
   @override
   void dispose() {

@@ -43,8 +43,10 @@ def is_configured() -> bool:
     return bool(c["client_id"] and c["client_secret"])
 
 
-def build_auth_url(country: str = "fr") -> str:
-    """URL du webview Powens à ouvrir dans l'app."""
+def build_auth_url(country: str = "fr", state: str = "") -> str:
+    """URL du webview Powens à ouvrir dans l'app.
+    `state` : nonce anti-CSRF renvoyé tel quel au callback —
+    le serveur le vérifie avant d'échanger le code."""
     c = _config()
     params = {
         "client_id": c["client_id"],
@@ -52,6 +54,8 @@ def build_auth_url(country: str = "fr") -> str:
         "country": country.lower() or "fr",
         "type": "single",
     }
+    if state:
+        params["state"] = state
     return "https://webview.powens.com/fr/connect?" + urllib.parse.urlencode(
         params
     )

@@ -68,7 +68,8 @@ class _DetailBody extends StatelessWidget {
       SubscriptionStatus.overdue => context.status.overdue,
     };
     final statusLabel = switch (sub.status) {
-      SubscriptionStatus.paid => context.tr('status.paid'),
+      SubscriptionStatus.paid =>
+        context.tr(sub.isEvent ? 'status.done' : 'status.paid'),
       SubscriptionStatus.dueSoon => context.tr('status.dueSoon'),
       SubscriptionStatus.overdue => context.tr('status.overdue'),
     };
@@ -278,7 +279,9 @@ class _DetailBody extends StatelessWidget {
           FilledButton.icon(
             onPressed: () => _markPaid(context),
             icon: const Icon(LucideIcons.check, size: 19),
-            label: Text(context.tr('detail.markPaid')),
+            label: Text(
+              context.tr(sub.isEvent ? 'detail.markDone' : 'detail.markPaid'),
+            ),
           ),
         if (sub.status != SubscriptionStatus.paid) const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -321,7 +324,9 @@ class _DetailBody extends StatelessWidget {
       style: ToastificationStyle.flat,
       title: Text(
         result is Ok
-            ? context.tr('toast.paid', {'name': subscription.name})
+            ? context.tr(subscription.isEvent ? 'toast.done' : 'toast.paid', {
+                'name': subscription.name,
+              })
             : switch (result) {
                 Err(failure: final f) => f.localizedMessage,
                 _ => context.tr('common.unexpected'),

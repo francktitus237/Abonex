@@ -222,7 +222,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       },
       style: ToastificationStyle.flat,
       title: Text(switch (result) {
-        Ok() => context.tr('toast.paid', {'name': sub.name}),
+        Ok() => context.tr(sub.isEvent ? 'toast.done' : 'toast.paid', {
+          'name': sub.name,
+        }),
         Err(failure: final f) => f.localizedMessage,
       }),
       autoCloseDuration: const Duration(seconds: 3),
@@ -384,13 +386,16 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     }
   }
 
-  /// Devises proposées : principale + secondaires du workspace.
+  /// Devises proposées : principale + secondaires du workspace en
+  /// premier, puis toutes les devises couvertes par les pays
+  /// supportés — un abonnement peut être facturé dans n'importe
+  /// quelle monnaie (Netflix en USD, loyer en XAF, fibre en EUR).
   List<String> get _currencies {
     final workspace = switch (context.read<AuthCubit>().state) {
       Authenticated(user: final u) => u.workspace,
       _ => null,
     };
-    final list = <String>{
+    final preferred = <String>{
       if (workspace?.defaultCurrency?.isNotEmpty ?? false)
         workspace!.defaultCurrency!,
       ...?workspace?.extraCurrencies,
@@ -398,7 +403,13 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       'EUR',
       'USD',
     }.toList();
-    return list;
+    final rest = AppCountries.all
+        .map((c) => c.currency)
+        .toSet()
+        .difference(preferred.toSet())
+        .toList()
+      ..sort();
+    return [...preferred, ...rest];
   }
 
   @override

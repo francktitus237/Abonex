@@ -10,6 +10,7 @@ import '../../features/auth/presentation/pages/invite_accept_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/reset_password_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
@@ -31,6 +32,10 @@ abstract final class AppRoutes {
   static const login = '/login';
   static const register = '/register';
   static const inviteAccept = '/invite';
+
+  /// Réinitialisation du mot de passe — deep link
+  /// `abonex://reset/<uid>/<token>` → `/reset-password?uid=…&token=…`.
+  static const resetPassword = '/reset-password';
 
   static const home = '/';
   static const subscriptions = '/subscriptions';
@@ -72,7 +77,8 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       final location = state.matchedLocation;
       final onPublicAuth = location == AppRoutes.login ||
           location == AppRoutes.register ||
-          location == AppRoutes.inviteAccept;
+          location == AppRoutes.inviteAccept ||
+          location == AppRoutes.resetPassword;
       final onOnboarding = location == AppRoutes.onboarding;
 
       return switch (authCubit.state) {
@@ -123,7 +129,16 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       ),
       GoRoute(
         path: AppRoutes.inviteAccept,
-        builder: (_, _) => const InviteAcceptPage(),
+        builder: (_, state) => InviteAcceptPage(
+          initialToken: state.uri.queryParameters['token'],
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (_, state) => ResetPasswordPage(
+          initialUid: state.uri.queryParameters['uid'],
+          initialToken: state.uri.queryParameters['token'],
+        ),
       ),
 
       // --- Shell à 5 onglets (l'état de chaque branche est préservé) ---

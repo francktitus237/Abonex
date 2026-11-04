@@ -3,11 +3,13 @@ import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -585,7 +587,15 @@ class _Card extends StatelessWidget {
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
         ),
       ),
-      child: Column(children: children),
+      // Ancêtre Material obligatoire : sans lui, l'effet ripple et
+      // la couleur de sélection des ListTile enfants sont invisibles
+      // (avertissement framework dans les logs).
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      ),
     );
   }
 }
@@ -904,7 +914,31 @@ class _RingtoneTileState extends State<_RingtoneTile> {
       final ext = path.contains('.') ? path.split('.').last : 'mp3';
       final dest = File('${dir.path}/alarm_custom.$ext');
       await File(path).copy(dest.path);
-      await _storage.setCustomAlarmSound(dest.path, picked.name);
+      var soundUri = dest.path;
+      if (Platform.isAndroid) {
+        // Android : le son est joué par le SYSTEMUI, qui ne lit PAS
+        // le stockage privé de l'app — un file:// reste muet.
+        // On l'insère donc dans le MediaStore → URI content://
+        // lisible par le système (canal natif MainActivity).
+        try {
+          const channel = MethodChannel('abonex/media_store');
+          soundUri = await channel.invokeMethod<String>(
+                'importSound',
+                {'path': dest.path, 'name': picked.name},
+              ) ??
+              soundUri;
+          // Ancienne entrée MediaStore : supprimée pour ne pas
+          // empiler les copies à chaque nouvel import.
+          final old = _storage.alarmCustomPath;
+          if (old != null && old.startsWith('content://')) {
+            await channel.invokeMethod<void>('deleteSound', {'uri': old});
+          }
+        } catch (_) {
+          // Échec natif → on garde le chemin fichier en repli
+          // (certains appareils lisent quand même file://).
+        }
+      }
+      await _storage.setCustomAlarmSound(soundUri, picked.name);
       if (!mounted) return;
       setState(() => _selected = 'custom');
       toastification.show(
@@ -920,51 +954,185 @@ class _RingtoneTileState extends State<_RingtoneTile> {
   }
 
   Future<void> _choose() async {
+    final service = getIt<NotificationService>();
+    var notifEnabled = await service.notificationsEnabled();
+    var exactAllowed = await service.exactAlarmsAllowed();
+    if (!mounted) return;
     final chosen = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('alarm.choose')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioGroup<String>(
-              groupValue: _selected,
-              onChanged: (val) => Navigator.of(ctx).pop(val),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final v in _builtin)
-                    RadioListTile<String>(
-                      value: v,
-                      title: Text(_labelFor(ctx, v)),
-                    ),
-                  if (_storage.alarmCustomName.isNotEmpty)
-                    RadioListTile<String>(
-                      value: 'custom',
-                      title: Text(_labelFor(ctx, 'custom')),
-                    ),
-                ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(ctx.tr('alarm.choose')),
+          // Le contenu est plus haut que l'écran sur petits
+          // appareils (options + batterie + avertissement) —
+          // scrollable évite l'overflow RenderFlex.
+          scrollable: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Notifications bloquées → rien ne sonnera : on le
+              // dit au lieu de laisser l'utilisateur chercher.
+              if (!notifEnabled)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      ctx,
+                    ).colorScheme.errorContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.bellOff,
+                        size: 18,
+                        color: Theme.of(ctx).colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          ctx.tr('alarm.disabled'),
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              RadioGroup<String>(
+                groupValue: _selected,
+                onChanged: (val) => Navigator.of(ctx).pop(val),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final v in _builtin)
+                      RadioListTile<String>(
+                        value: v,
+                        title: Text(_labelFor(ctx, v)),
+                      ),
+                    if (_storage.alarmCustomName.isNotEmpty)
+                      RadioListTile<String>(
+                        value: 'custom',
+                        title: Text(_labelFor(ctx, 'custom')),
+                      ),
+                  ],
+                ),
               ),
+              ListTile(
+                leading: const Icon(LucideIcons.fileAudio, size: 20),
+                title: Text(ctx.tr('alarm.import')),
+                onTap: () => Navigator.of(ctx).pop('__import__'),
+              ),
+              const Divider(height: 8),
+              // OEM agressifs (Infinix/XOS, Xiaomi/MIUI…) : sans
+              // exemption batterie les alarmes sont tuées en
+              // arrière-plan sur certains téléphones.
+              if (Platform.isAndroid) ...[
+                // Permission « Alarmes et rappels » refusée : les
+                // sonneries passent en mode approximatif (retardées
+                // voire absorbées par l'économiseur) — on le signale
+                // et on propose l'activation directement ici.
+                if (!exactAllowed)
+                  ListTile(
+                    leading: Icon(
+                      LucideIcons.alarmClock,
+                      size: 20,
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                    title: Text(
+                      ctx.tr('alarm.exactWarn'),
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(ctx).colorScheme.error,
+                      ),
+                    ),
+                    subtitle: Text(ctx.tr('alarm.exactEnable')),
+                    dense: true,
+                    onTap: () async {
+                      final ok = await service.requestExactAlarms();
+                      setD(() => exactAllowed = ok);
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(LucideIcons.batteryCharging, size: 20),
+                  title: Text(ctx.tr('alarm.battery')),
+                  subtitle: Text(ctx.tr('alarm.batterySub')),
+                  dense: true,
+                  onTap: () =>
+                      Permission.ignoreBatteryOptimizations.request(),
+                ),
+                // Alarme de test réelle : vérifie tout le circuit
+                // (canal + sonnerie + programmation exacte) sans
+                // créer de faux rendez-vous.
+                ListTile(
+                  leading: const Icon(LucideIcons.bellRing, size: 20),
+                  title: Text(ctx.tr('alarm.testRing')),
+                  subtitle: Text(ctx.tr('alarm.testScheduled')),
+                  dense: true,
+                  onTap: () async {
+                    await service.scheduleTestAlarm();
+                    if (!ctx.mounted || !mounted) return;
+                    Navigator.of(ctx).pop();
+                    toastification.show(
+                      context: context,
+                      type: ToastificationType.info,
+                      style: ToastificationStyle.flat,
+                      title: Text(context.tr('alarm.testScheduled')),
+                      autoCloseDuration: const Duration(seconds: 4),
+                    );
+                  },
+                ),
+              ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Text(
+                  ctx.tr('alarm.volumeHint'),
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (!notifEnabled)
+              TextButton(
+                onPressed: () async {
+                  var ok = await service.requestPermissions();
+                  ok = ok && await service.notificationsEnabled();
+                  // Permission définitivement refusée → on envoie
+                  // l'utilisateur dans les réglages système.
+                  if (!ok) await openAppSettings();
+                  setD(() => notifEnabled = ok);
+                },
+                child: Text(ctx.tr('alarm.enable')),
+              ),
+            TextButton(
+              // Aperçu : joue la sonnerie une fois. False = les
+              // notifications sont bloquées → on bascule sur
+              // l'avertissement au lieu d'un silence inexpliqué.
+              onPressed: () async {
+                final ok = await service.previewAlarmSound();
+                if (!ok) {
+                  setD(() => notifEnabled = false);
+                  if (mounted) {
+                    toastification.show(
+                      context: context,
+                      type: ToastificationType.warning,
+                      style: ToastificationStyle.flat,
+                      title: Text(context.tr('alarm.blocked')),
+                      autoCloseDuration: const Duration(seconds: 4),
+                    );
+                  }
+                }
+              },
+              child: Text(ctx.tr('alarm.test')),
             ),
-            ListTile(
-              leading: const Icon(LucideIcons.fileAudio, size: 20),
-              title: Text(ctx.tr('alarm.import')),
-              onTap: () => Navigator.of(ctx).pop('__import__'),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(ctx.tr('common.cancel')),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            // Aperçu : joue la sonnerie une fois sur le canal d'alarme.
-            onPressed: () =>
-                getIt<NotificationService>().previewAlarmSound(),
-            child: Text(ctx.tr('alarm.test')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(ctx.tr('common.cancel')),
-          ),
-        ],
       ),
     );
     if (chosen == null || !mounted) return;

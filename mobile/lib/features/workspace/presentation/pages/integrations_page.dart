@@ -202,17 +202,24 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   Future<void> _connectBank() async {
     setState(() => _busy = true);
     try {
-      final url = await _datasource.powensLogin();
+      final (url, state) = await _datasource.powensLogin();
       final result = await FlutterWebAuth2.authenticate(
         url: url,
         callbackUrlScheme: 'abonex',
       );
-      final code = Uri.parse(result).queryParameters['code'];
+      final params = Uri.parse(result).queryParameters;
+      final code = params['code'];
+      // Le serveur exige le state renvoyé par Powens (anti-CSRF) —
+      // à défaut on retombe sur celui mémorisé à la demande.
+      final returnedState = params['state'] ?? state;
       if (code == null || code.isEmpty) {
         if (mounted) _toast(context.tr('bank.fail'), error: true);
         return;
       }
-      final detected = await _datasource.powensCallback(code);
+      final detected = await _datasource.powensCallback(
+        code,
+        returnedState,
+      );
       if (!mounted) return;
       if (detected.isEmpty) {
         _toast(context.tr('int.noneDetected'));

@@ -137,17 +137,13 @@ class _DashboardPageState extends State<DashboardPage> {
           final spentByCurrency = sumByCurrency(
             billed.where((s) => s.status == SubscriptionStatus.paid),
           );
-          // Budget : comparé uniquement à la devise principale du
-          // workspace (les montants en USD ne gonflent pas le
-          // budget FCFA).
+          // Devise de base du workspace : TOUS les totaux sont
+          // convertis dedans (taux réels /rates/).
           final mainCurrency = switch (context.read<AuthCubit>().state) {
             Authenticated(user: final u) =>
               u.workspace?.defaultCurrency ?? 'XAF',
             _ => 'XAF',
           };
-          final spentMain =
-              (spentByCurrency[mainCurrency] ?? 0) +
-              (dueByCurrency[mainCurrency] ?? 0);
           final overdueSubs = items
               .where((s) => s.status == SubscriptionStatus.overdue)
               .toList();
@@ -186,7 +182,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       dueByCurrency: dueByCurrency,
                       spentByCurrency: spentByCurrency,
                       mainCurrency: mainCurrency,
-                      count: items.length,
+                      subCount: items.where((s) => !s.isEvent).length,
+                      eventCount: items.where((s) => s.isEvent).length,
                     ),
                   ),
                 const SizedBox(height: 14),
@@ -207,7 +204,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 else
                   AnimatedFadeIn(
                     delay: const Duration(milliseconds: 60),
-                    child: _BudgetCard(spent: spentMain),
+                    child: _BudgetCard(
+                      spentByCurrency: spentByCurrency,
+                      dueByCurrency: dueByCurrency,
+                    ),
                   ),
                 const SizedBox(height: 14),
 
@@ -215,7 +215,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (!loading && billed.isNotEmpty)
                   AnimatedFadeIn(
                     delay: const Duration(milliseconds: 120),
-                    child: _CategorySpend(items: billed),
+                    child: _CategorySpend(
+                      items: billed,
+                      mainCurrency: mainCurrency,
+                    ),
                   ),
                 if (!loading && billed.isNotEmpty) const SizedBox(height: 20),
 
@@ -285,7 +288,9 @@ class _DashboardPageState extends State<DashboardPage> {
       },
       style: ToastificationStyle.flat,
       title: Text(switch (result) {
-        Ok() => context.tr('toast.paid', {'name': sub.name}),
+        Ok() => context.tr(sub.isEvent ? 'toast.done' : 'toast.paid', {
+          'name': sub.name,
+        }),
         Err(failure: final f) => f.localizedMessage,
       }),
       autoCloseDuration: const Duration(seconds: 3),
@@ -383,9 +388,15 @@ class _OverdueBanner extends StatelessWidget {
 
 /// Consommation budgétaire du mois : dépensé + à payer vs budget.
 class _BudgetCard extends StatefulWidget {
-  const _BudgetCard({required this.spent});
+  const _BudgetCard({
+    required this.spentByCurrency,
+    required this.dueByCurrency,
+  });
 
-  final double spent;
+  /// Montants par devise — convertis dans la devise de base avant
+  /// d'être comparés au budget (un abonnement USD compte aussi).
+  final Map<String, double> spentByCurrency;
+  final Map<String, double> dueByCurrency;
 
   @override
   State<_BudgetCard> createState() => _BudgetCardState();
@@ -395,12 +406,40 @@ class _BudgetCardState extends State<_BudgetCard> {
   double _budget = 0;
   bool _loadingBudget = true;
   bool _budgetFailed = false;
+  // Repli synchrone : somme des montants déjà dans la devise de
+  // base uniquement — remplacée par le total converti dès que les
+  // taux arrivent.
+  late double _spent;
 
   @override
   void initState() {
     super.initState();
+    _spent = _fallbackSpent;
     _loadBudget();
+    _resolveSpent();
   }
+
+  /// Total dépensé + à payer converti dans la devise de base.
+  Future<void> _resolveSpent() async {
+    final merged = <String, double>{}
+      ..addAll(widget.dueByCurrency);
+    for (final e in widget.spentByCurrency.entries) {
+      merged[e.key] = (merged[e.key] ?? 0) + e.value;
+    }
+    final rawSum = merged.values.fold(0.0, (a, b) => a + b);
+    final total = await getIt<CurrencyConverter>().convertAll(
+      merged.entries.map((e) => (amount: e.value, currency: e.key)),
+      _mainCurrency,
+    );
+    // 0 alors qu'il y a des montants = taux indisponibles → repli.
+    if (mounted && (total > 0 || rawSum == 0)) {
+      setState(() => _spent = total);
+    }
+  }
+
+  double get _fallbackSpent =>
+      (widget.spentByCurrency[_mainCurrency] ?? 0) +
+      (widget.dueByCurrency[_mainCurrency] ?? 0);
 
   Future<void> _loadBudget() async {
     setState(() {
@@ -478,8 +517,8 @@ class _BudgetCardState extends State<_BudgetCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final ratio = _budget > 0 ? (widget.spent / _budget).clamp(0.0, 1.0) : 0.0;
-    final over = _budget > 0 && widget.spent > _budget;
+    final ratio = _budget > 0 ? (_spent / _budget).clamp(0.0, 1.0) : 0.0;
+    final over = _budget > 0 && _spent > _budget;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -562,7 +601,7 @@ class _BudgetCardState extends State<_BudgetCard> {
               children: [
                 Text(
                   context.tr('dash.committed', {
-                    'amount': AppFormatters.money(widget.spent, _mainCurrency),
+                    'amount': AppFormatters.money(_spent, _mainCurrency),
                   }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
@@ -586,7 +625,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                 child: Text(
                   context.tr('dash.over', {
                     'amount': AppFormatters.money(
-                      widget.spent - _budget,
+                      _spent - _budget,
                       _mainCurrency,
                     ),
                   }),
@@ -604,89 +643,138 @@ class _BudgetCardState extends State<_BudgetCard> {
 }
 
 /// Dépenses par catégorie — barres de progression compactes.
+/// Chaque ligne est convertie dans la devise de base du workspace
+/// (taux réels /rates/) — une barre USD ne se mélange jamais avec
+/// une barre XAF, tout est ramené à la même unité.
 class _CategorySpend extends StatelessWidget {
-  const _CategorySpend({required this.items});
+  const _CategorySpend({required this.items, required this.mainCurrency});
 
   final List<Subscription> items;
+  final String mainCurrency;
+
+  /// Somme par catégorie convertie dans `mainCurrency`.
+  Future<Map<SubscriptionCategory, double>> _converted(
+    Map<SubscriptionCategory, List<(double, String)>> byCategory,
+  ) {
+    final conv = getIt<CurrencyConverter>();
+    return Future.wait(
+      byCategory.entries.map(
+        (e) => conv
+            .convertAll(
+              e.value.map((t) => (amount: t.$1, currency: t.$2)),
+              mainCurrency,
+            )
+            .then((total) => MapEntry(e.key, total)),
+      ),
+    ).then((pairs) => {for (final p in pairs) p.key: p.value});
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    // Regroupement (catégorie, devise) — une ligne par combinaison
-    // pour ne jamais fusionner FCFA et USD dans une même barre.
-    final byCategory = <(SubscriptionCategory, String), double>{};
+    // Regroupement par catégorie (montants bruts multi-devises) ;
+    // repli (catégorie, devise) si les taux ne répondent pas.
+    final byCategory = <SubscriptionCategory, List<(double, String)>>{};
+    final raw = <(SubscriptionCategory, String), double>{};
     for (final s in items) {
+      byCategory.putIfAbsent(s.category, () => []).add((
+        s.amount,
+        s.currency,
+      ));
       final key = (s.category, s.currency);
-      byCategory[key] = (byCategory[key] ?? 0) + s.amount;
+      raw[key] = (raw[key] ?? 0) + s.amount;
     }
-    final entries = byCategory.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final max = entries.first.value;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radius),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.tr('dash.byCategory'),
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+    return FutureBuilder<Map<SubscriptionCategory, double>>(
+      future: _converted(byCategory),
+      builder: (context, snapshot) {
+        final converted = snapshot.data;
+        // Lignes à afficher : converties dans la devise de base
+        // quand les taux sont là, sinon l'ancien repli par devise.
+        final rows = <({SubscriptionCategory cat, double value, String cur})>[];
+        if (converted != null &&
+            (converted.values.any((v) => v > 0) || items.isEmpty)) {
+          for (final e in converted.entries) {
+            if (e.value > 0) {
+              rows.add((cat: e.key, value: e.value, cur: mainCurrency));
+            }
+          }
+        } else {
+          for (final e in raw.entries) {
+            rows.add((cat: e.key.$1, value: e.value, cur: e.key.$2));
+          }
+        }
+        if (rows.isEmpty) return const SizedBox.shrink();
+        rows.sort((a, b) => b.value.compareTo(a.value));
+        final max = rows.first.value;
+
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(AppTheme.radius),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
             ),
           ),
-          const SizedBox(height: 16),
-          ...entries
-              .take(5)
-              .map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    children: [
-                      Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.tr('dash.byCategory'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...rows
+                  .take(5)
+                  .map(
+                    (r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
                         children: [
-                          Icon(e.key.$1.icon, size: 15, color: e.key.$1.color),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              e.key.$1.label,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
+                          Row(
+                            children: [
+                              Icon(r.cat.icon, size: 15, color: r.cat.color),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  r.cat.label,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
+                              Text(
+                                AppFormatters.money(r.value, r.cur),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            AppFormatters.money(e.value, e.key.$2),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w600,
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value: (r.value / max).clamp(0.0, 1.0),
+                              minHeight: 6,
+                              backgroundColor: scheme.outlineVariant
+                                  .withValues(alpha: 0.35),
+                              color: r.cat.color,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(99),
-                        child: LinearProgressIndicator(
-                          value: (e.value / max).clamp(0.0, 1.0),
-                          minHeight: 6,
-                          backgroundColor: scheme.outlineVariant.withValues(
-                            alpha: 0.35,
-                          ),
-                          color: e.key.$1.color,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -698,7 +786,8 @@ class _TotalCard extends StatelessWidget {
     required this.dueByCurrency,
     required this.spentByCurrency,
     required this.mainCurrency,
-    required this.count,
+    required this.subCount,
+    required this.eventCount,
   });
 
   /// Totaux par devise — ex. {XAF: 850000, USD: 45}.
@@ -709,7 +798,11 @@ class _TotalCard extends StatelessWidget {
   /// Devise locale de l'utilisateur (workspace.defaultCurrency) —
   /// les gros chiffres de la carte sont convertis dedans.
   final String mainCurrency;
-  final int count;
+
+  /// Ventilation du suivi : abonnements et rendez-vous sont deux
+  /// natures différentes — jamais mélangées dans un seul compteur.
+  final int subCount;
+  final int eventCount;
 
   @override
   Widget build(BuildContext context) {
@@ -875,9 +968,17 @@ class _TotalCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   context.tr('dash.count', {
-                    'n': '$count',
-                    's': count > 1 ? 's' : '',
-                  }),
+                        'n': '$subCount',
+                        's': subCount > 1 ? 's' : '',
+                      }) +
+                      // « rendez-vous » est invariable en français ;
+                      // la ligne n'apparaît que s'il y en a.
+                      (eventCount > 0
+                          ? ' · ${context.tr('dash.events', {
+                              'n': '$eventCount',
+                              's': eventCount > 1 ? 's' : '',
+                            })}'
+                          : ''),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.55),
                   ),
@@ -1070,7 +1171,22 @@ class _ConvertedAmount extends StatelessWidget {
     }
     if (byCurrency.length == 1) {
       final e = byCurrency.entries.first;
-      return Text(AppFormatters.money(e.value, e.key), style: style);
+      if (e.key == target) {
+        return Text(AppFormatters.money(e.value, target), style: style);
+      }
+      // Une seule devise ÉTRANGÈRE : on convertit quand même dans
+      // la devise de base — sinon "Reste à payer 101 €" alors que
+      // l'utilisateur a choisi XAF (bug remonté).
+      return FutureBuilder<double?>(
+        future: getIt<CurrencyConverter>().convert(e.value, e.key, target),
+        builder: (context, snapshot) => Text(
+          AppFormatters.money(
+            snapshot.data ?? e.value,
+            snapshot.data != null ? target : e.key,
+          ),
+          style: style,
+        ),
+      );
     }
     return FutureBuilder<double>(
       future: getIt<CurrencyConverter>().convertAll(
@@ -1084,7 +1200,14 @@ class _ConvertedAmount extends StatelessWidget {
           final e = byCurrency.entries.first;
           return Text(AppFormatters.money(e.value, e.key), style: style);
         }
-        return Text(AppFormatters.money(snapshot.data!, target), style: style);
+        final total = snapshot.data!;
+        final rawSum = byCurrency.values.fold(0.0, (a, b) => a + b);
+        if (total == 0 && rawSum > 0) {
+          // Taux indisponibles → résumé multi-devises plutôt
+          // qu'un "0 FCFA" trompeur.
+          return Text(_breakdown(byCurrency), style: style);
+        }
+        return Text(AppFormatters.money(total, target), style: style);
       },
     );
   }

@@ -35,7 +35,7 @@ class SubscriptionTile extends StatelessWidget {
     final (statusColor, statusLabel) = switch (sub.status) {
       SubscriptionStatus.paid => (
         context.status.paid,
-        context.tr('status.paid'),
+        context.tr(sub.isEvent ? 'status.done' : 'status.paid'),
       ),
       SubscriptionStatus.dueSoon => (
         context.status.dueSoon,

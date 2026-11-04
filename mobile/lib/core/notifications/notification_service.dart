@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,13 +48,15 @@ class NotificationService {
 
   // Canal "alarme" : notification plein écran par-dessus
   // l'écran verrouillé, sonnerie forte — impossible à manquer.
-  static const _urgentChannelId = 'abonex_urgent';
+  // Le suffixe _v2 invalide les anciens canaux : Android rend
+  // les attributs audio d'un canal immuables après sa création.
+  static const _urgentChannelId = 'abonex_urgent_v2';
   static String get _urgentChannelName => _t('ns.channelUrgent');
   static String get _urgentChannelDesc => _t('ns.channelUrgentDesc');
 
   // Canal dédié aux rendez-vous : sonnerie d'alarme en boucle
   // jusqu'à ce que l'utilisateur arrête ou repousse.
-  static const _eventChannelId = 'abonex_event_alarm';
+  static const _eventChannelId = 'abonex_event_alarm_v2';
   static String get _eventChannelName => _t('ns.channelEvent');
   static String get _eventChannelDesc => _t('ns.channelEventDesc');
 
@@ -62,11 +64,15 @@ class NotificationService {
   static const actionSnooze = 'snooze';
   static const _snoozeDuration = Duration(minutes: 10);
 
-  // Plages d'identifiants : rappels classiques 0-59, hebdo 999,
-  // alarmes de RDV 1000-1999, reports (snooze) 2000-2999.
+  // Plages d'identifiants : rappels classiques 0-149, rappels de
+  // relance (en retard) 150-299, hebdo 999, alarmes d'échéance
+  // 1000-2999, aperçu 3000, reports (snooze) 4000-5999.
+  static const _maxRegular = 150;
+  static const _overdueIdBase = 150;
+  static const _maxOverdue = 150;
   static const _eventIdBase = 1000;
-  static const _snoozeIdBase = 2000;
-  static const _idRange = 1000;
+  static const _snoozeIdBase = 4000;
+  static const _idRange = 2000;
 
   // FLAG_INSISTENT : le son se répète jusqu'à fermeture.
   static final _insistent = Int32List.fromList(const <int>[4]);
@@ -115,7 +121,11 @@ class NotificationService {
         ),
       'custom' when customPath != null => (
           '${base}_custom_$rev',
-          UriAndroidNotificationSound('file://$customPath'),
+          // content:// (MediaStore, lisible par le système) ou
+          // file:// en repli — l'URI est stockée telle quelle.
+          UriAndroidNotificationSound(
+            customPath.contains('://') ? customPath : 'file://$customPath',
+          ),
         ),
       _ => (base, null),
     };
@@ -271,16 +281,28 @@ class NotificationService {
         audioAttributesUsage: AudioAttributesUsage.alarm,
       ),
     );
-    await android?.requestNotificationsPermission();
-    // Demande l'autorisation plein écran (rappel type alarme).
-    await android?.requestFullScreenIntentPermission();
-    // Alarme à l'heure exacte du rendez-vous (Android 12+).
-    await android?.requestExactAlarmsPermission();
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
+    // Chaque demande de permission est isolée : une plateforme qui
+    // lève une exception ici ne doit PAS empêcher _initialized de
+    // passer à true — sinon scheduleDueReminders sortirait en
+    // silence et AUCUNE alarme ne serait jamais programmée.
+    try {
+      await android?.requestNotificationsPermission();
+    } catch (_) {}
+    try {
+      // Autorisation plein écran (rappel type alarme).
+      await android?.requestFullScreenIntentPermission();
+    } catch (_) {}
+    try {
+      // Alarme à l'heure exacte du rendez-vous (Android 12+).
+      await android?.requestExactAlarmsPermission();
+    } catch (_) {}
+    try {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    } catch (_) {}
     _initialized = true;
   }
 
@@ -289,13 +311,28 @@ class NotificationService {
     if (r.actionId == actionSnooze) await snoozeFromPayload(r.payload);
   }
 
+  /// Un plantage de planification sur UNE échéance ne doit jamais
+  /// annuler les suivantes — sans ce garde-fou, une seule
+  /// PlatformException (permission, canal, date) stoppait la boucle
+  /// et TOUTES les alarmes prévues après n'étaient pas programmées.
+  static Future<void> _safeSchedule(
+    Future<void> Function() run,
+    String label,
+  ) async {
+    try {
+      await run();
+    } catch (e) {
+      debugPrint('Abonex: échec de programmation ($label) — $e');
+    }
+  }
+
   /// Replanifie tous les rappels à chaque chargement de la liste :
   /// simple et toujours cohérent avec l'état serveur.
   Future<void> scheduleDueReminders(List<Subscription> subs) async {
     if (!_initialized) return;
     // On ne touche pas aux reports (snooze) en cours : ils doivent
     // survivre à un rafraîchissement de la liste.
-    for (var i = 0; i < 60; i++) {
+    for (var i = 0; i < _overdueIdBase + _maxOverdue; i++) {
       await _plugin.cancel(id: i);
     }
     await _plugin.cancel(id: 999);
@@ -359,37 +396,80 @@ class NotificationService {
           if (!isToday) continue;
           when = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 1));
         }
-        if (id >= 60) break; // limite Android de notifications planifiées
-        await _plugin.zonedSchedule(
-          id: id++,
-          title: daysBefore == 0
-              ? _t(sub.isEvent ? 'ns.eventToday' : 'ns.dueToday', {
-                  'name': sub.name,
-                })
-              : daysBefore == 1
-              ? _t(sub.isEvent ? 'ns.eventTomorrow' : 'ns.dueTomorrow', {
-                  'name': sub.name,
-                })
-              : _t(sub.isEvent ? 'ns.eventIn' : 'ns.dueIn', {
-                  'n': '$daysBefore',
-                  'name': sub.name,
-                }),
-          body: sub.isEvent
-              ? _eventBody(sub)
-              : _t('ns.payBody', {
-                      'provider': sub.provider,
-                      'amount': AppFormatters.money(sub.amount, sub.currency),
-                    }) +
-                    _descSuffix(sub),
-          scheduledDate: when,
-          // Jour J + rappels sonores activés → alarme plein écran.
-          notificationDetails: urgent && daysBefore == 0
-              ? urgentDetails
-              : _notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          payload: 'subscription:${sub.id}',
+        if (id >= _maxRegular) break;
+        final notifId = id++;
+        await _safeSchedule(
+          () => _plugin.zonedSchedule(
+            id: notifId,
+            title: daysBefore == 0
+                ? _t(sub.isEvent ? 'ns.eventToday' : 'ns.dueToday', {
+                    'name': sub.name,
+                  })
+                : daysBefore == 1
+                ? _t(sub.isEvent ? 'ns.eventTomorrow' : 'ns.dueTomorrow', {
+                    'name': sub.name,
+                  })
+                : _t(sub.isEvent ? 'ns.eventIn' : 'ns.dueIn', {
+                    'n': '$daysBefore',
+                    'name': sub.name,
+                  }),
+            body: sub.isEvent
+                ? _eventBody(sub)
+                : _t('ns.payBody', {
+                        'provider': sub.provider,
+                        'amount': AppFormatters.money(sub.amount, sub.currency),
+                      }) +
+                      _descSuffix(sub),
+            scheduledDate: when,
+            // Jour J + rappels sonores activés → alarme plein écran.
+            notificationDetails: urgent && daysBefore == 0
+                ? urgentDetails
+                : _notificationDetails,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            payload: 'subscription:${sub.id}',
+          ),
+          'reminder:${sub.id}',
         );
       }
+    }
+
+    // Relances des échéances EN RETARD : sans elles, un paiement
+    // dépassé tombait dans l'oubli — le planificateur ne suivait
+    // que les échéances "à venir". Un rappel quotidien à l'heure
+    // de rappel tant que l'échéance reste impayée (reprogrammé à
+    // chaque chargement de la liste → cohérent avec le serveur).
+    var overdueId = _overdueIdBase;
+    for (final sub in subs) {
+      if (sub.status != SubscriptionStatus.overdue) continue;
+      if (overdueId >= _overdueIdBase + _maxOverdue) break;
+      var when = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        reminderHour,
+      );
+      if (!when.isAfter(now)) when = when.add(const Duration(days: 1));
+      final notifId = overdueId++;
+      await _safeSchedule(
+        () => _plugin.zonedSchedule(
+          id: notifId,
+          title: _t('ns.overdueTitle', {'name': sub.name}),
+          body: _t('ns.payBody', {
+                'provider': sub.provider,
+                'amount': AppFormatters.money(sub.amount, sub.currency),
+              }) +
+              _descSuffix(sub),
+          scheduledDate: when,
+          notificationDetails: _notificationDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          // Quotidien : repart chaque jour à la même heure jusqu'à
+          // ce que l'échéance soit soldée (ou la liste rechargée).
+          matchDateTimeComponents: DateTimeComponents.time,
+          payload: 'subscription:${sub.id}',
+        ),
+        'overdue:${sub.id}',
+      );
     }
 
     // Rappels rapprochés le jour J pour les échéances à heure
@@ -404,24 +484,28 @@ class NotificationService {
           tz.local,
         );
         if (!when.isAfter(now)) continue;
-        if (id >= 60) break;
-        await _plugin.zonedSchedule(
-          id: id++,
-          title: _t(sub.isEvent ? 'ns.soonEvent' : 'ns.soonDue', {
-            'h': '${offset.inHours} h',
-            'name': sub.name,
-          }),
-          body: sub.isEvent
-              ? AppFormatters.dateTimeLong(sub.dueAt)
-              : _t('ns.payBody', {
-                      'provider': sub.provider,
-                      'amount': AppFormatters.money(sub.amount, sub.currency),
-                    }) +
-                    _descSuffix(sub),
-          scheduledDate: when,
-          notificationDetails: _notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          payload: 'subscription:${sub.id}',
+        if (id >= _maxRegular) break;
+        final notifId = id++;
+        await _safeSchedule(
+          () => _plugin.zonedSchedule(
+            id: notifId,
+            title: _t(sub.isEvent ? 'ns.soonEvent' : 'ns.soonDue', {
+              'h': '${offset.inHours} h',
+              'name': sub.name,
+            }),
+            body: sub.isEvent
+                ? AppFormatters.dateTimeLong(sub.dueAt)
+                : _t('ns.payBody', {
+                        'provider': sub.provider,
+                        'amount': AppFormatters.money(sub.amount, sub.currency),
+                      }) +
+                      _descSuffix(sub),
+            scheduledDate: when,
+            notificationDetails: _notificationDetails,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            payload: 'subscription:${sub.id}',
+          ),
+          'soon:${sub.id}',
         );
       }
     }
@@ -434,6 +518,8 @@ class NotificationService {
       if (sub.status == SubscriptionStatus.paid) continue;
       final when = tz.TZDateTime.from(sub.dueAt, tz.local);
       if (!when.isAfter(now)) continue;
+      // hashCode peut être négatif → abs() obligatoire, et la plage
+      // est large (2000) pour limiter les collisions entre IDs.
       final numericId = int.tryParse(sub.id) ?? sub.id.hashCode.abs();
       final title = _t(sub.isEvent ? 'ns.eventTitle' : 'ns.dueAlarmTitle', {
         'name': sub.name,
@@ -458,15 +544,18 @@ class NotificationService {
     // Rappel récurrent : chaque lundi 9h, invite à mettre la liste
     // à jour (factures, salaires, nouveaux abonnements oubliés).
     var next = _nextWeekday(DateTime.monday, reminderHour);
-    await _plugin.zonedSchedule(
-      id: 999,
-      title: _t('ns.weeklyTitle'),
-      body: _t('ns.weeklyBody'),
-      scheduledDate: next,
-      notificationDetails: _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-      payload: 'weekly-update',
+    await _safeSchedule(
+      () => _plugin.zonedSchedule(
+        id: 999,
+        title: _t('ns.weeklyTitle'),
+        body: _t('ns.weeklyBody'),
+        scheduledDate: next,
+        notificationDetails: _notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        payload: 'weekly-update',
+      ),
+      'weekly',
     );
   }
 
@@ -558,18 +647,138 @@ class NotificationService {
       androidScheduleMode: mode,
       payload: payload,
     );
-    try {
-      await schedule(AndroidScheduleMode.exactAllowWhileIdle);
-    } on PlatformException {
-      await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+    // Permission « Alarmes & rappels » (Android 12+) : si refusée,
+    // tout mode exact lève une exception → repli inexact direct.
+    final canExact =
+        await plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.canScheduleExactNotifications() ??
+        true;
+    if (!canExact) {
+      debugPrint(
+        'Abonex: alarme exacte non autorisée — alarme $id '
+        'programmée en mode approximatif',
+      );
+      await _safeSchedule(
+        () => schedule(AndroidScheduleMode.inexactAllowWhileIdle),
+        'alarm:$id',
+      );
+      return;
+    }
+    // alarmClock = AlarmManager.setAlarmClock : LE mode le plus
+    // fiable — sonne pile à l'heure même en Doze, prioritaire sur
+    // l'économiseur de batterie (API prévue pour les applis réveil).
+    // Repli : exact → inexact. Toutes les exceptions sont capturées,
+    // pas seulement PlatformException.
+    var scheduled = false;
+    for (final mode in [
+      AndroidScheduleMode.alarmClock,
+      AndroidScheduleMode.exactAllowWhileIdle,
+    ]) {
+      try {
+        await schedule(mode);
+        scheduled = true;
+        break;
+      } catch (e) {
+        debugPrint('Abonex: alarme $id refusée en mode $mode — $e');
+      }
+    }
+    if (!scheduled) {
+      await _safeSchedule(
+        () => schedule(AndroidScheduleMode.inexactAllowWhileIdle),
+        'alarm:$id',
+      );
     }
   }
 
-  /// Aperçu : joue la sonnerie choisie une seule fois (réglages).
-  Future<void> previewAlarmSound() async {
+  /// Vrai si l'utilisateur a autorisé les notifications — sinon
+  /// AUCUN rappel ni sonnerie ne sortira (cause la plus fréquente
+  /// de "ça ne sonne pas" sur un téléphone fraîchement installé).
+  Future<bool> notificationsEnabled() async {
     await init();
+    final enabled = await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.areNotificationsEnabled();
+    return enabled ?? true; // iOS : géré par les permissions système
+  }
+
+  /// Redemande l'autorisation (utile si elle a été refusée au
+  /// premier lancement — Android ne la repropose pas tout seul).
+  Future<bool> requestPermissions() async {
+    await init();
+    final granted = await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+    return granted ?? true;
+  }
+
+  /// Permission « Alarmes et rappels » (Android 12+) : sans elle,
+  /// les sonneries à l'heure exacte tombent en mode approximatif —
+  /// le système peut alors les retarder de plusieurs minutes.
+  Future<bool> exactAlarmsAllowed() async {
+    await init();
+    return await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.canScheduleExactNotifications() ??
+        true;
+  }
+
+  /// Ouvre l'écran système « Alarmes et rappels » — Android refuse
+  /// toute demande directe, seul ce réglage existe. Retourne l'état
+  /// de la permission une fois l'utilisateur revenu.
+  Future<bool> requestExactAlarms() async {
+    await init();
+    try {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.requestExactAlarmsPermission();
+    } catch (_) {}
+    return exactAlarmsAllowed();
+  }
+
+  /// Alarme de TEST : programme une vraie sonnerie ~30 s plus tard
+  /// en passant par exactement le même chemin que les alarmes de
+  /// rendez-vous (canal, plein écran, setAlarmClock). Le moyen le
+  /// plus fiable de vérifier que tout fonctionne sur CET appareil.
+  /// L'ID 6000 est hors de toutes les plages de rappels.
+  Future<void> scheduleTestAlarm() async {
+    await init();
+    final when = tz.TZDateTime.now(tz.local).add(
+      const Duration(seconds: 30),
+    );
+    final title = _t('alarm.testTitle');
+    final body = _t('alarm.testBody');
+    await _scheduleEventAlarm(
+      _plugin,
+      id: 6000,
+      title: title,
+      body: body,
+      when: when,
+      payload: _eventPayload('test', _t('alarm.title'), title, body),
+    );
+  }
+
+  /// Aperçu : joue la sonnerie choisie une seule fois (réglages).
+  /// Retourne false si les notifications sont bloquées — la vue
+  /// affiche alors un message au lieu de croire que ça joue.
+  ///
+  /// Canal en usage "notification" (pas "alarme") : le volume suivi
+  /// est celui que l'utilisateur règle naturellement — sinon un
+  /// volume « Alarme » à 0 rend l'aperçu muet et semble cassé.
+  Future<bool> previewAlarmSound() async {
+    if (!await notificationsEnabled()) return false;
     final (channelId, sound) = await _alarmChannelFor(
-      'abonex_alarm_preview',
+      'abonex_alarm_preview_v2',
     );
     await _createChannel(
       _plugin,
@@ -580,7 +789,6 @@ class NotificationService {
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
-        audioAttributesUsage: AudioAttributesUsage.alarm,
         sound: sound,
       ),
     );
@@ -597,8 +805,6 @@ class NotificationService {
           priority: Priority.max,
           playSound: true,
           enableVibration: true,
-          category: AndroidNotificationCategory.alarm,
-          audioAttributesUsage: AudioAttributesUsage.alarm,
           sound: sound,
         ),
         iOS: const DarwinNotificationDetails(
@@ -609,6 +815,7 @@ class NotificationService {
         ),
       ),
     );
+    return true;
   }
 
   /// Prochain [weekday] à [hour]h — DateTime monday=1 … sunday=7.
