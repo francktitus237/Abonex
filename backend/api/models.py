@@ -97,6 +97,10 @@ class Subscription(models.Model):
         ("monthly", "Mensuel"),
         ("quarterly", "Trimestriel"),
         ("yearly", "Annuel"),
+        # Récurrences courtes — pensées surtout pour les
+        # rendez-vous récurrents (même heure chaque jour/semaine).
+        ("daily", "Quotidien"),
+        ("weekly", "Hebdomadaire"),
         # Paiement/événement ponctuel (rendez-vous, facture unique).
         ("once", "Une seule fois"),
     ]

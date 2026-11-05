@@ -427,11 +427,15 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     var d = _firstDue;
     final today = DateUtils.dateOnly(DateTime.now());
     var guard = 0;
-    while (d.isBefore(today) && guard++ < 120) {
+    // 800 itérations : couvre ~2 ans pour un cycle quotidien
+    // sur une première échéance très ancienne.
+    while (d.isBefore(today) && guard++ < 800) {
       d = switch (_cycle) {
         BillingCycle.monthly => DateTime(d.year, d.month + 1, d.day),
         BillingCycle.quarterly => DateTime(d.year, d.month + 3, d.day),
         BillingCycle.yearly => DateTime(d.year + 1, d.month, d.day),
+        BillingCycle.daily => d.add(const Duration(days: 1)),
+        BillingCycle.weekly => d.add(const Duration(days: 7)),
         // Événement ponctuel : la première échéance EST l'échéance.
         BillingCycle.once => today,
       };
@@ -506,7 +510,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             category: _isEvent ? SubscriptionCategory.event : _category,
             amount: amount,
             nextDueDate: _isEvent ? _firstDue : _nextDue,
-            cycle: _isEvent ? BillingCycle.once : _cycle,
+            cycle: _cycle,
             currency: _currency,
             description: _description.text.trim(),
             country: _country,
@@ -521,7 +525,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             category: _isEvent ? SubscriptionCategory.event : _category,
             amount: amount,
             nextDueDate: _isEvent ? _firstDue : _nextDue,
-            cycle: _isEvent ? BillingCycle.once : _cycle,
+            cycle: _cycle,
             currency: _currency,
             description: _description.text.trim(),
             country: _country,
@@ -604,7 +608,17 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 ],
                 selected: {_isEvent},
                 showSelectedIcon: false,
-                onSelectionChanged: (s) => setState(() => _isEvent = s.first),
+                onSelectionChanged: (s) => setState(() {
+                  _isEvent = s.first;
+                  // Bascule vers RDV : récurrence « une fois » par
+                  // défaut (l'utilisateur la change ensuite). Retour
+                  // abonnement : mensuel si on venait de « une fois ».
+                  if (_isEvent && widget.existing == null) {
+                    _cycle = BillingCycle.once;
+                  } else if (!_isEvent && _cycle == BillingCycle.once) {
+                    _cycle = BillingCycle.monthly;
+                  }
+                }),
               ),
               // Raccourci vers l'ajout automatique : connexion à un
               // compte fournisseur ou services populaires pré-remplis —
@@ -882,6 +896,36 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         icon: const Icon(LucideIcons.x, size: 18),
                       ),
                   ],
+                ),
+              // Récurrence du rendez-vous : une fois, chaque jour à
+              // la même heure, chaque semaine (même jour/heure),
+              // chaque mois ou chaque année. Le backend fait avancer
+              // l'échéance à chaque « Terminé ».
+              if (_isEvent) const SizedBox(height: 8),
+              if (_isEvent)
+                DropdownButtonFormField<BillingCycle>(
+                  initialValue: _cycle,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: context.tr('form.recurrence'),
+                    prefixIcon: const Icon(LucideIcons.repeat, size: 18),
+                  ),
+                  items:
+                      const [
+                            BillingCycle.once,
+                            BillingCycle.daily,
+                            BillingCycle.weekly,
+                            BillingCycle.monthly,
+                            BillingCycle.yearly,
+                          ]
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(context.tr('cycle.${c.name}')),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (c) => setState(() => _cycle = c!),
                 ),
               const SizedBox(height: 8),
               Row(

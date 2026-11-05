@@ -427,6 +427,24 @@ def _advance_due(subscription):
         return
     today = _date.today()
     d = subscription.next_due_date
+    # Récurrences en jours : la date avance d'un pas fixe —
+    # même heure, même jour de semaine pour l'hebdo.
+    if subscription.cycle in ("daily", "weekly"):
+        from datetime import timedelta
+
+        step_days = 1 if subscription.cycle == "daily" else 7
+        guard = 0
+        while d <= today and guard < 800:
+            d = d + timedelta(days=step_days)
+            guard += 1
+        if subscription.end_date and d > subscription.end_date:
+            subscription.status = "paid"
+            subscription.save(update_fields=["status"])
+            return
+        subscription.next_due_date = d
+        subscription.status = "dueSoon"
+        subscription.save(update_fields=["next_due_date", "status"])
+        return
     step = {"monthly": 1, "quarterly": 3, "yearly": 12}.get(
         subscription.cycle, 1
     )

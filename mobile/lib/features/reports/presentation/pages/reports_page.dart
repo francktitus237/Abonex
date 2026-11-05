@@ -363,6 +363,9 @@ bool _dueInMonth(Subscription s, DateTime m) {
   }
   return switch (s.cycle) {
     BillingCycle.monthly => true,
+    // Quotidien et hebdomadaire : une échéance tombe forcément
+    // dans chaque mois.
+    BillingCycle.daily || BillingCycle.weekly => true,
     BillingCycle.quarterly =>
       ((m.year - d.year) * 12 + (m.month - d.month)) % 3 == 0,
     BillingCycle.yearly => m.month == d.month,
