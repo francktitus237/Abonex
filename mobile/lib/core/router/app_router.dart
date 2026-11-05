@@ -19,6 +19,7 @@ import '../../features/reports/presentation/pages/reports_page.dart';
 import '../../features/subscriptions/presentation/pages/subscription_detail_page.dart';
 import '../../features/subscriptions/presentation/pages/subscriptions_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
+import '../../features/workspace/presentation/pages/employees_page.dart';
 import '../../features/workspace/presentation/pages/integrations_page.dart';
 import '../storage/settings_storage.dart';
 import '../widgets/app_shell.dart';
@@ -51,6 +52,9 @@ abstract final class AppRoutes {
 
   /// Import CSV / connexions aux comptes fournisseurs.
   static const integrations = '/integrations';
+
+  /// Gestion des employés — espaces entreprise uniquement.
+  static const employees = '/employees';
 
   /// Détail d'un abonnement — `/subscriptions/42`.
   static String subscriptionDetail(String id) => '/subscriptions/$id';
@@ -208,6 +212,10 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.integrations,
         builder: (_, _) => const IntegrationsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.employees,
+        builder: (_, _) => const EmployeesPage(),
       ),
     ],
   );

@@ -501,8 +501,37 @@ abstract final class AppStrings {
     'profile.integrationsSub': 'Fichier CSV, comptes OVH/IONOS connectés',
     'profile.logout': 'Se déconnecter',
     'auth.verified': 'Adresse email vérifiée.',
+    'auth.personal': 'Personnel',
+    'auth.business': 'Entreprise',
+    'auth.personalHint':
+        'Suivez vos abonnements et rendez-vous perso.',
+    'auth.businessHint':
+        'Personnel + gestion des employés, rôles et '
+            'masse salariale.',
+    'emp.title': 'Employés',
+    'emp.empty': 'Aucun employé',
+    'emp.emptySub':
+        'Ajoutez vos employés — chaque paie devient une '
+            'échéance mensuelle suivie.',
+    'emp.add': 'Ajouter un employé',
+    'emp.edit': 'Modifier l\u2019employé',
+    'emp.name': 'Nom complet',
+    'emp.position': 'Poste / fonction',
+    'emp.salary': 'Salaire mensuel',
+    'emp.payDay': 'Jour de paie (jour du mois)',
+    'emp.active': 'Employé actif',
+    'emp.activeSub':
+        'Inactif : la paie n\u2019est plus suivie '
+            'comme échéance',
+    'emp.deleted': 'Employé supprimé.',
+    'emp.saved': 'Employé enregistré — paie suivie '
+        'automatiquement.',
+    'emp.payroll': 'Masse salariale : {amount}/mois',
     'auth.verifyFail': 'Lien de vérification invalide ou expiré.',
     'profile.dataSection': 'Données & compte',
+    'profile.employees': 'Employés',
+    'profile.employeesSub':
+        'Paies suivies comme échéances mensuelles',
     'profile.exportData': 'Exporter mes données (CSV)',
     'profile.exportDataSub':
         'Abonnements, paiements — format tableur',
@@ -1049,8 +1078,35 @@ abstract final class AppStrings {
     'profile.integrationsSub': 'CSV file, connected OVH/IONOS accounts',
     'profile.logout': 'Log out',
     'auth.verified': 'Email address verified.',
+    'auth.personal': 'Personal',
+    'auth.business': 'Business',
+    'auth.personalHint':
+        'Track your personal subscriptions and appointments.',
+    'auth.businessHint':
+        'Personal + employee management, roles and payroll.',
+    'emp.title': 'Employees',
+    'emp.empty': 'No employees',
+    'emp.emptySub':
+        'Add your employees — each payroll becomes a '
+            'tracked monthly due.',
+    'emp.add': 'Add an employee',
+    'emp.edit': 'Edit employee',
+    'emp.name': 'Full name',
+    'emp.position': 'Position / role',
+    'emp.salary': 'Monthly salary',
+    'emp.payDay': 'Pay day (day of month)',
+    'emp.active': 'Active employee',
+    'emp.activeSub':
+        'Inactive: payroll is no longer tracked as a due',
+    'emp.deleted': 'Employee deleted.',
+    'emp.saved': 'Employee saved — payroll tracked '
+        'automatically.',
+    'emp.payroll': 'Payroll: {amount}/month',
     'auth.verifyFail': 'Verification link invalid or expired.',
     'profile.dataSection': 'Data & account',
+    'profile.employees': 'Employees',
+    'profile.employeesSub':
+        'Payrolls tracked as monthly dues',
     'profile.exportData': 'Export my data (CSV)',
     'profile.exportDataSub':
         'Subscriptions, payments — spreadsheet format',

@@ -50,6 +50,7 @@ abstract class WorkspaceModel with _$WorkspaceModel {
   const factory WorkspaceModel({
     required String id,
     String? name,
+    @Default('personal') String kind,
     String? country,
     String? defaultCurrency,
     @Default([]) List<String> extraCurrencies,
@@ -62,6 +63,7 @@ abstract class WorkspaceModel with _$WorkspaceModel {
   Workspace toEntity() => Workspace(
     id: id,
     name: name,
+    kind: kind,
     country: country,
     defaultCurrency: defaultCurrency,
     extraCurrencies: extraCurrencies,

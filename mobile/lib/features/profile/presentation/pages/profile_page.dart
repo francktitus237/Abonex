@@ -124,6 +124,18 @@ class _ProfileView extends StatelessWidget {
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.integrations),
                 ),
+                // Espace entreprise : gestion des employés et
+                // de la masse salariale (paies = échéances payroll).
+                if (user.workspace?.isBusiness ?? false) ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.userRoundCog),
+                    title: Text(context.tr('profile.employees')),
+                    subtitle: Text(context.tr('profile.employeesSub')),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    onTap: () => context.push(AppRoutes.employees),
+                  ),
+                ],
               ],
             ),
           ),

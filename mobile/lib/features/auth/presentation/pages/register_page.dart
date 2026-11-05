@@ -35,6 +35,9 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _accepted = false;
   bool _submitting = false;
   String? _error;
+  // Type de compte : personnel (usage individuel) ou
+  // entreprise (employés, rôles, masse salariale).
+  bool _businessAccount = false;
   // Pays de l'utilisateur — pré-rempli depuis la locale du
   // téléphone ; détermine devise/langue côté serveur.
   late Country _country = _detectCountry();
@@ -74,6 +77,7 @@ class _RegisterPageState extends State<RegisterPage> {
       firstName: _firstName.text.trim(),
       lastName: _lastName.text.trim(),
       country: _country.code,
+      kind: _businessAccount ? 'business' : 'personal',
     );
 
     // Le router gère la redirection sur Authenticated — ici on
@@ -132,6 +136,40 @@ class _RegisterPageState extends State<RegisterPage> {
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
+                      const SizedBox(height: 20),
+
+                      // --- Type de compte ---
+                      SegmentedButton<bool>(
+                        segments: [
+                          ButtonSegment(
+                            value: false,
+                            icon: const Icon(LucideIcons.user, size: 17),
+                            label: Text(context.tr('auth.personal')),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            icon: const Icon(LucideIcons.building2, size: 17),
+                            label: Text(context.tr('auth.business')),
+                          ),
+                        ],
+                        selected: {_businessAccount},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (s) =>
+                            setState(() => _businessAccount = s.first),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        context.tr(
+                          _businessAccount
+                              ? 'auth.businessHint'
+                              : 'auth.personalHint',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+
                       const SizedBox(height: 28),
 
                       // --- Erreur serveur ---

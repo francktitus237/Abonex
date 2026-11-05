@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Payment, Subscription, Workspace
+from .models import Employee, Payment, Subscription, Workspace
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -10,7 +10,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workspace
         fields = [
-            "id", "name", "country", "default_currency",
+            "id", "name", "kind", "country", "default_currency",
             "extra_currencies", "configured",
         ]
         read_only_fields = ["id", "name"]
@@ -131,6 +131,19 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         if not data.get("country"):
             data["country"] = instance.workspace.country or ""
         return data
+
+
+class EmployeeSerializer(serializers.ModelSerializer):
+    """Employé d'un espace entreprise — l'abonnement payroll
+    généré n'est PAS exposé ici, il vit dans /subscriptions/."""
+
+    class Meta:
+        model = Employee
+        fields = [
+            "id", "name", "position", "salary", "currency",
+            "pay_day", "active", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
 
 
 class PaymentSerializer(serializers.ModelSerializer):

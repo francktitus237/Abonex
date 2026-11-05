@@ -15,7 +15,9 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Workspace {
 
- String get id; String? get name; String? get country; String? get defaultCurrency; List<String> get extraCurrencies; bool get configured;
+ String get id; String? get name;/// 'personal' | 'business' — espace entreprise = fonctionnalités
+/// supplémentaires (employés, rôles, suivi de la masse salariale).
+ String get kind; String? get country; String? get defaultCurrency; List<String> get extraCurrencies; bool get configured;
 /// Create a copy of Workspace
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -26,16 +28,16 @@ $WorkspaceCopyWith<Workspace> get copyWith => _$WorkspaceCopyWithImpl<Workspace>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Workspace&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.country, country) || other.country == country)&&(identical(other.defaultCurrency, defaultCurrency) || other.defaultCurrency == defaultCurrency)&&const DeepCollectionEquality().equals(other.extraCurrencies, extraCurrencies)&&(identical(other.configured, configured) || other.configured == configured));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Workspace&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.country, country) || other.country == country)&&(identical(other.defaultCurrency, defaultCurrency) || other.defaultCurrency == defaultCurrency)&&const DeepCollectionEquality().equals(other.extraCurrencies, extraCurrencies)&&(identical(other.configured, configured) || other.configured == configured));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,country,defaultCurrency,const DeepCollectionEquality().hash(extraCurrencies),configured);
+int get hashCode => Object.hash(runtimeType,id,name,kind,country,defaultCurrency,const DeepCollectionEquality().hash(extraCurrencies),configured);
 
 @override
 String toString() {
-  return 'Workspace(id: $id, name: $name, country: $country, defaultCurrency: $defaultCurrency, extraCurrencies: $extraCurrencies, configured: $configured)';
+  return 'Workspace(id: $id, name: $name, kind: $kind, country: $country, defaultCurrency: $defaultCurrency, extraCurrencies: $extraCurrencies, configured: $configured)';
 }
 
 
@@ -46,7 +48,7 @@ abstract mixin class $WorkspaceCopyWith<$Res>  {
   factory $WorkspaceCopyWith(Workspace value, $Res Function(Workspace) _then) = _$WorkspaceCopyWithImpl;
 @useResult
 $Res call({
- String id, String? name, String? country, String? defaultCurrency, List<String> extraCurrencies, bool configured
+ String id, String? name, String kind, String? country, String? defaultCurrency, List<String> extraCurrencies, bool configured
 });
 
 
@@ -63,11 +65,12 @@ class _$WorkspaceCopyWithImpl<$Res>
 
 /// Create a copy of Workspace
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = freezed,Object? country = freezed,Object? defaultCurrency = freezed,Object? extraCurrencies = null,Object? configured = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = freezed,Object? kind = null,Object? country = freezed,Object? defaultCurrency = freezed,Object? extraCurrencies = null,Object? configured = null,}) {
   return _then(Workspace(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
-as String?,country: freezed == country ? _self.country : country // ignore: cast_nullable_to_non_nullable
+as String?,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
+as String,country: freezed == country ? _self.country : country // ignore: cast_nullable_to_non_nullable
 as String?,defaultCurrency: freezed == defaultCurrency ? _self.defaultCurrency : defaultCurrency // ignore: cast_nullable_to_non_nullable
 as String?,extraCurrencies: null == extraCurrencies ? _self.extraCurrencies : extraCurrencies // ignore: cast_nullable_to_non_nullable
 as List<String>,configured: null == configured ? _self.configured : configured // ignore: cast_nullable_to_non_nullable
@@ -156,10 +159,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? name,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? name,  String kind,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Workspace() when $default != null:
-return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
+return $default(_that.id,_that.name,_that.kind,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
   return orElse();
 
 }
@@ -177,10 +180,10 @@ return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.ex
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? name,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? name,  String kind,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)  $default,) {final _that = this;
 switch (_that) {
 case _Workspace():
-return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
+return $default(_that.id,_that.name,_that.kind,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -197,10 +200,10 @@ return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.ex
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? name,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? name,  String kind,  String? country,  String? defaultCurrency,  List<String> extraCurrencies,  bool configured)?  $default,) {final _that = this;
 switch (_that) {
 case _Workspace() when $default != null:
-return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
+return $default(_that.id,_that.name,_that.kind,_that.country,_that.defaultCurrency,_that.extraCurrencies,_that.configured);case _:
   return null;
 
 }
@@ -212,11 +215,14 @@ return $default(_that.id,_that.name,_that.country,_that.defaultCurrency,_that.ex
 
 
 class _Workspace extends Workspace {
-  const _Workspace({required this.id, this.name, this.country, this.defaultCurrency,  List<String> extraCurrencies = const [], this.configured = false}): _extraCurrencies = extraCurrencies,super._();
+  const _Workspace({required this.id, this.name, this.kind = 'personal', this.country, this.defaultCurrency,  List<String> extraCurrencies = const [], this.configured = false}): _extraCurrencies = extraCurrencies,super._();
   
 
 @override final  String id;
 @override final  String? name;
+/// 'personal' | 'business' — espace entreprise = fonctionnalités
+/// supplémentaires (employés, rôles, suivi de la masse salariale).
+@override@JsonKey() final  String kind;
 @override final  String? country;
 @override final  String? defaultCurrency;
  final  List<String> _extraCurrencies;
@@ -238,16 +244,16 @@ _$WorkspaceCopyWith<_Workspace> get copyWith => __$WorkspaceCopyWithImpl<_Worksp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Workspace&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.country, country) || other.country == country)&&(identical(other.defaultCurrency, defaultCurrency) || other.defaultCurrency == defaultCurrency)&&const DeepCollectionEquality().equals(other._extraCurrencies, _extraCurrencies)&&(identical(other.configured, configured) || other.configured == configured));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Workspace&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.country, country) || other.country == country)&&(identical(other.defaultCurrency, defaultCurrency) || other.defaultCurrency == defaultCurrency)&&const DeepCollectionEquality().equals(other._extraCurrencies, _extraCurrencies)&&(identical(other.configured, configured) || other.configured == configured));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,country,defaultCurrency,const DeepCollectionEquality().hash(_extraCurrencies),configured);
+int get hashCode => Object.hash(runtimeType,id,name,kind,country,defaultCurrency,const DeepCollectionEquality().hash(_extraCurrencies),configured);
 
 @override
 String toString() {
-  return 'Workspace(id: $id, name: $name, country: $country, defaultCurrency: $defaultCurrency, extraCurrencies: $extraCurrencies, configured: $configured)';
+  return 'Workspace(id: $id, name: $name, kind: $kind, country: $country, defaultCurrency: $defaultCurrency, extraCurrencies: $extraCurrencies, configured: $configured)';
 }
 
 
@@ -258,7 +264,7 @@ abstract mixin class _$WorkspaceCopyWith<$Res> implements $WorkspaceCopyWith<$Re
   factory _$WorkspaceCopyWith(_Workspace value, $Res Function(_Workspace) _then) = __$WorkspaceCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String? name, String? country, String? defaultCurrency, List<String> extraCurrencies, bool configured
+ String id, String? name, String kind, String? country, String? defaultCurrency, List<String> extraCurrencies, bool configured
 });
 
 
@@ -275,11 +281,12 @@ class __$WorkspaceCopyWithImpl<$Res>
 
 /// Create a copy of Workspace
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = freezed,Object? country = freezed,Object? defaultCurrency = freezed,Object? extraCurrencies = null,Object? configured = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = freezed,Object? kind = null,Object? country = freezed,Object? defaultCurrency = freezed,Object? extraCurrencies = null,Object? configured = null,}) {
   return _then(_Workspace(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
-as String?,country: freezed == country ? _self.country : country // ignore: cast_nullable_to_non_nullable
+as String?,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
+as String,country: freezed == country ? _self.country : country // ignore: cast_nullable_to_non_nullable
 as String?,defaultCurrency: freezed == defaultCurrency ? _self.defaultCurrency : defaultCurrency // ignore: cast_nullable_to_non_nullable
 as String?,extraCurrencies: null == extraCurrencies ? _self._extraCurrencies : extraCurrencies // ignore: cast_nullable_to_non_nullable
 as List<String>,configured: null == configured ? _self.configured : configured // ignore: cast_nullable_to_non_nullable

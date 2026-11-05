@@ -30,12 +30,12 @@ from .connectors.powens import (
 )
 from .rates import rates_for
 from .models import (
-    Invitation, Payment, Profile, ProviderConnection,
+    Employee, Invitation, Payment, Profile, ProviderConnection,
     Subscription, Workspace,
 )
 from .serializers import (
-    PaymentSerializer, SubscriptionSerializer, UserSerializer,
-    WorkspaceSerializer, WorkspaceBudgetSerializer,
+    EmployeeSerializer, PaymentSerializer, SubscriptionSerializer,
+    UserSerializer, WorkspaceSerializer, WorkspaceBudgetSerializer,
 )
 
 
@@ -147,9 +147,11 @@ class RegisterView(APIView):
         # automatiquement : pas d'écran de setup supplémentaire,
         # l'espace est prêt à l'emploi dès le premier login.
         currency, language = COUNTRY_DEFAULTS.get(country, ("", "fr"))
+        kind = "business" if request.data.get("kind") == "business" else "personal"
         # L'inscrit est propriétaire de son propre espace de travail.
         workspace = Workspace.objects.create(
             name=f"Espace de {first_name or email}",
+            kind=kind,
             country=country if country in COUNTRY_DEFAULTS else "",
             default_currency=currency,
             configured=True,
@@ -442,6 +444,119 @@ class DeviceTokenView(APIView):
         if token and profile is not None:
             profile.fcm_token = token
             profile.save(update_fields=["fcm_token"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _employee_next_due(pay_day):
+    """Prochaine date de paie : le pay_day du mois courant s'il
+    n'est pas passé, sinon celui du mois suivant (jour clampé
+    sur les mois courts, ex. 31 → 28/29/30)."""
+    today = date.today()
+    day = min(max(1, int(pay_day)), _month_days(today.year, today.month))
+    d = date(today.year, today.month, day)
+    if d <= today:
+        month = today.month + 1
+        year = today.year + (month - 1) // 12
+        month = (month - 1) % 12 + 1
+        d = date(year, month, min(day, _month_days(year, month)))
+    return d
+
+
+def _sync_employee_subscription(employee, user):
+    """(Ré)génère l'abonnement payroll de l'employé. Inactif →
+    l'échéance disparaît du suivi (l'employé est conservé)."""
+    sub = employee.subscription
+    if not employee.active:
+        if sub is not None:
+            sub.delete()
+            employee.subscription = None
+            employee.save(update_fields=["subscription"])
+        return
+    due = _employee_next_due(employee.pay_day)
+    if sub is not None:
+        sub.name = f"Paie — {employee.name}"
+        sub.amount = employee.salary
+        sub.currency = employee.currency
+        sub.description = employee.position
+        sub.next_due_date = due
+        sub.save(
+            update_fields=[
+                "name", "amount", "currency", "description",
+                "next_due_date",
+            ]
+        )
+    else:
+        employee.subscription = Subscription.objects.create(
+            owner=user,
+            workspace=employee.workspace,
+            name=f"Paie — {employee.name}",
+            category="payroll",
+            amount=employee.salary,
+            currency=employee.currency,
+            description=employee.position,
+            next_due_date=due,
+            cycle="monthly",
+            status="dueSoon",
+        )
+        employee.save(update_fields=["subscription"])
+
+
+class EmployeeListCreateView(APIView):
+    """GET liste des employés de l'espace · POST crée un employé
+    (owner/manager via SubscriptionPermission) + sa paie payroll."""
+
+    permission_classes = [SubscriptionPermission]
+
+    def get(self, request):
+        ws = request.user.profile.workspace
+        return Response(
+            EmployeeSerializer(
+                ws.employees.all(), many=True
+            ).data
+        )
+
+    def post(self, request):
+        ws = request.user.profile.workspace
+        ser = EmployeeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        employee = ser.save(workspace=ws)
+        _sync_employee_subscription(employee, request.user)
+        return Response(
+            EmployeeSerializer(employee).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EmployeeDetailView(APIView):
+    """GET/PATCH un employé · DELETE retire l'employé ET son
+    échéance payroll (l'historique de paiements part avec —
+    comportement identique à la suppression d'abonnement)."""
+
+    permission_classes = [SubscriptionPermission]
+
+    def _employee(self, request, pk):
+        return get_object_or_404(
+            Employee, pk=pk, workspace=request.user.profile.workspace
+        )
+
+    def get(self, request, pk):
+        return Response(
+            EmployeeSerializer(self._employee(request, pk)).data
+        )
+
+    def patch(self, request, pk):
+        employee = self._employee(request, pk)
+        ser = EmployeeSerializer(employee, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        _sync_employee_subscription(employee, request.user)
+        return Response(EmployeeSerializer(employee).data)
+
+    def delete(self, request, pk):
+        employee = self._employee(request, pk)
+        if employee.subscription_id:
+            employee.subscription.delete()
+        employee.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

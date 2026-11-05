@@ -10,7 +10,17 @@ ROLES = [
 
 
 class Workspace(models.Model):
+    KINDS = [
+        ("personal", "Personnel"),
+        ("business", "Entreprise"),
+    ]
+
     name = models.CharField(max_length=120)
+    # Type de compte : personnel (usage individuel) ou
+    # entreprise (espace de travail + employés + rôles).
+    kind = models.CharField(
+        max_length=16, choices=KINDS, default="personal"
+    )
     # Configuration de premier démarrage : pays + devises.
     country = models.CharField(max_length=2, blank=True, default="")
     default_currency = models.CharField(max_length=8, blank=True, default="")
@@ -149,6 +159,36 @@ class Subscription(models.Model):
 
     class Meta:
         ordering = ["next_due_date"]
+
+
+class Employee(models.Model):
+    """Employé d'un espace entreprise. Sa paie génère un
+    abonnement 'payroll' mensuel suivi comme les autres
+    échéances — visible au dashboard, calendrier, rappels."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="employees"
+    )
+    name = models.CharField(max_length=120)
+    # Poste / fonction — rappelé dans la description de l'échéance.
+    position = models.CharField(max_length=120, blank=True)
+    salary = models.DecimalField(max_digits=14, decimal_places=2)
+    currency = models.CharField(max_length=8, default="XAF")
+    # Jour de paie mensuel (1-31, clampé sur les mois courts).
+    pay_day = models.PositiveSmallIntegerField(default=25)
+    active = models.BooleanField(default=True)
+    # Abonnement payroll généré — null si l'employé est inactif.
+    subscription = models.OneToOneField(
+        Subscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employee",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
 
 
 class Payment(models.Model):
