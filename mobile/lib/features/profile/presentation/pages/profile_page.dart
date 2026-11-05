@@ -957,6 +957,11 @@ class _RingtoneTileState extends State<_RingtoneTile> {
     final service = getIt<NotificationService>();
     var notifEnabled = await service.notificationsEnabled();
     var exactAllowed = await service.exactAlarmsAllowed();
+    // Sélection locale au dialogue : un tap sur un radio ne ferme
+    // plus le popup — l'utilisateur peut écouter CHAQUE sonnerie
+    // avant de valider. Déclaré hors du builder pour survivre aux
+    // reconstructions de StatefulBuilder.
+    var choice = _selected;
     if (!mounted) return;
     final chosen = await showDialog<String>(
       context: context,
@@ -1000,8 +1005,8 @@ class _RingtoneTileState extends State<_RingtoneTile> {
                   ),
                 ),
               RadioGroup<String>(
-                groupValue: _selected,
-                onChanged: (val) => Navigator.of(ctx).pop(val),
+                groupValue: choice,
+                onChanged: (val) => setD(() => choice = val ?? choice),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1107,11 +1112,14 @@ class _RingtoneTileState extends State<_RingtoneTile> {
                 child: Text(ctx.tr('alarm.enable')),
               ),
             TextButton(
-              // Aperçu : joue la sonnerie une fois. False = les
-              // notifications sont bloquées → on bascule sur
-              // l'avertissement au lieu d'un silence inexpliqué.
+              // Aperçu : joue la sonnerie SURVOLÉE (pas encore
+              // sauvegardée). False = notifications bloquées → on
+              // bascule sur l'avertissement au lieu d'un silence
+              // inexpliqué.
               onPressed: () async {
-                final ok = await service.previewAlarmSound();
+                final ok = await service.previewAlarmSound(
+                  soundKey: choice,
+                );
                 if (!ok) {
                   setD(() => notifEnabled = false);
                   if (mounted) {
@@ -1130,6 +1138,12 @@ class _RingtoneTileState extends State<_RingtoneTile> {
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: Text(ctx.tr('common.cancel')),
+            ),
+            // La confirmation est un bouton explicite : choisir un
+            // radio ne ferme plus le dialogue (écoute libre avant).
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(choice),
+              child: Text(ctx.tr('common.confirm')),
             ),
           ],
         ),

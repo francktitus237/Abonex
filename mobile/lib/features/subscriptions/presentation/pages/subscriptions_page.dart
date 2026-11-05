@@ -324,10 +324,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   List<Map<String, dynamic>> _providerSuggestions = [];
   bool _loadingProviders = true;
   bool _providerLoadFailed = false;
-  // Date de la PREMIÈRE échéance — peut être dans le passé
-  // (ex. serveur loué dimanche, saisi mercredi) : la prochaine
-  // échéance est alors calculée automatiquement.
-  DateTime _firstDue = DateTime.now().add(const Duration(days: 30));
+  // Date de la PREMIÈRE échéance — aujourd'hui par défaut. Elle
+  // peut être dans le passé (ex. serveur loué dimanche, saisi
+  // mercredi) : la prochaine échéance est alors calculée auto.
+  DateTime _firstDue = DateTime.now();
   // Heure du rendez-vous — null = journée entière.
   TimeOfDay? _dueTime;
   // Date de prise réelle de l'abonnement — null = inconnue.
