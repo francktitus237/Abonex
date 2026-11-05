@@ -8,7 +8,7 @@ import '../../../../core/utils/formatters.dart';
 /// vert = payé, orange = bientôt dû, rouge = en retard.
 enum SubscriptionStatus { paid, dueSoon, overdue }
 
-enum BillingCycle { monthly, quarterly, yearly, once }
+enum BillingCycle { monthly, quarterly, yearly, daily, weekly, once }
 
 /// Catégories d'abonnements (loyers, logiciels, assurances…).
 enum SubscriptionCategory {
@@ -135,6 +135,8 @@ class Subscription {
     BillingCycle.monthly => 'Monthly',
     BillingCycle.quarterly => 'Quarterly',
     BillingCycle.yearly => 'Yearly',
+    BillingCycle.daily => 'Daily',
+    BillingCycle.weekly => 'Weekly',
     BillingCycle.once => 'Once',
   };
 }
