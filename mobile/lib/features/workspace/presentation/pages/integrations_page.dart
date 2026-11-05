@@ -209,10 +209,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       );
       final params = Uri.parse(result).queryParameters;
       final code = params['code'];
-      // Le serveur exige le state renvoyé par Powens (anti-CSRF) —
-      // à défaut on retombe sur celui mémorisé à la demande.
-      final returnedState = params['state'] ?? state;
-      if (code == null || code.isEmpty) {
+      // Anti-CSRF : le state renvoyé par Powens DOIT correspondre
+      // exactement à celui émis par le serveur — pas de repli,
+      // sinon la vérification ne sert à rien.
+      final returnedState = params['state'];
+      if (code == null ||
+          code.isEmpty ||
+          returnedState == null ||
+          returnedState != state) {
         if (mounted) _toast(context.tr('bank.fail'), error: true);
         return;
       }

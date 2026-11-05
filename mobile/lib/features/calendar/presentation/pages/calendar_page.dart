@@ -14,6 +14,42 @@ import '../../../subscriptions/domain/entities/subscription.dart';
 import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../../../subscriptions/presentation/widgets/subscription_tile.dart';
 
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+int _monthDays(int year, int month) => DateTime(year, month + 1, 0).day;
+
+/// Occurrences d'une échéance sur le calendrier : la date exacte
+/// PLUS les projections futures des cycles récurrents — un RDV
+/// quotidien apparaît chaque jour, un loyer mensuel le même jour
+/// de chaque mois (jours clampés : 31 → 28/29/30 comme le backend).
+bool _occursOn(Subscription s, DateTime day) {
+  final d = s.nextDueDate;
+  if (_sameDay(d, day)) return true;
+  if (s.cycle == BillingCycle.once) return false;
+  final due = DateTime(d.year, d.month, d.day);
+  if (!day.isAfter(due)) return false;
+  final end = s.endDate;
+  if (end != null &&
+      day.isAfter(DateTime(end.year, end.month, end.day))) {
+    return false;
+  }
+  final monthDiff = (day.year - d.year) * 12 + (day.month - d.month);
+  return switch (s.cycle) {
+    BillingCycle.daily => true,
+    BillingCycle.weekly => day.difference(due).inDays % 7 == 0,
+    BillingCycle.monthly =>
+      day.day == d.day.clamp(1, _monthDays(day.year, day.month)),
+    BillingCycle.quarterly =>
+      monthDiff % 3 == 0 &&
+          day.day == d.day.clamp(1, _monthDays(day.year, day.month)),
+    BillingCycle.yearly =>
+      monthDiff % 12 == 0 &&
+          day.day == d.day.clamp(1, _monthDays(day.year, day.month)),
+    BillingCycle.once => false,
+  };
+}
+
 /// Onglet Calendrier : grille mensuelle, pastilles colorées par statut,
 /// détail du jour sélectionné.
 class CalendarPage extends StatefulWidget {
@@ -84,7 +120,7 @@ class _CalendarPageState extends State<CalendarPage> {
           final selected = _selectedDay;
           final dayItems = selected == null
               ? <Subscription>[]
-              : items.where((s) => _sameDay(s.nextDueDate, selected)).toList();
+              : items.where((s) => _occursOn(s, selected)).toList();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -190,8 +226,6 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class _MonthGrid extends StatelessWidget {
@@ -277,12 +311,7 @@ class _MonthGrid extends StatelessWidget {
         day.month == selected!.month &&
         day.day == selected!.day;
 
-    final dues = items.where(
-      (s) =>
-          s.nextDueDate.year == day.year &&
-          s.nextDueDate.month == day.month &&
-          s.nextDueDate.day == day.day,
-    );
+    final dues = items.where((s) => _occursOn(s, day));
 
     return GestureDetector(
       onTap: () => onSelect(day),

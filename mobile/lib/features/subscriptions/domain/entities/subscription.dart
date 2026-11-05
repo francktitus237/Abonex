@@ -111,9 +111,10 @@ class Subscription {
   /// Heure de l'échéance — renseignée pour les rendez-vous.
   final TimeOfDay? dueTime;
 
-  /// Rendez-vous / événement ponctuel (pas un abonnement facturé).
-  bool get isEvent =>
-      category == SubscriptionCategory.event || cycle == BillingCycle.once;
+  /// Rendez-vous / événement — uniquement la catégorie dédiée.
+  /// Un abonnement ponctuel (facture « une seule fois ») reste un
+  /// abonnement : il se « paie », il ne « se termine » pas.
+  bool get isEvent => category == SubscriptionCategory.event;
 
   /// Date + heure complètes de l'échéance (heure à minuit si absente).
   DateTime get dueAt => DateTime(

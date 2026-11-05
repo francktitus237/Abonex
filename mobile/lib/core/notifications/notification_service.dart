@@ -513,11 +513,15 @@ class NotificationService {
         () => _plugin.zonedSchedule(
           id: notifId,
           title: _t('ns.overdueTitle', {'name': sub.name}),
-          body: _t('ns.payBody', {
-                'provider': sub.provider,
-                'amount': AppFormatters.money(sub.amount, sub.currency),
-              }) +
-              _descSuffix(sub),
+          // Un rendez-vous en retard n'est pas « à payer » —
+          // on affiche sa date/heure et sa note, pas 0,00 €.
+          body: sub.isEvent
+              ? _eventBody(sub)
+              : _t('ns.payBody', {
+                      'provider': sub.provider,
+                      'amount': AppFormatters.money(sub.amount, sub.currency),
+                    }) +
+                    _descSuffix(sub),
           scheduledDate: when,
           notificationDetails: _notificationDetails,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

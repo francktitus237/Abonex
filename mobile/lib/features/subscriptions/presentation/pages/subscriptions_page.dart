@@ -35,6 +35,9 @@ class SubscriptionsPage extends StatefulWidget {
 class _SubscriptionsPageState extends State<SubscriptionsPage> {
   String _query = '';
   SubscriptionStatus? _filter;
+  // Onglet affiché : abonnements facturés ou rendez-vous —
+  // les deux ne se mélangent jamais dans la même liste.
+  bool _showEvents = false;
 
   @override
   void initState() {
@@ -90,6 +93,30 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Sélecteur de type : chaque onglet garde sa
+                // recherche et ses filtres de statut.
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<bool>(
+                    segments: [
+                      ButtonSegment(
+                        value: false,
+                        icon: const Icon(LucideIcons.repeat, size: 17),
+                        label: Text(context.tr('subs.tabSubs')),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: const Icon(LucideIcons.calendarClock, size: 17),
+                        label: Text(context.tr('subs.tabEvents')),
+                      ),
+                    ],
+                    selected: {_showEvents},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (s) =>
+                        setState(() => _showEvents = s.first),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -100,7 +127,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                         onTap: () => setState(() => _filter = null),
                       ),
                       _FilterChip(
-                        label: context.tr('filter.paid'),
+                        label: context.tr(
+                          _showEvents ? 'filter.done' : 'filter.paid',
+                        ),
                         selected: _filter == SubscriptionStatus.paid,
                         onTap: () =>
                             setState(() => _filter = SubscriptionStatus.paid),
@@ -162,6 +191,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   Widget _buildList(BuildContext context, List<Subscription> items) {
     final q = _query.trim().toLowerCase();
     final filtered = items.where((s) {
+      // Onglet courant : abonnements ou rendez-vous, jamais les deux.
+      if (s.isEvent != _showEvents) return false;
       final matchesQuery =
           q.isEmpty ||
           s.name.toLowerCase().contains(q) ||
@@ -185,6 +216,22 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
     }
     if (filtered.isEmpty) {
+      // Onglet vide sans recherche → invite à créer ce type
+      // d'élément plutôt qu'un « aucun résultat » trompeur.
+      final noItemsOfType = items.every((s) => s.isEvent != _showEvents);
+      if (noItemsOfType && q.isEmpty && _filter == null) {
+        return EmptyState(
+          icon: _showEvents ? LucideIcons.calendarClock : LucideIcons.repeat,
+          title: context.tr(
+            _showEvents ? 'subs.emptyEvents' : 'subs.emptySubs',
+          ),
+          action: FilledButton.icon(
+            onPressed: () => _showAddSheet(context),
+            icon: const Icon(LucideIcons.plus, size: 18),
+            label: Text(context.tr('common.add')),
+          ),
+        );
+      }
       return EmptyState(
         icon: LucideIcons.searchX,
         title: context.tr('subs.noResult'),
@@ -232,13 +279,18 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   }
 
   void _showAddSheet(BuildContext context) =>
-      showSubscriptionFormSheet(context);
+      showSubscriptionFormSheet(context, isEvent: _showEvents);
 }
 
 /// Ouvre le formulaire d'ajout/édition d'abonnement.
 /// Réutilisé par la page détail (bouton Modifier) : passer
-/// [existing] pour éditer, rien pour créer.
-void showSubscriptionFormSheet(BuildContext context, {Subscription? existing}) {
+/// [existing] pour éditer, rien pour créer. [isEvent] pré-sélectionne
+/// le type rendez-vous (ajout depuis l'onglet Rendez-vous).
+void showSubscriptionFormSheet(
+  BuildContext context, {
+  Subscription? existing,
+  bool isEvent = false,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -249,7 +301,7 @@ void showSubscriptionFormSheet(BuildContext context, {Subscription? existing}) {
     useRootNavigator: true,
     builder: (_) => BlocProvider.value(
       value: context.read<SubscriptionsCubit>(),
-      child: _AddSubscriptionSheet(existing: existing),
+      child: _AddSubscriptionSheet(existing: existing, isEvent: isEvent),
     ),
   );
 }
@@ -292,9 +344,13 @@ class _FilterChip extends StatelessWidget {
 /// Formulaire d'ajout/édition en bottom sheet — validé localement,
 /// envoyé au SubscriptionsCubit. [existing] non null = édition.
 class _AddSubscriptionSheet extends StatefulWidget {
-  const _AddSubscriptionSheet({this.existing});
+  const _AddSubscriptionSheet({this.existing, this.isEvent = false});
 
   final Subscription? existing;
+
+  /// Pré-sélection « Rendez-vous » quand on ajoute depuis
+  /// l'onglet dédié — l'utilisateur peut toujours basculer.
+  final bool isEvent;
 
   @override
   State<_AddSubscriptionSheet> createState() => _AddSubscriptionSheetState();
@@ -348,6 +404,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _currency = workspace!.defaultCurrency!;
     }
     _country = workspace?.country ?? '';
+    // Ajout depuis l'onglet Rendez-vous : type déjà choisi.
+    if (widget.isEvent && widget.existing == null) {
+      _isEvent = true;
+      _cycle = BillingCycle.once;
+    }
     // Mode édition : on pré-remplit tous les champs.
     final e = widget.existing;
     if (e != null) {

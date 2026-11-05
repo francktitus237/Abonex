@@ -142,6 +142,7 @@ abstract final class AppStrings {
     'subs.integrations': 'Import & intégrations',
     'filter.all': 'Tous',
     'filter.paid': 'Payés',
+    'filter.done': 'Terminés',
     'filter.dueSoon': 'À venir',
     'filter.overdue': 'En retard',
     'subs.empty': 'Aucun abonnement',
@@ -151,6 +152,10 @@ abstract final class AppStrings {
     'subs.addFirst': 'Ajouter un abonnement',
     'subs.noResult': 'Aucun résultat',
     'subs.noResultSub': 'Modifiez la recherche ou les filtres.',
+    'subs.tabSubs': 'Abonnements',
+    'subs.tabEvents': 'Rendez-vous',
+    'subs.emptySubs': 'Aucun abonnement pour le moment',
+    'subs.emptyEvents': 'Aucun rendez-vous pour le moment',
 
     // Abonnements — formulaire
     'form.editTitle': 'Modifier — {name}',
@@ -692,6 +697,7 @@ abstract final class AppStrings {
     'subs.integrations': 'Import & integrations',
     'filter.all': 'All',
     'filter.paid': 'Paid',
+    'filter.done': 'Done',
     'filter.dueSoon': 'Upcoming',
     'filter.overdue': 'Overdue',
     'subs.empty': 'No subscriptions',
@@ -699,6 +705,10 @@ abstract final class AppStrings {
     'subs.addFirst': 'Add a subscription',
     'subs.noResult': 'No results',
     'subs.noResultSub': 'Adjust the search or the filters.',
+    'subs.tabSubs': 'Subscriptions',
+    'subs.tabEvents': 'Appointments',
+    'subs.emptySubs': 'No subscriptions yet',
+    'subs.emptyEvents': 'No appointments yet',
 
     'form.editTitle': 'Edit — {name}',
     'form.newEvent': 'New event',
