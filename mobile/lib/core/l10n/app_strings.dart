@@ -34,6 +34,7 @@ abstract final class AppStrings {
 
     // Commun
     'common.cancel': 'Annuler',
+    'common.confirm': 'Valider',
     'common.retry': 'Réessayer',
     'common.refresh': 'Actualiser',
     'common.save': 'Enregistrer',
@@ -586,6 +587,7 @@ abstract final class AppStrings {
     'nav.notifications': 'Notifications',
 
     'common.cancel': 'Cancel',
+    'common.confirm': 'Confirm',
     'common.retry': 'Retry',
     'common.refresh': 'Refresh',
     'common.save': 'Save',

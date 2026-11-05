@@ -740,7 +740,9 @@ class _PresetSheetState extends State<_PresetSheet> {
   int _planIndex = 0;
   String _currency = 'EUR';
   BillingCycle _cycle = BillingCycle.monthly;
-  DateTime _date = DateTime.now().add(const Duration(days: 30));
+  // Première échéance : aujourd'hui par défaut — l'utilisateur
+  // ajuste si sa facturation démarre ailleurs.
+  DateTime _date = DateTime.now();
 
   List<Map<String, dynamic>> get _plans =>
       (widget.preset['plans'] as List).cast<Map<String, dynamic>>();

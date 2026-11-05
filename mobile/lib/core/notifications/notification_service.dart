@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show MethodChannel, rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -42,21 +45,25 @@ class NotificationService {
   static String _t(String key, [Map<String, String>? args]) =>
       AppStrings.t(AppFormatters.lang, key, args);
 
-  static const _channelId = 'abonex_due_reminders_v2';
+  // Suffixe _v3 : les canaux Android sont IMMUABLES — une version
+  // précédente a pu créer ces canaux avec une ressource sonore
+  // absente (APK antérieur à l'ajout des sonneries) ; ils resteraient
+  // silencieux à vie. Nouvel ID → canal recréé proprement.
+  static const _channelId = 'abonex_due_reminders_v3';
   static String get _channelName => _t('ns.channelReminders');
   static String get _channelDesc => _t('ns.channelRemindersDesc');
 
   // Canal "alarme" : notification plein écran par-dessus
   // l'écran verrouillé, sonnerie forte — impossible à manquer.
-  // Le suffixe _v2 invalide les anciens canaux : Android rend
+  // Le suffixe _v3 invalide les anciens canaux : Android rend
   // les attributs audio d'un canal immuables après sa création.
-  static const _urgentChannelId = 'abonex_urgent_v2';
+  static const _urgentChannelId = 'abonex_urgent_v3';
   static String get _urgentChannelName => _t('ns.channelUrgent');
   static String get _urgentChannelDesc => _t('ns.channelUrgentDesc');
 
   // Canal dédié aux rendez-vous : sonnerie d'alarme en boucle
   // jusqu'à ce que l'utilisateur arrête ou repousse.
-  static const _eventChannelId = 'abonex_event_alarm_v2';
+  static const _eventChannelId = 'abonex_event_alarm_v3';
   static String get _eventChannelName => _t('ns.channelEvent');
   static String get _eventChannelDesc => _t('ns.channelEventDesc');
 
@@ -98,27 +105,78 @@ class NotificationService {
     ),
   );
 
+  /// Canal natif vers MainActivity : copie d'un fichier audio dans
+  /// le MediaStore Android (URI content:// lisible par le système —
+  /// certains appareils refusent les sons android.resource:// sur
+  /// les canaux de notification).
+  static const _mediaStore = MethodChannel('abonex/media_store');
+
+  /// Garantit qu'une sonnerie INTÉGRÉE existe dans le MediaStore et
+  /// retourne son URI content:// (cache dans les préférences — la
+  /// copie n'est faite qu'une fois). Retourne null en cas d'échec
+  /// (isolate de fond sans accès assets/canal → repli res/raw).
+  static Future<String?> _builtinMediaStoreUri(String key) async {
+    const prefKey = 'alarm_ms_uri_';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('$prefKey$key');
+      if (cached != null && cached.startsWith('content://')) {
+        return cached;
+      }
+      final bytes = await rootBundle.load('assets/sounds/alarm_$key.wav');
+      final dir = await getApplicationSupportDirectory();
+      final tmp = File('${dir.path}/alarm_$key.wav');
+      await tmp.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+      final uri = await _mediaStore.invokeMethod<String>('importSound', {
+        'path': tmp.path,
+        'name': 'builtin_$key',
+      });
+      if (uri != null && uri.startsWith('content://')) {
+        await prefs.setString('$prefKey$key', uri);
+        return uri;
+      }
+    } catch (e) {
+      debugPrint('Abonex: copie MediaStore de la sonnerie $key — $e');
+    }
+    return null;
+  }
+
   /// Canal + son selon la sonnerie choisie par l'utilisateur.
   /// Android grave le son dans le canal à sa création : un ID
   /// distinct par choix est requis (le son d'un canal existant
   /// est immuable côté système).
   static Future<(String, AndroidNotificationSound?)> _alarmChannelFor(
-    String base,
-  ) async {
-    var sel = 'default';
+    String base, {
+    /// Permet d'écouter une sonnerie qui n'est pas encore celle
+    /// sauvegardée (sélection survolée dans le dialogue).
+    String? selection,
+  }) async {
+    var sel = selection ?? 'default';
     String? customPath;
     var rev = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
-      sel = prefs.getString(SettingsStorage.kAlarmSound) ?? 'default';
+      sel = selection ?? prefs.getString(SettingsStorage.kAlarmSound) ?? 'default';
       customPath = prefs.getString(SettingsStorage.kAlarmCustomPath);
       rev = prefs.getInt(SettingsStorage.kAlarmCustomRev) ?? 0;
     } catch (_) {}
+    // Sonneries intégrées : de préférence une copie MediaStore en
+    // content:// — certains téléphones (XOS notamment) refusent de
+    // jouer les sons android.resource:// sur les canaux, alors que
+    // content:// fonctionne (c'est le chemin de l'import, éprouvé).
+    // Suffixe _ms dans l'ID de canal : un éventuel canal cassé créé
+    // avec res/raw n'est jamais réutilisé.
+    if (sel == 'classic' || sel == 'digital' || sel == 'chime') {
+      final msUri = await _builtinMediaStoreUri(sel);
+      if (msUri != null) {
+        return ('${base}_${sel}_ms', UriAndroidNotificationSound(msUri));
+      }
+      return (
+        '${base}_$sel',
+        RawResourceAndroidNotificationSound('alarm_$sel'),
+      );
+    }
     return switch (sel) {
-      'classic' || 'digital' || 'chime' => (
-          '${base}_$sel',
-          RawResourceAndroidNotificationSound('alarm_$sel'),
-        ),
       'custom' when customPath != null => (
           '${base}_custom_$rev',
           // content:// (MediaStore, lisible par le système) ou
@@ -775,10 +833,11 @@ class NotificationService {
   /// Canal en usage "notification" (pas "alarme") : le volume suivi
   /// est celui que l'utilisateur règle naturellement — sinon un
   /// volume « Alarme » à 0 rend l'aperçu muet et semble cassé.
-  Future<bool> previewAlarmSound() async {
+  Future<bool> previewAlarmSound({String? soundKey}) async {
     if (!await notificationsEnabled()) return false;
     final (channelId, sound) = await _alarmChannelFor(
-      'abonex_alarm_preview_v2',
+      'abonex_alarm_preview_v3',
+      selection: soundKey,
     );
     await _createChannel(
       _plugin,
