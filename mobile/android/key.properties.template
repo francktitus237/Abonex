@@ -1,0 +1,8 @@
+# Copier ce fichier en key.properties (jamais commité) et
+# remplir avec le keystore de production :
+#   keytool -genkey -v -keystore app/abonex.jks -keyalg RSA \
+#     -keysize 2048 -validity 10000 -alias abonex
+storeFile=abonex.jks
+storePassword=MOT_DE_PASSE_KEYSTORE
+keyAlias=abonex
+keyPassword=MOT_DE_PASSE_CLE

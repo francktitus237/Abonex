@@ -33,6 +33,12 @@ abstract final class ApiEndpoints {
   /// POST /subscriptions/bulk/ — import en masse.
   static const subscriptionsBulk = 'subscriptions/bulk/';
 
+  /// GET /export/csv/ — export RGPD/compta de toutes les données.
+  static const exportCsv = 'export/csv/';
+
+  /// POST /devices/ — enregistre le jeton FCM de l'appareil.
+  static const devices = 'devices/';
+
   /// Configuration de premier démarrage : pays, devises, langue.
   static const workspaceSetup = 'workspace/setup/';
 

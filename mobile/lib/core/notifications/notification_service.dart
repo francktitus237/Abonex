@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show MethodChannel, rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,9 +14,11 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/subscriptions/domain/entities/subscription.dart';
+import '../config/env.dart';
 import '../di/injection.dart';
 import '../l10n/app_strings.dart';
 import '../storage/settings_storage.dart';
+import '../storage/token_storage.dart';
 import '../utils/formatters.dart';
 
 /// Action sur l'alarme de rendez-vous reçue hors de l'app (app
@@ -21,6 +26,12 @@ import '../utils/formatters.dart';
 /// d'où l'annotation et l'initialisation locale du fuseau horaire.
 @pragma('vm:entry-point')
 Future<void> onBackgroundNotificationResponse(NotificationResponse r) async {
+  // « Payé/Terminé » depuis la notification : appel API direct
+  // depuis l'isolate — l'app n'a pas besoin de s'ouvrir.
+  if (r.actionId == NotificationService.actionMarkPaid) {
+    await NotificationService.markPaidFromPayload(r.payload);
+    return;
+  }
   if (r.actionId != NotificationService.actionSnooze) return;
   tz_data.initializeTimeZones();
   try {
@@ -69,6 +80,9 @@ class NotificationService {
 
   static const actionStop = 'stop';
   static const actionSnooze = 'snooze';
+  // « Marquer payé/terminé » — action sans interface, traitée
+  // en isolate de fond (appel API authentifié).
+  static const actionMarkPaid = 'mark_paid';
   static const _snoozeDuration = Duration(minutes: 10);
 
   // Plages d'identifiants : rappels classiques 0-149, rappels de
@@ -202,8 +216,9 @@ class NotificationService {
 
   static NotificationDetails _urgentDetails(
     String channelId,
-    AndroidNotificationSound? sound,
-  ) => NotificationDetails(
+    AndroidNotificationSound? sound, {
+    bool isEvent = false,
+  }) => NotificationDetails(
     android: AndroidNotificationDetails(
       channelId,
       _urgentChannelName,
@@ -229,8 +244,9 @@ class NotificationService {
 
   static NotificationDetails _eventAlarmDetails(
     String channelId,
-    AndroidNotificationSound? sound,
-  ) => NotificationDetails(
+    AndroidNotificationSound? sound, {
+    required bool isEvent,
+  }) => NotificationDetails(
     android: AndroidNotificationDetails(
       channelId,
       _eventChannelName,
@@ -251,6 +267,12 @@ class NotificationService {
         AndroidNotificationAction(
           actionSnooze,
           _t('ns.snooze'),
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        AndroidNotificationAction(
+          actionMarkPaid,
+          isEvent ? _t('ns.markDone') : _t('ns.markPaid'),
           showsUserInterface: false,
           cancelNotification: true,
         ),
@@ -367,6 +389,7 @@ class NotificationService {
   /// Action sur l'alarme quand l'app est au premier plan.
   Future<void> _onResponse(NotificationResponse r) async {
     if (r.actionId == actionSnooze) await snoozeFromPayload(r.payload);
+    if (r.actionId == actionMarkPaid) await markPaidFromPayload(r.payload);
   }
 
   /// Un plantage de planification sur UNE échéance ne doit jamais
@@ -425,7 +448,13 @@ class NotificationService {
         sound: urgentSound,
       ),
     );
-    final urgentDetails = _urgentDetails(urgentChannel, urgentSound);
+    // Détails par type : le libellé de l'action diffère
+    // (« Marquer payé » vs « Marquer terminé »).
+    NotificationDetails urgentDetails(Subscription s) => _urgentDetails(
+      urgentChannel,
+      urgentSound,
+      isEvent: s.isEvent,
+    );
     var id = 0;
     // Déduplique les jours choisis (ex. J-7 et J tombant le même
     // jour ne doivent produire qu'UN rappel).
@@ -481,7 +510,7 @@ class NotificationService {
             scheduledDate: when,
             // Jour J + rappels sonores activés → alarme plein écran.
             notificationDetails: urgent && daysBefore == 0
-                ? urgentDetails
+                ? urgentDetails(sub)
                 : _notificationDetails,
             androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
             payload: 'subscription:${sub.id}',
@@ -599,6 +628,7 @@ class NotificationService {
         title: title,
         body: body,
         when: when,
+        isEvent: sub.isEvent,
         payload: _eventPayload(sub.id, sub.name, title, body),
       );
     }
@@ -644,6 +674,35 @@ class NotificationService {
 
   /// Repousse l'alarme de 10 minutes à partir du payload reçu.
   /// Statique : utilisable depuis l'isolate de fond.
+  /// « Marquer payé » depuis la notification — PATCH direct
+  /// sur l'API avec le token sécurisé (fonctionne app fermée).
+  /// Échec silencieux : la prochaine ouverture resynchronise.
+  static Future<void> markPaidFromPayload(String? payload) async {
+    if (payload == null) return;
+    // Deux formats : 'subscription:<id>' (rappels) et
+    // 'event:<id>\x01<nom>\x01…' (alarmes plein écran).
+    String? id;
+    if (payload.startsWith('subscription:')) {
+      id = payload.substring('subscription:'.length);
+    } else if (payload.startsWith('event:')) {
+      id = payload.substring('event:'.length).split('').first;
+    }
+    if (id == null || id.isEmpty || id == 'test') return;
+    try {
+      final token = await TokenStorage(
+        const FlutterSecureStorage(),
+      ).readAccessToken();
+      if (token == null) return;
+      final base =
+          Env.apiBaseUrl.endsWith('/') ? Env.apiBaseUrl : '${Env.apiBaseUrl}/';
+      await Dio().patch<void>(
+        '${base}subscriptions/$id/',
+        data: {'status': 'paid'},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } catch (_) {}
+  }
+
   static Future<void> snoozeFromPayload(String? payload) async {
     if (payload == null || !payload.startsWith('event:')) return;
     final parts = payload.substring(6).split('\u0001');
@@ -684,6 +743,9 @@ class NotificationService {
     required String body,
     required tz.TZDateTime when,
     required String payload,
+    // Libellé de l'action : « Terminé » pour les RDV,
+    // « Payé » pour les abonnements facturés.
+    bool isEvent = true,
   }) async {
     final (channelId, sound) = await _alarmChannelFor(_eventChannelId);
     await _createChannel(
@@ -699,7 +761,11 @@ class NotificationService {
         sound: sound,
       ),
     );
-    final details = _eventAlarmDetails(channelId, sound);
+    final details = _eventAlarmDetails(
+      channelId,
+      sound,
+      isEvent: isEvent,
+    );
     Future<void> schedule(AndroidScheduleMode mode) => plugin.zonedSchedule(
       id: id,
       title: title,

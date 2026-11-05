@@ -36,6 +36,10 @@ class Profile(models.Model):
     # Photo de profil uploadée par l'utilisateur (FileField :
     # aucune dépendance Pillow — validation type/taille à la vue).
     avatar = models.FileField(upload_to="avatars/", blank=True)
+    # Adresse confirmée par lien email (anti-comptes bidons).
+    email_verified = models.BooleanField(default=False)
+    # Jeton FCM du dernier appareil connecté — notifications push.
+    fcm_token = models.CharField(max_length=255, blank=True, default="")
 
 
 class Invitation(models.Model):

@@ -20,6 +20,22 @@ class WorkspaceRemoteDataSource {
     await _dio.patch<void>('workspace/budget/', data: {'monthly_budget': amount});
   }
 
+  /// GET /export/csv/ → télécharge le CSV des données de
+  /// l'espace dans [savePath] (export RGPD / compta).
+  Future<String> exportCsv(String savePath) async {
+    await _dio.download(ApiEndpoints.exportCsv, savePath);
+    return savePath;
+  }
+
+  /// DELETE /auth/me/ {password} — suppression définitive
+  /// du compte (le mot de passe confirme l'action côté API).
+  Future<void> deleteAccount(String password) async {
+    await _dio.delete<void>(
+      ApiEndpoints.me,
+      data: {'password': password},
+    );
+  }
+
   /// PATCH /workspace/setup/ → user mis à jour (avec workspace).
   Future<UserModel> setup({
     required String country,

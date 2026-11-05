@@ -1,14 +1,18 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:toastification/toastification.dart';
 
+import 'core/config/env.dart';
 import 'core/di/injection.dart';
+import 'core/l10n/app_strings.dart';
 import 'core/router/app_router.dart';
+import 'core/utils/formatters.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/cubit/auth_cubit.dart';
 import 'features/settings/presentation/cubit/settings_cubit.dart';
@@ -67,6 +71,36 @@ class _AbonexAppState extends State<AbonexApp> {
         } else {
           router.go(AppRoutes.resetPassword);
         }
+      case 'verify':
+        // Lien de confirmation d'email : appel direct au
+        // backend (AllowAny — pas besoin de session).
+        if (uri.pathSegments.length >= 2) {
+          _verifyEmail(uri.pathSegments[0], uri.pathSegments[1]);
+        }
+    }
+  }
+
+  /// `GET /auth/verify/…/…` puis toast du résultat —
+  /// l'utilisateur est déjà dans l'app, inutile de naviguer.
+  Future<void> _verifyEmail(String uid, String token) async {
+    final messenger = toastification;
+    try {
+      final base =
+          Env.apiBaseUrl.endsWith('/') ? Env.apiBaseUrl : '${Env.apiBaseUrl}/';
+      await Dio().get<void>('${base}auth/verify/$uid/$token/');
+      messenger.show(
+        type: ToastificationType.success,
+        style: ToastificationStyle.flat,
+        title: Text(AppStrings.t(AppFormatters.lang, 'auth.verified')),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    } catch (_) {
+      messenger.show(
+        type: ToastificationType.error,
+        style: ToastificationStyle.flat,
+        title: Text(AppStrings.t(AppFormatters.lang, 'auth.verifyFail')),
+        autoCloseDuration: const Duration(seconds: 4),
+      );
     }
   }
 

@@ -12,6 +12,13 @@ urlpatterns = [
     path("auth/password/change/", views.ChangePasswordView.as_view()),
     path("auth/password/forgot/", views.ForgotPasswordView.as_view()),
     path("auth/password/reset/", views.ResetPasswordView.as_view()),
+    path("auth/verify/resend/", views.ResendVerifyEmailView.as_view()),
+    path(
+        "auth/verify/<str:uid>/<str:token>/",
+        views.VerifyEmailView.as_view(),
+    ),
+    path("devices/", views.DeviceTokenView.as_view()),
+    path("export/csv/", views.ExportCsvView.as_view()),
     path("users/", views.UserListView.as_view()),
     path("users/<int:pk>/", views.UserDetailView.as_view()),
     path(
