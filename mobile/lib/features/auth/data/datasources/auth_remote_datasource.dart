@@ -21,6 +21,10 @@ abstract class AuthRemoteDataSource {
     String? firstName,
     String? lastName,
     String? country,
+
+    /// 'personal' | 'business' — type de compte choisi à
+    /// l'inscription (espace entreprise = employés + rôles).
+    String? kind,
   });
 
   /// GET /auth/me/ → user
@@ -77,6 +81,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String? firstName,
     String? lastName,
     String? country,
+    String? kind,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.register,
@@ -86,6 +91,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'first_name': ?firstName,
         'last_name': ?lastName,
         'country': ?country,
+        'kind': ?kind,
       },
     );
     final data = res.data!;

@@ -20,6 +20,47 @@ class WorkspaceRemoteDataSource {
     await _dio.patch<void>('workspace/budget/', data: {'monthly_budget': amount});
   }
 
+  // ---------- Employés (espaces entreprise) ----------
+
+  /// GET /employees/ → employés de l'espace courant.
+  Future<List<Map<String, dynamic>>> employees() async {
+    final res = await _dio.get<dynamic>('employees/');
+    final raw = res.data;
+    final items = raw is Map<String, dynamic>
+        ? raw['results'] as List<dynamic>
+        : raw as List<dynamic>;
+    return items.cast<Map<String, dynamic>>();
+  }
+
+  /// POST /employees/ — crée l'employé + sa paie payroll.
+  Future<Map<String, dynamic>> createEmployee(
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'employees/',
+      data: payload,
+    );
+    return res.data!;
+  }
+
+  /// PATCH /employees/ID/ — met à jour + resynchronise la paie.
+  Future<Map<String, dynamic>> updateEmployee(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      'employees/$id/',
+      data: payload,
+    );
+    return res.data!;
+  }
+
+  /// DELETE /employees/ID/ — supprime l'employé et son
+  /// échéance payroll associée.
+  Future<void> deleteEmployee(String id) async {
+    await _dio.delete<void>('employees/$id/');
+  }
+
   /// GET /export/csv/ → télécharge le CSV des données de
   /// l'espace dans [savePath] (export RGPD / compta).
   Future<String> exportCsv(String savePath) async {

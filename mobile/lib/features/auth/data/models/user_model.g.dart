@@ -42,6 +42,7 @@ _WorkspaceModel _$WorkspaceModelFromJson(Map<String, dynamic> json) =>
     _WorkspaceModel(
       id: json['id'] as String,
       name: json['name'] as String?,
+      kind: json['kind'] as String? ?? 'personal',
       country: json['country'] as String?,
       defaultCurrency: json['default_currency'] as String?,
       extraCurrencies:
@@ -56,6 +57,7 @@ Map<String, dynamic> _$WorkspaceModelToJson(_WorkspaceModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'name': instance.name,
+      'kind': instance.kind,
       'country': instance.country,
       'default_currency': instance.defaultCurrency,
       'extra_currencies': instance.extraCurrencies,

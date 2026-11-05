@@ -16,6 +16,7 @@ abstract class AuthRepository {
     String? firstName,
     String? lastName,
     String? country,
+    String? kind,
   });
 
   /// User courant : /auth/me/ en priorité, cache local en fallback

@@ -65,11 +65,17 @@ abstract class Workspace with _$Workspace {
   const factory Workspace({
     required String id,
     String? name,
+
+    /// 'personal' | 'business' — espace entreprise = fonctionnalités
+    /// supplémentaires (employés, rôles, suivi de la masse salariale).
+    @Default('personal') String kind,
     String? country,
     String? defaultCurrency,
     @Default([]) List<String> extraCurrencies,
     @Default(false) bool configured,
   }) = _Workspace;
+
+  bool get isBusiness => kind == 'business';
 }
 
 /// Utilisateur authentifié — entité du domaine, indépendante du JSON.

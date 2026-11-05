@@ -19,6 +19,11 @@ urlpatterns = [
     ),
     path("devices/", views.DeviceTokenView.as_view()),
     path("export/csv/", views.ExportCsvView.as_view()),
+    path("employees/", views.EmployeeListCreateView.as_view()),
+    path(
+        "employees/<int:pk>/",
+        views.EmployeeDetailView.as_view(),
+    ),
     path("users/", views.UserListView.as_view()),
     path("users/<int:pk>/", views.UserDetailView.as_view()),
     path(

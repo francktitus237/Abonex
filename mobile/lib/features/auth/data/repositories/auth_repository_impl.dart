@@ -40,6 +40,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? firstName,
     String? lastName,
     String? country,
+    String? kind,
   }) async {
     try {
       final session = await _remote.register(
@@ -48,6 +49,7 @@ class AuthRepositoryImpl implements AuthRepository {
         firstName: firstName,
         lastName: lastName,
         country: country,
+        kind: kind,
       );
       await _local.saveSession(tokens: session.tokens, user: session.user);
       return Ok(session.user.toEntity());
