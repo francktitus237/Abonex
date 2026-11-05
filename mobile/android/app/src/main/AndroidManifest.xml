@@ -62,6 +62,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="abonex" android:host="invite" />
                 <data android:scheme="abonex" android:host="reset" />
+                <data android:scheme="abonex" android:host="verify" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -188,6 +188,18 @@ class MeView(APIView):
     def get(self, request):
         return self._serialize(request)
 
+    def delete(self, request):
+        """DELETE /auth/me/ {password} — suppression définitive
+        du compte (RGPD). Le mot de passe confirme l'action."""
+        password = request.data.get("password") or ""
+        if not request.user.check_password(password):
+            return Response(
+                {"password": "Mot de passe incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        request.user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def patch(self, request):
         user = request.user
         data = request.data
@@ -366,6 +378,119 @@ class ResetPasswordView(APIView):
         for outstanding in OutstandingToken.objects.filter(user=user):
             BlacklistedToken.objects.get_or_create(token=outstanding)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _send_verify_email(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    link = f"abonex://verify/{uid}/{default_token_generator.make_token(user)}"
+    send_mail(
+        "Abonex — Confirmez votre adresse email",
+        f"Bonjour,\n\nConfirmez votre adresse en ouvrant ce lien "
+        f"dans l'application :\n{link}\n\n— L'équipe Abonex",
+        None,
+        [user.email],
+        fail_silently=True,
+    )
+
+
+class VerifyEmailView(APIView):
+    """GET /auth/verify/<uid>/<token> — confirme l'adresse email.
+    Même générateur de tokens que le reset de mot de passe."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, uid, token):
+        try:
+            user = User.objects.get(
+                pk=force_str(urlsafe_base64_decode(uid))
+            )
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+        if user is None or not default_token_generator.check_token(
+            user, token
+        ):
+            return Response(
+                {"token": "Lien invalide ou expiré."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile = getattr(user, "profile", None)
+        if profile is not None:
+            profile.email_verified = True
+            profile.save(update_fields=["email_verified"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResendVerifyEmailView(APIView):
+    """POST /auth/verify/resend/ — renvoie le lien de vérification
+    (appelé aussi juste après l'inscription)."""
+
+    def post(self, request):
+        profile = getattr(request.user, "profile", None)
+        if profile is None or profile.email_verified:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        _send_verify_email(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DeviceTokenView(APIView):
+    """POST /devices/ {token} — enregistre le jeton FCM de
+    l'appareil pour les notifications push serveur."""
+
+    def post(self, request):
+        token = (request.data.get("token") or "").strip()[:255]
+        profile = getattr(request.user, "profile", None)
+        if token and profile is not None:
+            profile.fcm_token = token
+            profile.save(update_fields=["fcm_token"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ExportCsvView(APIView):
+    """GET /export/csv/ — export RGPD + comptabilité : toutes les
+    données de l'espace courant en CSV (abonnements + paiements)."""
+
+    def get(self, request):
+        import csv
+        import io
+
+        ws = request.user.profile.workspace
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(
+            [
+                "type", "id", "name", "provider", "category", "cycle",
+                "amount", "currency", "status", "due_date", "due_time",
+                "paid_at", "country", "description",
+            ]
+        )
+        for s in Subscription.objects.filter(workspace=ws):
+            w.writerow(
+                [
+                    "subscription", s.pk, s.name, s.provider, s.category,
+                    s.cycle, s.amount, s.currency, s.status,
+                    s.next_due_date, s.due_time or "", "", s.country,
+                    s.description,
+                ]
+            )
+        for p in Payment.objects.filter(
+            workspace=ws
+        ).select_related("subscription", "recorded_by"):
+            w.writerow(
+                [
+                    "payment", p.pk, p.subscription.name, "", "", "",
+                    p.amount, p.subscription.currency, "paid", p.due_date,
+                    "", p.paid_at, "", "",
+                ]
+            )
+        from django.http import HttpResponse
+
+        resp = HttpResponse(
+            buf.getvalue(), content_type="text/csv; charset=utf-8"
+        )
+        resp["Content-Disposition"] = (
+            'attachment; filename="abonex_export.csv"'
+        )
+        return resp
 
 
 class UserListView(generics.ListAPIView):

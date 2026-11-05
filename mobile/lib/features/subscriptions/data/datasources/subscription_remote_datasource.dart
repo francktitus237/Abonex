@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/api_endpoints.dart';
 import '../models/subscription_model.dart';
@@ -19,17 +23,35 @@ class SubscriptionRemoteDataSourceImpl
 
   final Dio _dio;
 
+  static const _cacheKey = 'cache.subscriptions.v1';
+
   @override
   Future<List<SubscriptionModel>> list() async {
-    final res = await _dio.get<dynamic>(ApiEndpoints.subscriptions);
-    final raw = res.data;
-    // DRF paginé {results: [...]} ou liste brute — on gère les deux.
-    final items = raw is Map<String, dynamic>
-        ? raw['results'] as List<dynamic>
-        : raw as List<dynamic>;
-    return items
-        .map((e) => SubscriptionModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+    try {
+      final res = await _dio.get<dynamic>(ApiEndpoints.subscriptions);
+      final raw = res.data;
+      // DRF paginé {results: [...]} ou liste brute — on gère les deux.
+      final items = raw is Map<String, dynamic>
+          ? raw['results'] as List<dynamic>
+          : raw as List<dynamic>;
+      // Cache offline : la dernière réponse réussie est persistée —
+      // hors-ligne ou serveur down, l'app reste utilisable en lecture.
+      unawaited(
+        SharedPreferences.getInstance().then(
+          (p) => p.setString(_cacheKey, jsonEncode(items)),
+        ),
+      );
+      return items
+          .map((e) => SubscriptionModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException {
+      final cached = (await SharedPreferences.getInstance())
+          .getString(_cacheKey);
+      if (cached == null) rethrow;
+      return (jsonDecode(cached) as List<dynamic>)
+          .map((e) => SubscriptionModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
   }
 
   @override

@@ -286,6 +286,8 @@ abstract final class AppStrings {
         'Pensez à ajouter vos nouvelles factures et abonnements pour '
         'un suivi complet.',
     'ns.overdueTitle': 'Toujours en retard : {name}',
+    'ns.markPaid': 'Marquer payé',
+    'ns.markDone': 'Marquer terminé',
     'ns.channelReminders': 'Rappels importants',
     'ns.channelRemindersDesc':
         'Alertes sonores avant les paiements et rappels de suivi.',
@@ -498,6 +500,23 @@ abstract final class AppStrings {
     'profile.integrations': 'Import & intégrations',
     'profile.integrationsSub': 'Fichier CSV, comptes OVH/IONOS connectés',
     'profile.logout': 'Se déconnecter',
+    'auth.verified': 'Adresse email vérifiée.',
+    'auth.verifyFail': 'Lien de vérification invalide ou expiré.',
+    'profile.dataSection': 'Données & compte',
+    'profile.exportData': 'Exporter mes données (CSV)',
+    'profile.exportDataSub':
+        'Abonnements, paiements — format tableur',
+    'profile.exportFail': "L'export a échoué.",
+    'profile.deleteAccount': 'Supprimer le compte',
+    'profile.deleteAccountSub':
+        'Définitif — toutes vos données sont effacées',
+    'profile.deleteWarn':
+        'Cette action est irréversible : abonnements, '
+            'paiements et espace de travail seront supprimés. '
+            'Confirmez avec votre mot de passe.',
+    'profile.deleted': 'Compte supprimé.',
+    'profile.deleteFail': 'Suppression impossible : '
+        'vérifiez le mot de passe.',
     'profile.edit': 'Modifier le profil',
     'profile.firstName': 'Prénom',
     'profile.lastName': 'Nom',
@@ -830,6 +849,8 @@ abstract final class AppStrings {
         'Remember to add your new bills and subscriptions for '
         'complete tracking.',
     'ns.overdueTitle': 'Still overdue: {name}',
+    'ns.markPaid': 'Mark as paid',
+    'ns.markDone': 'Mark as done',
     'ns.channelReminders': 'Important reminders',
     'ns.channelRemindersDesc':
         'Sound alerts before payments and tracking reminders.',
@@ -1027,6 +1048,22 @@ abstract final class AppStrings {
     'profile.integrations': 'Import & integrations',
     'profile.integrationsSub': 'CSV file, connected OVH/IONOS accounts',
     'profile.logout': 'Log out',
+    'auth.verified': 'Email address verified.',
+    'auth.verifyFail': 'Verification link invalid or expired.',
+    'profile.dataSection': 'Data & account',
+    'profile.exportData': 'Export my data (CSV)',
+    'profile.exportDataSub':
+        'Subscriptions, payments — spreadsheet format',
+    'profile.exportFail': 'Export failed.',
+    'profile.deleteAccount': 'Delete account',
+    'profile.deleteAccountSub':
+        'Permanent — all your data is erased',
+    'profile.deleteWarn':
+        'This action is irreversible: subscriptions, payments '
+            'and workspace will be deleted. Confirm with your '
+            'password.',
+    'profile.deleted': 'Account deleted.',
+    'profile.deleteFail': 'Could not delete: check the password.',
     'profile.edit': 'Edit profile',
     'profile.firstName': 'First name',
     'profile.lastName': 'Last name',

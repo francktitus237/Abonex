@@ -10,6 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -141,6 +142,37 @@ class _ProfileView extends StatelessWidget {
           child: _Card(children: [_UpdateTile()]),
         ),
 
+        const SizedBox(height: 20),
+
+        // ---------- Données & compte (export RGPD, suppression) ----------
+        AnimatedFadeIn(
+          delay: const Duration(milliseconds: 260),
+          child: _Card(
+            children: [
+              ListTile(
+                leading: const Icon(LucideIcons.fileDown, size: 20),
+                title: Text(context.tr('profile.exportData')),
+                subtitle: Text(context.tr('profile.exportDataSub')),
+                onTap: () => _exportData(context),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(
+                  LucideIcons.trash2,
+                  size: 20,
+                  color: theme.colorScheme.error,
+                ),
+                title: Text(
+                  context.tr('profile.deleteAccount'),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+                subtitle: Text(context.tr('profile.deleteAccountSub')),
+                onTap: () => _confirmDeleteAccount(context),
+              ),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 28),
 
         // ---------- Session ----------
@@ -170,6 +202,100 @@ class _ProfileView extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// ============ Données & compte ============
+
+/// Télécharge le CSV RGPD/compta puis propose le partage
+/// (Drive, mail, fichiers…) via la feuille système.
+Future<void> _exportData(BuildContext context) async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    final path =
+        '${dir.path}/abonex_export_'
+        '${DateTime.now().millisecondsSinceEpoch}.csv';
+    await getIt<WorkspaceRemoteDataSource>().exportCsv(path);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(path)], subject: 'Abonex export'),
+    );
+  } catch (_) {
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        style: ToastificationStyle.flat,
+        title: Text(context.tr('profile.exportFail')),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+  }
+}
+
+/// Suppression définitive du compte : mot de passe requis,
+/// puis logout local après confirmation serveur.
+Future<void> _confirmDeleteAccount(BuildContext context) async {
+  final pwdCtrl = TextEditingController();
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: Icon(
+        LucideIcons.triangleAlert,
+        color: Theme.of(ctx).colorScheme.error,
+      ),
+      title: Text(ctx.tr('profile.deleteAccount')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(ctx.tr('profile.deleteWarn')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: pwdCtrl,
+            obscureText: true,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: ctx.tr('profile.password'),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text(ctx.tr('common.cancel')),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(ctx).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(ctx.tr('profile.deleteAccount')),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  try {
+    await getIt<WorkspaceRemoteDataSource>().deleteAccount(pwdCtrl.text);
+    if (!context.mounted) return;
+    toastification.show(
+      context: context,
+      type: ToastificationType.success,
+      style: ToastificationStyle.flat,
+      title: Text(context.tr('profile.deleted')),
+      autoCloseDuration: const Duration(seconds: 3),
+    );
+    context.read<AuthCubit>().logout();
+  } catch (_) {
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        style: ToastificationStyle.flat,
+        title: Text(context.tr('profile.deleteFail')),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
   }
 }
 
