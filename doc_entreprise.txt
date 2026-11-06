@@ -1,0 +1,249 @@
+Abonex — Étude du compte Entreprise
+Analyse du code existant (backend Django + mobile Flutter) et plan de valeur ajoutée pour les comptes entreprise.
+1. Résumé
+Abonex est aujourd'hui un suivi d'échéances récurrentes (abonnements, factures, loyers, salaires, rendez-vous) avec rappels, multi-devises, import CSV, connecteurs fournisseurs et espaces partagés par rôles. La base est solide et propre.
+Le constat principal : la distinction « Personnel / Entreprise » existe dans les données mais ne change rien à l'expérience. Le choix est fait à l'inscription (kind), stocké sur le Workspace, puis ignoré : l'entité Flutter isBusiness est définie mais utilisée nulle part, et l'écran Employés est affiché à tout le monde (choix commenté dans le code).
+Pour qu'un compte entreprise ait une vraie plus-value, il faut passer d'un « rappel de paiements » à un outil de pilotage des dépenses d'une organisation : contrôle (approbations, audit, confidentialité), organisation (départements, budgets, fournisseurs, contrats), trésorerie (payé réel, justificatifs, prévisions) et paie.
+Priorités recommandées :
+Corriger les fondations (confidentialité des salaires, multi-espaces, audit, retrait de membres).
+Ajouter la gouvernance (approbations, départements, budgets avec alertes).
+Ajouter la preuve de paiement et le reporting professionnel.
+Enrichir la paie et les fournisseurs/contrats, puis les intégrations.
+2. Ce que fait Abonex aujourd'hui
+Suivi et pilotage
+Abonnements/échéances avec cycles quotidien, hebdo, mensuel, trimestriel, annuel, ponctuel ; date de début/fin ; heure (rendez-vous) ; lien de paiement ; drapeau « partagé ».
+10 catégories : logiciels, loyer, assurance, télécom, énergie, eau, salaires, transport, événement, autre.
+Tableau de bord : dépensé, reste à payer, budget mensuel unique, retards, prochaines échéances, répartition par catégorie.
+Rapports (répartition, prévisions 6 mois), calendrier, centre de notifications, rappels J-14 à J avec alarme plein écran, push FCM.
+/insights/ : total mensuel équivalent, doublons, alternatives moins chères (catalogue), « reste à vivre ».
+Multi-devises : devise par pays, devises secondaires, taux en ligne (cache 12 h), totaux convertis.
+Automatisation : import CSV (500 lignes max), catalogue fournisseurs par pays, connecteurs OVH/IONOS/Hetzner/DigitalOcean/Vultr/Cloudflare/Gandi/GoDaddy/Stripe/Mollie/Paddle/GoCardless, agrégation bancaire Powens (PSD2), identifiants chiffrés Fernet.
+Collaboration : 4 rôles (Propriétaire, Gestionnaire, Assistant, Lecteur), invitations par e-mail (7 jours), permissions appliquées côté serveur.
+Entreprise (déjà amorcé) : modèle Employee (poste, salaire, devise, jour de paie, actif) qui génère automatiquement une échéance « Paie — Nom » mensuelle ; masse salariale convertie dans la devise de base ; choix Personnel/Entreprise à l'inscription.
+Qualité technique : architecture Flutter claire (Cubit, repository, DI), JWT avec rotation et blacklist, throttling, tests backend, CI qui construit l'APK, déploiement Docker/nginx documenté.
+3. Personnel vs Entreprise : l'état réel
+Sujet
+Aujourd'hui
+Conséquence
+Choix du type
+Segment à l'inscription → Workspace.kind
+Fonctionne
+Navigation
+Identique (5 onglets)
+Aucune différence visible
+Dashboard
+Identique, vocabulaire « reste à vivre »
+Notion personnelle, pas comptable
+Catégories
+Même liste
+Pas de taxes, fournitures, marketing, carburant…
+Employés
+Visible pour tous
+Pas un différenciateur
+Nom de l'espace
+Auto « Espace de {prénom} » et lecture seule
+Une société ne peut pas avoir son nom
+Infos société
+Aucune
+Pas de raison sociale, NIU, secteur, logo
+Changement de type
+kind modifiable via PATCH workspace/setup/ (owner/manager)
+Un gestionnaire peut basculer le type sans contrôle
+4. Failles et limites à corriger en premier
+Ce sont des prérequis : ajouter des fonctionnalités entreprise par-dessus aggraverait ces points.
+4.1 Confidentialité des salaires (important). EmployeeListCreateView utilise SubscriptionPermission, qui autorise toute lecture (SAFE_METHODS) à n'importe quel profil connecté. Résultat : un Lecteur ou un Assistant peut lister tous les employés avec leur salaire. Les échéances « Paie — Nom » (catégorie payroll) sont aussi visibles via /subscriptions/, /insights/ et l'export CSV. À faire : réserver employés et lignes payroll au propriétaire (et éventuellement à un rôle RH/comptable), et filtrer la catégorie payroll pour les autres rôles.
+4.2 Un utilisateur = un seul espace. Profile.workspace est une relation unique. Quand on invite un compte existant, InviteAcceptView le déplace vers le nouvel espace : il quitte l'ancien et ne voit plus ses données personnelles. Or le cas réel est : un employé a son compte perso et accède à l'espace de son entreprise. Il faut un modèle Membership (utilisateur ↔ espace ↔ rôle) et un sélecteur d'espace dans l'app.
+4.3 Impossible de retirer un membre. UserDetailView ne fait que modifier le rôle : pas de suppression, suspension ni révocation d'invitation. Indispensable en entreprise (départ d'un employé).
+4.4 Le rôle Assistant ne respecte pas sa définition. La doc Flutter dit « déclare des paiements, soumis à validation du propriétaire », mais le backend enregistre directement le paiement et avance l'échéance. Il n'y a aucun statut « en attente de validation ».
+4.5 Pas de journal d'audit. Seul Payment.recorded_by existe. Modifications de montants, suppressions, changements de rôle ne sont pas tracés. La suppression d'un abonnement efface aussi tout son historique de paiements.
+4.6 Paiement = simple bascule « payé ». Payment.amount est une copie du montant prévu : pas de montant réellement payé, pas de mode de paiement, de référence, de justificatif ni de paiement partiel.
+4.7 Hygiène du projet. L'archive contient backend/.env, db.sqlite3 et des logs JVM (hs_err_pid*.log). Ils sont bien dans le .gitignore, mais si cette archive a circulé, change les secrets (DJANGO_SECRET_KEY, mot de passe Postgres, clé fournisseur) et ne la partage pas telle quelle.
+5. Ce que font les applications de ce type
+D'après les catégories d'outils connues (gestion des dépenses d'entreprise, gestion d'abonnements/SaaS, petite comptabilité), un compte entreprise attend généralement :
+Contrôle : approbations, plafonds, rôles fins, journal d'audit.
+Organisation : départements/centres de coûts, projets, budgets par poste, responsables.
+Preuves : justificatifs, factures jointes, références de transaction.
+Fournisseurs et contrats : fiche fournisseur, échéances de contrat, alerte avant reconduction.
+Trésorerie : payé vs prévu, prévisions, à payer et à recevoir.
+Reporting : par département/fournisseur/période, budget vs réel, export PDF/Excel/comptable.
+Paie : bulletins, avances, retenues, historique.
+Intégrations : comptabilité, API, webhooks.
+Commercial : offre payante par nombre de membres.
+Ce benchmark est général, tiré de mes connaissances et non d'une recherche en ligne ; à confirmer avec quelques apps concurrentes sur ton marché cible.
+6. Recommandations par bloc
+Légende : P0 = prérequis, P1 = forte valeur, P2 = croissance. Effort : S (jours), M (1–2 semaines), L (plus).
+A. Fondations entreprise (P0)
+Fonctionnalité
+Détail
+Effort
+Profil de société
+Raison sociale, secteur, taille, adresse, logo, numéro fiscal (NIU/RCCM), nom éditable
+S
+Confidentialité salaires
+Employés et lignes payroll réservés owner + rôle RH
+S
+Retrait / suspension de membre
+DELETE ou désactivation, révocation d'invitation, renvoi
+S
+Multi-espaces
+Membership + sélecteur d'espace, un compte perso peut rejoindre une entreprise sans perdre ses données
+M
+Journal d'audit
+Qui a créé/modifié/supprimé/payé quoi, quand, ancienne/nouvelle valeur ; écran consultable par le propriétaire
+M
+Suppression douce
+Archiver au lieu d'effacer, conserver l'historique de paiements
+S
+Verrouillage du kind
+Changement de type réservé au propriétaire, avec confirmation
+S
+B. Gouvernance des dépenses (P1)
+Workflow d'approbation : l'Assistant « déclare » un paiement → statut en attente → Gestionnaire/Propriétaire valide ou refuse (motif). C'est aussi la mise en conformité du rôle Assistant avec sa définition.
+Seuils : au-delà d'un montant, validation obligatoire ; en dessous, automatique.
+Départements / centres de coûts / projets : champ sur chaque échéance, filtre partout, responsable désigné.
+Budgets par catégorie et par département (pas seulement un budget mensuel global), alertes à 80 % et 100 %.
+Responsable d'une échéance : assigné, reçoit les rappels ; escalade au manager si non payé à J+1.
+Rôles personnalisés (P2) : permissions à la carte (voir salaires, valider, exporter, gérer les connecteurs).
+C. Paiement, preuves et trésorerie (P1)
+Paiement réel : montant payé, date, mode (Mobile Money, virement, espèces, carte, chèque), référence de transaction, paiement partiel.
+Justificatif : photo du reçu ou PDF de la facture attaché à chaque paiement et à chaque échéance.
+Écart prévu/réel et pénalités de retard repérées.
+Prévision de trésorerie : solde de départ saisi + échéances à venir → courbe sur 30/60/90 jours avec alerte « solde insuffisant ».
+À recevoir (P2) : factures clients et loyers perçus pour obtenir une trésorerie nette (aujourd'hui l'app ne voit que les sorties).
+Mobile Money : pour le marché camerounais, c'est probablement plus utile que l'agrégation bancaire Powens, conçue pour l'Europe/PSD2 (à vérifier pour tes banques cibles). Un import de relevé Orange Money/MTN MoMo en CSV/PDF est un bon premier pas avant toute intégration API.
+D. Paie et RH (P1)
+Fiche employé enrichie : date d'embauche, type de contrat, département, coordonnées de paiement (numéro Mobile Money/compte), pièces jointes.
+Éléments de paie : primes, avances sur salaire, retenues, heures supplémentaires.
+Cotisations et impôts sur salaire : prévoir des lignes configurables (CNPS et autres). Les taux et règles doivent être validés avec un comptable, ne les codes pas en dur sans cette validation.
+Bulletin de paie PDF généré et envoyé à l'employé.
+Paie groupée : « Payer tous les salaires du mois » avec validation unique et récapitulatif.
+Portail employé : lier Employee à un compte utilisateur pour qu'il voie ses bulletins et uniquement les siens.
+Historique de paie par employé, et gestion des paliers de salaire dans le temps.
+E. Fournisseurs et contrats (P1)
+Fiche fournisseur : contact, moyen de paiement, conditions, total dépensé, liste des échéances.
+Contrats : date de fin déjà présente ; ajouter préavis de non-reconduction avec alerte (« résilier avant le … »), pièce jointe du contrat, responsable.
+Détection des doublons et abonnements inutilisés (le doublon existe déjà ; ajouter « non utilisé / à résilier » décidé par le responsable).
+Catalogue enrichi des fournisseurs locaux (ENEO, Camwater, Orange, MTN, Camtel…) avec plans types.
+F. Reporting et exports (P1)
+Rapports par département, catégorie, fournisseur, période ; budget vs réel ; comparaison mois sur mois.
+Exports PDF et Excel (aujourd'hui CSV uniquement) et export « comptable » (journal des paiements).
+Rapport mensuel automatique envoyé par e-mail au directeur.
+Tableaux de bord par rôle : Directeur (synthèse, trésorerie), Comptable (à valider, justificatifs manquants), Employé (ses échéances).
+Vocabulaire entreprise : « marge budgétaire » à la place de « reste à vivre ».
+G. Collaboration et notifications (P1)
+Commentaires et @mentions sur une échéance, historique de discussion.
+Notifications par e-mail, SMS et WhatsApp en plus du push (le push n'enregistre que le dernier appareil).
+Résumé hebdomadaire des échéances et des validations en attente.
+Notification au demandeur quand sa déclaration est validée/refusée.
+H. Multi-entités et intégrations (P2)
+Plusieurs entités (agences, filiales) sous un même compte avec vue consolidée.
+API publique + webhooks (jetons par espace) ; connecteurs comptables (Odoo, Zoho Books, Sage) ou export compatible.
+Import avancé : relevés Mobile Money/banque, factures PDF par OCR (extraction montant, fournisseur, échéance).
+I. Sécurité et conformité (P1)
+2FA optionnelle puis obligatoire au choix de l'entreprise ; liste des appareils connectés et déconnexion à distance.
+Politique de mot de passe configurable ; verrouillage par biométrie (déjà présent) imposable.
+Chiffrement des champs sensibles (coordonnées de paiement des employés), comme déjà fait pour les identifiants fournisseurs.
+Export et suppression de données ; vérifier les obligations locales de protection des données personnelles.
+J. Modèle commercial (P2)
+Personnel gratuit ; Entreprise payant, par nombre de membres et/ou d'échéances suivies.
+Fonctions réservées au plan Entreprise : approbations, audit, départements, exports PDF/Excel, connecteurs, API.
+Essai gratuit de 14 à 30 jours à la création d'un espace entreprise.
+7. Faire différer l'expérience Personnel / Entreprise
+Élément
+Personnel
+Entreprise
+Inscription
+Pays, devise
++ société, secteur, taille, logo, premier département
+Accueil
+Dépensé, reste à vivre, partages famille
+Trésorerie, à valider, budget vs réel, masse salariale
+Onglets
+Accueil, Abonnements, Calendrier, Rapports, Profil
++ Équipe/Validations (selon rôle)
+Catégories
+Actuelles
++ taxes et impôts, fournitures, marketing, carburant, maintenance, formation, déplacements, frais bancaires, comptabilité
+Rôles
+Simples (foyer)
+RBAC fin + rôles personnalisés
+Employés
+Optionnel (ménagère, gardien)
+Module paie complet
+Rapports
+Catégories, prévisions
+Départements, fournisseurs, export comptable
+Notifications
+Push + alarme
++ e-mail, SMS, WhatsApp, escalade
+Techniquement : exposer isBusiness dans un FeatureFlags unique (ou un getter canUse(feature)) pour afficher/masquer écrans et menus, et protéger les routes côté backend par le kind et le rôle, pas seulement par l'interface.
+8. Esquisse du modèle de données
+Modèle
+Rôle
+Champs clés
+Workspace (existant)
+Organisation
++ legal_name, tax_id, sector, size, logo, plan
+Membership
+Utilisateur ↔ espace
+user, workspace, role, custom_permissions, status (active/suspendue)
+Department
+Centre de coûts
+workspace, name, manager, budget
+Budget
+Budget cible
+workspace, department?, category?, period, amount, alert_threshold
+Subscription (existant)
+Échéance
++ department, assignee, supplier, notice_period_days, archived_at
+Supplier
+Fournisseur
+name, contact, payment_method, terms
+Payment (existant)
+Paiement
++ amount_paid, method, reference, status (pending/approved/rejected), approved_by
+Attachment
+Justificatif
+workspace, cible (échéance/paiement), fichier, auteur
+ApprovalRule
+Règles
+seuil, catégorie, approbateur
+AuditLog
+Traçabilité
+workspace, actor, action, object, before, after, at
+Employee (existant)
+Employé
++ user?, hire_date, contract, department, coordonnées de paiement chiffrées
+PayrollItem
+Élément de paie
+employee, type (prime, avance, retenue), amount, period
+Les migrations se font en douceur : ajouter les champs optionnels, migrer Profile.workspace/role vers Membership, puis retirer l'ancienne relation.
+9. Feuille de route proposée
+Phase 1 — Fondations (≈ 2–3 semaines)
+Confidentialité des salaires, retrait de membre, verrouillage du kind, suppression douce.
+Profil de société et nom éditable.
+Membership + sélecteur d'espace.
+Journal d'audit minimal.
+FeatureFlags Flutter et différenciation de l'accueil entreprise.
+Phase 2 — Gouvernance et preuves (≈ 3–4 semaines)
+Workflow d'approbation, seuils, statuts de paiement.
+Départements, budgets par catégorie/département, alertes.
+Paiement réel (mode, référence, partiel) et justificatifs.
+Exports PDF/Excel et rapport mensuel.
+Phase 3 — Paie, fournisseurs, trésorerie (≈ 4 semaines)
+Fiche employé enrichie, éléments de paie, bulletins PDF, paie groupée, portail employé.
+Fiches fournisseurs et contrats avec préavis.
+Prévision de trésorerie et import Mobile Money.
+E-mail/SMS/WhatsApp et escalade.
+Phase 4 — Croissance
+Multi-entités, API/webhooks, connecteurs comptables, OCR de factures.
+Plans payants, rôles personnalisés, 2FA obligatoire.
+Les durées sont des ordres de grandeur pour un développeur seul ; à ajuster selon ton rythme.
+10. Points à décider avant de coder
+Cible : TPE/PME camerounaises, indépendants, ONG, associations ? Cela change la paie, la TVA et le vocabulaire.
+Abonex paie-t-il, ou seulement suit-il ? Aujourd'hui, c'est du suivi. Payer depuis l'app (Mobile Money, virement) ajoute de la valeur mais aussi des obligations réglementaires et de sécurité.
+Paie : simple suivi des salaires versés, ou calcul complet avec cotisations ? Le second demande un comptable pour valider les règles.
+Hors-ligne : les équipes terrain doivent-elles pouvoir déclarer un paiement sans réseau ?
+Un seul espace par entreprise ou plusieurs entités dès le départ ? Mieux vaut prévoir Membership maintenant.
+11. Prochaine étape suggérée
+Commencer par la Phase 1, en particulier la fuite des salaires (4.1) et le retrait de membre (4.3), qui sont de petits correctifs à fort impact. Je peux ensuite te fournir, fichier par fichier, le code backend (modèles, migrations, permissions, vues) et Flutter (écrans, routes, FeatureFlags) pour chaque bloc, en te donnant uniquement ce qui change.

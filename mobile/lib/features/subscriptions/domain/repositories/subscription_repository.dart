@@ -48,7 +48,10 @@ abstract class SubscriptionRepository {
   });
 
   /// Marque un abonnement comme payé (PATCH status).
-  Future<Result<Subscription>> markPaid(String id);
+  Future<Result<Subscription>> markPaid(
+    String id, {
+    Map<String, dynamic>? payment,
+  });
 
   /// Supprime définitivement un abonnement.
   Future<Result<void>> deleteSubscription(String id);

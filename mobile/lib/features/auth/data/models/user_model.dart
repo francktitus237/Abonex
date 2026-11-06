@@ -55,6 +55,10 @@ abstract class WorkspaceModel with _$WorkspaceModel {
     String? defaultCurrency,
     @Default([]) List<String> extraCurrencies,
     @Default(false) bool configured,
+    @Default('') String legalName,
+    @Default('') String taxId,
+    @Default('') String sector,
+    @Default('') String size,
   }) = _WorkspaceModel;
 
   factory WorkspaceModel.fromJson(Map<String, dynamic> json) =>
@@ -68,5 +72,9 @@ abstract class WorkspaceModel with _$WorkspaceModel {
     defaultCurrency: defaultCurrency,
     extraCurrencies: extraCurrencies,
     configured: configured,
+    legalName: legalName,
+    taxId: taxId,
+    sector: sector,
+    size: size,
   );
 }

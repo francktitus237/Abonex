@@ -30,8 +30,8 @@ from .connectors.powens import (
 )
 from .rates import rates_for
 from .models import (
-    Employee, Invitation, Payment, Profile, ProviderConnection,
-    Subscription, Workspace,
+    AuditLog, Employee, Invitation, Membership, Payment, Profile,
+    ProviderConnection, Subscription, Workspace,
 )
 from .serializers import (
     EmployeeSerializer, PaymentSerializer, SubscriptionSerializer,
@@ -40,7 +40,7 @@ from .serializers import (
 
 
 from .permissions import (
-    IsOwner, SubscriptionPermission,
+    EmployeePermission, IsOwner, SubscriptionPermission,
 )
 
 
@@ -159,6 +159,11 @@ class RegisterView(APIView):
         Profile.objects.create(
             user=user, workspace=workspace, role="owner",
             language=language,
+        )
+        # Registre multi-espaces : l'espace créé devient le premier
+        # membership du compte (étude §4.2).
+        Membership.objects.create(
+            user=user, workspace=workspace, role="owner"
         )
 
         refresh = RefreshToken.for_user(user)
@@ -505,15 +510,17 @@ class EmployeeListCreateView(APIView):
     """GET liste des employés de l'espace · POST crée un employé
     (owner/manager via SubscriptionPermission) + sa paie payroll."""
 
-    permission_classes = [SubscriptionPermission]
+    permission_classes = [EmployeePermission]
 
     def get(self, request):
         ws = request.user.profile.workspace
-        return Response(
-            EmployeeSerializer(
-                ws.employees.all(), many=True
-            ).data
-        )
+        data = EmployeeSerializer(ws.employees.all(), many=True).data
+        # Salaire masqué pour le manager (lecture RH sans montant) —
+        # seul le propriétaire voit les salaires (étude §4.1).
+        if request.user.profile.role != "owner":
+            for e in data:
+                e["salary"] = None
+        return Response(data)
 
     def post(self, request):
         ws = request.user.profile.workspace
@@ -532,7 +539,7 @@ class EmployeeDetailView(APIView):
     échéance payroll (l'historique de paiements part avec —
     comportement identique à la suppression d'abonnement)."""
 
-    permission_classes = [SubscriptionPermission]
+    permission_classes = [EmployeePermission]
 
     def _employee(self, request, pk):
         return get_object_or_404(
@@ -581,7 +588,7 @@ class InsightsView(APIView):
         ws = profile.workspace
         base = ws.default_currency or "XAF"
         subs = list(
-            Subscription.objects.filter(workspace=ws).exclude(
+            _visible_subscriptions(request).exclude(
                 category="event"
             )
         )
@@ -709,7 +716,7 @@ class ExportCsvView(APIView):
                 "paid_at", "country", "description",
             ]
         )
-        for s in Subscription.objects.filter(workspace=ws):
+        for s in _visible_subscriptions(request):
             w.writerow(
                 [
                     "subscription", s.pk, s.name, s.provider, s.category,
@@ -751,7 +758,7 @@ class UserListView(generics.ListAPIView):
         ).order_by("id")
 
 
-class UserDetailView(generics.UpdateAPIView):
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsOwner]
 
@@ -773,7 +780,77 @@ class UserDetailView(generics.UpdateAPIView):
                 {"role": ["Rôle non autorisé."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        _audit(
+            request,
+            "role_change",
+            "member",
+            target.email,
+            before={"role": target.profile.role},
+            after={"role": role},
+        )
         return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE /users/<id>/ — retire un membre de l'espace
+        (étude §4.3). Le profil est supprimé → le compte devient
+        orphelin jusqu'à une nouvelle invitation ; on ne supprime
+        JAMAIS le propriétaire ni soi-même."""
+        target = self.get_object()
+        if target == request.user:
+            return Response(
+                {"detail": ["Impossible de se retirer soi-même."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target.profile.role == "owner":
+            return Response(
+                {"detail": ["Impossible de retirer le propriétaire."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        email = target.email
+        role = target.profile.role
+        ws = request.user.profile.workspace
+        # Membership : on révoque l'accès à CET espace plutôt que
+        # de détruire le profil — le compte garde ses autres
+        # espaces (§4.2) ; s'il n'en a plus, l'espace actif est
+        # recréé en espace personnel neuf.
+        Membership.objects.filter(
+            user=target, workspace=ws
+        ).delete()
+        if target.profile.workspace_id == ws.id:
+            fallback = (
+                Membership.objects.filter(
+                    user=target, status="active"
+                )
+                .select_related("workspace")
+                .first()
+            )
+            if fallback is not None:
+                target.profile.workspace = fallback.workspace
+                target.profile.role = fallback.role
+                target.profile.save(
+                    update_fields=["workspace", "role"]
+                )
+            else:
+                personal = Workspace.objects.create(
+                    name=f"Espace de {target.first_name or email}",
+                    kind="personal",
+                )
+                Membership.objects.create(
+                    user=target, workspace=personal, role="owner"
+                )
+                target.profile.workspace = personal
+                target.profile.role = "owner"
+                target.profile.save(
+                    update_fields=["workspace", "role"]
+                )
+        _audit(
+            request,
+            "member_remove",
+            "member",
+            email,
+            before={"role": role},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _refresh_statuses(qs):
@@ -846,6 +923,33 @@ def _month_days(year, month):
     return (nxt - date(year, month, 1)).days
 
 
+def _visible_subscriptions(request):
+    """Échéances visibles pour ce membre : non archivées —
+    et les lignes payroll (salaires) réservées au propriétaire
+    (confidentialité, étude §4.1)."""
+    qs = Subscription.objects.filter(
+        workspace=request.user.profile.workspace,
+        archived_at__isnull=True,
+    )
+    if request.user.profile.role != "owner":
+        qs = qs.exclude(category="payroll")
+    _refresh_statuses(qs)
+    return qs
+
+
+def _audit(request, action, obj_type, obj_repr, before=None, after=None):
+    """Écrit une ligne de journal d'audit (étude §4.5)."""
+    AuditLog.objects.create(
+        workspace=request.user.profile.workspace,
+        actor=request.user,
+        action=action,
+        object_type=obj_type,
+        object_repr=str(obj_repr)[:200],
+        before=before or {},
+        after=after or {},
+    )
+
+
 class SubscriptionListCreateView(generics.ListCreateAPIView):
     """GET /subscriptions/ · POST /subscriptions/"""
 
@@ -853,11 +957,7 @@ class SubscriptionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, SubscriptionPermission]
 
     def get_queryset(self):
-        qs = Subscription.objects.filter(
-            workspace=self.request.user.profile.workspace
-        )
-        _refresh_statuses(qs)
-        return qs
+        return _visible_subscriptions(self.request)
 
     def perform_create(self, serializer):
         from datetime import date as _date
@@ -869,10 +969,21 @@ class SubscriptionListCreateView(generics.ListCreateAPIView):
             if next_due and next_due < _date.today()
             else serializer.validated_data.get("status", "dueSoon")
         )
-        serializer.save(
+        subscription = serializer.save(
             owner=self.request.user,
             workspace=self.request.user.profile.workspace,
             status=computed,
+        )
+        _audit(
+            self.request,
+            "create",
+            "subscription",
+            subscription.name,
+            after={
+                "amount": str(subscription.amount),
+                "currency": subscription.currency,
+                "cycle": subscription.cycle,
+            },
         )
 
 
@@ -883,15 +994,39 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, SubscriptionPermission]
 
     def get_queryset(self):
-        qs = Subscription.objects.filter(
-            workspace=self.request.user.profile.workspace
-        )
-        _refresh_statuses(qs)
-        return qs
+        return _visible_subscriptions(self.request)
 
     def perform_update(self, serializer):
+        role = self.request.user.profile.role
+        marking_paid = self.request.data.get("status") == "paid"
+        # Un assistant ne fait que DÉCLARER le paiement : l'échéance
+        # reste due jusqu'à validation owner/manager (étude §4.4).
+        if marking_paid and role == "assistant":
+            subscription = serializer.save(status="dueSoon")
+            payment, created = Payment.objects.get_or_create(
+                subscription=subscription,
+                workspace=self.request.user.profile.workspace,
+                due_date=subscription.next_due_date,
+                defaults={
+                    "recorded_by": self.request.user,
+                    "amount": subscription.amount,
+                    "amount_paid": self.request.data.get("amount_paid"),
+                    "method": self.request.data.get("method", ""),
+                    "reference": self.request.data.get("reference", ""),
+                    "status": "pending",
+                },
+            )
+            _audit(
+                self.request,
+                "pay",
+                "payment",
+                f"{subscription.name} (déclaré)",
+                after={"status": "pending"},
+            )
+            return
+        before = {"status": serializer.instance.status}
         subscription = serializer.save()
-        if self.request.data.get("status") == "paid":
+        if marking_paid:
             Payment.objects.get_or_create(
                 subscription=subscription,
                 workspace=self.request.user.profile.workspace,
@@ -899,11 +1034,227 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
                 defaults={
                     "recorded_by": self.request.user,
                     "amount": subscription.amount,
+                    "amount_paid": self.request.data.get("amount_paid"),
+                    "method": self.request.data.get("method", ""),
+                    "reference": self.request.data.get("reference", ""),
+                    "status": "approved",
+                    "approved_by": self.request.user,
                 },
             )
             # L'échéance payée appartient au passé : on fait avancer
             # la prochaine échéance d'un cycle complet.
             _advance_due(subscription)
+            _audit(
+                self.request,
+                "pay",
+                "payment",
+                subscription.name,
+                before=before,
+                after={"status": "paid"},
+            )
+        else:
+            _audit(
+                self.request,
+                "update",
+                "subscription",
+                subscription.name,
+                before=before,
+                after=self.request.data,
+            )
+
+    def perform_destroy(self, instance):
+        # Suppression douce : l'échéance est archivée, pas effacée —
+        # l'historique de paiements survit (étude §4.5/§4.6).
+        instance.archived_at = timezone.now()
+        instance.save(update_fields=["archived_at"])
+        _audit(
+            self.request,
+            "delete",
+            "subscription",
+            instance.name,
+            before={
+                "amount": str(instance.amount),
+                "currency": instance.currency,
+            },
+        )
+
+
+class PaymentApprovalView(APIView):
+    """POST /payments/<id>/verdict/ — owner/manager valide ou
+    refuse une déclaration de paiement d'assistant (étude §4.4/B)."""
+
+    def post(self, request, pk):
+        profile = request.user.profile
+        if profile.role not in {"owner", "manager"}:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        payment = get_object_or_404(
+            Payment, pk=pk, workspace=profile.workspace, status="pending"
+        )
+        verdict = request.data.get("verdict")
+        if verdict not in {"approved", "rejected"}:
+            return Response(
+                {"verdict": ["approved ou rejected attendu."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        payment.status = verdict
+        payment.approved_by = request.user
+        payment.rejection_reason = request.data.get("reason", "")
+        payment.save(
+            update_fields=[
+                "status", "approved_by", "rejection_reason"
+            ]
+        )
+        sub = payment.subscription
+        if verdict == "approved":
+            sub.status = "paid"
+            sub.save(update_fields=["status"])
+            _advance_due(sub)
+        _audit(
+            request,
+            verdict.replace("approved", "approve").replace(
+                "rejected", "reject"
+            ),
+            "payment",
+            sub.name,
+            after={"verdict": verdict},
+        )
+        return Response({"status": verdict})
+
+
+class PendingPaymentsView(APIView):
+    """GET /payments/ — déclarations de paiement en attente
+    de validation (owner/manager, workflow d'approbation)."""
+
+    def get(self, request):
+        profile = request.user.profile
+        if profile.role not in {"owner", "manager"}:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        payments = (
+            Payment.objects.filter(
+                workspace=profile.workspace, status="pending"
+            )
+            .select_related("subscription", "recorded_by")
+            .order_by("due_date")
+        )
+        return Response(
+            [
+                {
+                    "id": p.id,
+                    "subscription_id": p.subscription_id,
+                    "name": p.subscription.name,
+                    "amount": str(p.amount),
+                    "amount_paid": (
+                        str(p.amount_paid) if p.amount_paid is not None
+                        else None
+                    ),
+                    "currency": p.subscription.currency,
+                    "due_date": p.due_date,
+                    "method": p.method,
+                    "reference": p.reference,
+                    "declared_by": (
+                        p.recorded_by.get_full_name() or p.recorded_by.email
+                        if p.recorded_by
+                        else ""
+                    ),
+                }
+                for p in payments
+            ]
+        )
+
+
+class MembershipListView(APIView):
+    """GET /memberships/ — espaces accessibles à l'utilisateur
+    (étude §4.2). Crée à la volée le membership de l'espace
+    courant pour les comptes antérieurs au modèle."""
+
+    def get(self, request):
+        profile = request.user.profile
+        # Compte pré-Membership : l'espace actif n'a pas encore
+        # de ligne — on l'enregistre (lazy backfill).
+        Membership.objects.get_or_create(
+            user=request.user,
+            workspace=profile.workspace,
+            defaults={"role": profile.role},
+        )
+        memberships = (
+            Membership.objects.filter(
+                user=request.user, status="active"
+            )
+            .select_related("workspace")
+            .order_by("created_at")
+        )
+        return Response(
+            [
+                {
+                    "id": m.id,
+                    "workspace_id": m.workspace_id,
+                    "name": m.workspace.name,
+                    "kind": m.workspace.kind,
+                    "role": m.role,
+                    "active": m.workspace_id == profile.workspace_id,
+                }
+                for m in memberships
+            ]
+        )
+
+
+class MembershipActivateView(APIView):
+    """POST /memberships/<id>/activate/ — bascule l'espace actif
+    : profile.workspace/role reflètent le membership choisi —
+    tout le code existant (permissions, requêtes) suit
+    automatiquement (étude §4.2)."""
+
+    def post(self, request, pk):
+        membership = get_object_or_404(
+            Membership.objects.select_related("workspace"),
+            pk=pk,
+            user=request.user,
+            status="active",
+        )
+        profile = request.user.profile
+        profile.workspace = membership.workspace
+        profile.role = membership.role
+        profile.save(update_fields=["workspace", "role"])
+        _audit(
+            request,
+            "update",
+            "workspace",
+            f"Espace actif : {membership.workspace.name}",
+        )
+        return Response(
+            UserSerializer(request.user, context={"request": request}).data
+        )
+
+
+class AuditLogView(generics.ListAPIView):
+    """GET /audit/ — journal d'audit de l'espace, propriétaire
+    uniquement (étude §4.5)."""
+
+    permission_classes = [IsOwner]
+
+    def get(self, request):
+        logs = request.user.profile.workspace.audit_logs.select_related(
+            "actor"
+        )[:200]
+        return Response(
+            [
+                {
+                    "id": log.id,
+                    "actor": (
+                        log.actor.get_full_name() or log.actor.email
+                        if log.actor
+                        else ""
+                    ),
+                    "action": log.action,
+                    "object_type": log.object_type,
+                    "object_repr": log.object_repr,
+                    "before": log.before,
+                    "after": log.after,
+                    "at": log.created_at,
+                }
+                for log in logs
+            ]
+        )
 
 
 class PaymentHistoryView(generics.ListAPIView):
@@ -950,9 +1301,20 @@ class WorkspaceSetupView(APIView):
 
     def patch(self, request):
         # La config concerne TOUT l'espace : seuls owner/manager
-        # peuvent la modifier (cohérent avec le budget).
+        # peuvent la modifier (cohérent avec le budget) — mais le
+        # TYPE de compte (kind) est réservé au propriétaire : un
+        # gestionnaire ne doit pas basculer l'espace (étude §4.7).
         if request.user.profile.role not in {"owner", "manager"}:
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if (
+            "kind" in request.data
+            and request.data["kind"] != request.user.profile.workspace.kind
+            and request.user.profile.role != "owner"
+        ):
+            return Response(
+                {"kind": ["Type de compte réservé au propriétaire."]},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         workspace = request.user.profile.workspace
         serializer = WorkspaceSerializer(
             workspace, data=request.data, partial=True
@@ -1105,9 +1467,24 @@ class InviteAcceptView(APIView):
                 user=user, workspace=invite.workspace, role=invite.role
             )
         else:
+            # Multi-espaces (§4.2) : l'ancien espace reste
+            # accessible via son membership — l'utilisateur
+            # peut revenir à son espace perso à tout moment.
+            Membership.objects.update_or_create(
+                user=user,
+                workspace=profile.workspace,
+                defaults={"role": profile.role, "status": "active"},
+            )
             profile.workspace = invite.workspace
             profile.role = invite.role
             profile.save(update_fields=["workspace", "role"])
+        # Le membership du nouvel espace : créé ou réactivé
+        # (ré-invitation d'un membre suspendu).
+        Membership.objects.update_or_create(
+            user=user,
+            workspace=invite.workspace,
+            defaults={"role": invite.role, "status": "active"},
+        )
         invite.status = "accepted"
         invite.save(update_fields=["status"])
         refresh = RefreshToken.for_user(user)

@@ -13,7 +13,11 @@ abstract class SubscriptionRemoteDataSource {
   Future<List<SubscriptionModel>> list();
   Future<SubscriptionModel> create(Map<String, dynamic> payload);
   Future<SubscriptionModel> update(String id, Map<String, dynamic> payload);
-  Future<SubscriptionModel> updateStatus(String id, String status);
+  Future<SubscriptionModel> updateStatus(
+    String id,
+    String status, {
+    Map<String, dynamic>? extra,
+  });
   Future<void> delete(String id);
 }
 
@@ -76,10 +80,13 @@ class SubscriptionRemoteDataSourceImpl
   }
 
   @override
-  Future<SubscriptionModel> updateStatus(String id, String status) async {
-    final res = await _dio.patch<Map<String, dynamic>>(
+  Future<SubscriptionModel> updateStatus(
+    String id,
+    String status, {
+    Map<String, dynamic>? extra,
+  }) async {    final res = await _dio.patch<Map<String, dynamic>>(
       ApiEndpoints.subscription(id),
-      data: {'status': status},
+      data: {'status': status, ...?extra},
     );
     return SubscriptionModel.fromJson(res.data!);
   }

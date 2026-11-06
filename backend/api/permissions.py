@@ -22,6 +22,32 @@ class IsOwner(BasePermission):
         return bool(profile and profile.role == "owner")
 
 
+class EmployeePermission(BasePermission):
+    """Salaires confidentiels : employés et leur paie réservés au
+    propriétaire — un Lecteur/Assistant ne doit jamais lister les
+    salaires (étude §4.1). Le rôle « manager » gère les employés
+    sans voir les montants ? Non : la doc réserve aux owner +
+    RH — manager exclus côté salaire, conservé sur écriture."""
+
+    message = "Salaires réservés au propriétaire de l'espace."
+
+    def has_permission(self, request, view):
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return False
+        if profile.role == "owner":
+            return True
+        # Écriture RH déléguée possible au manager — jamais le
+        # salaire en lecture ni le montant dans le payload.
+        if profile.role == "manager":
+            if request.method in SAFE_METHODS:
+                return True
+            if request.method == "POST":
+                return True
+            return False  # PATCH/DELETE : owner seulement
+        return False
+
+
 class SubscriptionPermission(BasePermission):
     def has_permission(self, request, view):
         profile = getattr(request.user, "profile", None)

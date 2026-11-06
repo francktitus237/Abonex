@@ -27,6 +27,7 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/app_shell.dart';
 import '../../../auth/domain/entities/user.dart';
+import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../settings/presentation/cubit/settings_cubit.dart';
@@ -163,10 +164,66 @@ class _ProfileView extends StatelessWidget {
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.integrations),
                 ),
-                // Employés : entreprise ET particulier — un
-                // particulier suit aussi sa ménagère ou son
-                // vigile (salaires = échéances payroll).
+                // Informations société : nom, raison sociale,
+                // NIU, secteur — espaces entreprise, owner/manager.
+                if ((user.workspace?.isBusiness ?? false) &&
+                    (user.role == UserRole.owner ||
+                        user.role == UserRole.manager)) ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.building2),
+                    title: Text(context.tr('co.tile')),
+                    subtitle: Text(context.tr('co.tileSub')),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    onTap: () => _editCompany(context, user),
+                  ),
+                ],
+                // Validations : owner/manager approuvent les
+                // déclarations de paiement des assistants.
+                if (user.role == UserRole.owner ||
+                    user.role == UserRole.manager) ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.listChecks),
+                    title: Text(context.tr('pend.tile')),
+                    subtitle: Text(context.tr('pend.tileSub')),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    onTap: () => context.push(AppRoutes.pendingPayments),
+                  ),
+                ],
+                // Changer d'espace : multi-espaces — un compte
+                // perso peut accéder à l'espace de sa boîte et
+                // revenir sans perdre ses données (§4.2).
                 ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(
+                      icon: LucideIcons.building,
+                    ),
+                    title: Text(context.tr('spaces.tile')),
+                    subtitle: Text(context.tr('spaces.tileSub')),
+                    trailing: const Icon(
+                      LucideIcons.chevronsUpDown,
+                      size: 18,
+                    ),
+                    onTap: () => _switchSpace(context),
+                  ),
+                ],
+                // Journal d'audit : qui a fait quoi — propriétaire.
+                if (user.role == UserRole.owner) ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.scrollText),
+                    title: Text(context.tr('audit.tile')),
+                    subtitle: Text(context.tr('audit.tileSub')),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    onTap: () => context.push(AppRoutes.audit),
+                  ),
+                ],
+                // Employés : salaires confidentiels — la page
+                // est réservée au propriétaire (étude §4.1) ;
+                // le backend refuse les autres rôles.
+                if (user.role == UserRole.owner) ...[
                   const Divider(indent: 56),
                   ListTile(
                     leading: _TileIcon(icon: LucideIcons.userRoundCog),
@@ -352,6 +409,218 @@ Future<void> _confirmDeleteAccount(BuildContext context) async {
 }
 
 // ============ Sous-widgets ============
+
+/// Sélecteur d'espace (multi-espaces §4.2) : liste les
+/// memberships actifs, active l'espace choisi puis resync
+/// profil + abonnements — le cubit traite le switch comme
+/// un changement de compte.
+Future<void> _switchSpace(BuildContext context) async {
+  final source = getIt<WorkspaceRemoteDataSource>();
+  List<Map<String, dynamic>>? spaces;
+  try {
+    spaces = await source.memberships();
+  } catch (_) {
+    spaces = null;
+  }
+  if (!context.mounted || spaces == null || spaces.isEmpty) return;
+
+  final picked = await showModalBottomSheet<int>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              ctx.tr('spaces.title'),
+              style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          for (final s in spaces!)
+            ListTile(
+              leading: Icon(
+                s['kind'] == 'business'
+                    ? LucideIcons.building2
+                    : LucideIcons.house,
+                size: 20,
+              ),
+              title: Text(
+                '${s['name']}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                ctx.tr('role.${s['role']}'),
+              ),
+              trailing: s['active'] == true
+                  ? Icon(
+                      LucideIcons.circleCheck,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    )
+                  : null,
+              onTap: () => Navigator.of(ctx).pop(s['id'] as int),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+  if (picked == null || !context.mounted) return;
+  final okMsg = context.tr('spaces.switched');
+  final auth = context.read<AuthCubit>();
+  try {
+    await source.activateMembership(picked);
+    // L'espace actif a changé : profil rechargé + données
+    // réinitialisées comme lors d'un changement de compte.
+    unawaited(auth.refresh());
+    getIt<SubscriptionsCubit>().resetForAccountChange();
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.success,
+        title: Text(okMsg),
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        title: Text(context.tr('common.error')),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+  }
+}
+
+/// Formulaire « Informations société » : nom affiché, raison
+/// sociale, numéro fiscal, secteur, taille — PATCH
+/// /workspace/setup/ (owner/manager) puis resync du profil.
+Future<void> _editCompany(BuildContext context, User user) async {
+  final ws = user.workspace;
+  final name = TextEditingController(text: ws?.name ?? '');
+  final legal = TextEditingController(text: ws?.legalName ?? '');
+  final tax = TextEditingController(text: ws?.taxId ?? '');
+  final sector = TextEditingController(text: ws?.sector ?? '');
+  String size = ws?.size ?? '';
+  final sizes = ['', 'solo', 'tpe', 'pme', 'eti'];
+
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(ctx).viewInsets.bottom + 20,
+      ),
+      child: StatefulBuilder(
+        builder: (ctx, setSheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              ctx.tr('co.title'),
+              style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: name,
+              decoration: InputDecoration(
+                labelText: ctx.tr('co.name'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: legal,
+              decoration: InputDecoration(
+                labelText: ctx.tr('co.legalName'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: tax,
+              decoration: InputDecoration(
+                labelText: ctx.tr('co.taxId'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sector,
+              decoration: InputDecoration(
+                labelText: ctx.tr('co.sector'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: size,
+              decoration: InputDecoration(
+                labelText: ctx.tr('co.size'),
+              ),
+              items: [
+                for (final s in sizes)
+                  DropdownMenuItem(
+                    value: s,
+                    child: Text(
+                      s.isEmpty ? '—' : ctx.tr('co.$s'),
+                    ),
+                  ),
+              ],
+              onChanged: (v) => setSheet(() => size = v ?? ''),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (saved != true || !context.mounted) return;
+  final auth = context.read<AuthCubit>();
+  final okMsg = context.tr('co.saved');
+  final errMsg = context.tr('common.error');
+  try {
+    await getIt<WorkspaceRemoteDataSource>().updateCompany({
+      'name': name.text.trim(),
+      'legal_name': legal.text.trim(),
+      'tax_id': tax.text.trim(),
+      'sector': sector.text.trim(),
+      'size': size,
+    });
+    unawaited(auth.refresh());
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.success,
+        title: Text(okMsg),
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        title: Text(errMsg),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+  } finally {
+    name.dispose();
+    legal.dispose();
+    tax.dispose();
+    sector.dispose();
+  }
+}
 
 class _IdentityCard extends StatelessWidget {
   const _IdentityCard({required this.user});

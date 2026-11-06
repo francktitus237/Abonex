@@ -59,6 +59,17 @@ urlpatterns = [
         "connectors/powens/callback/",
         views.PowensCallbackView.as_view(),
     ),
+    path(
+        "payments/<int:pk>/verdict/",
+        views.PaymentApprovalView.as_view(),
+    ),
+    path("audit/", views.AuditLogView.as_view()),
+    path("memberships/", views.MembershipListView.as_view()),
+    path(
+        "memberships/<int:pk>/activate/",
+        views.MembershipActivateView.as_view(),
+    ),
+    path("payments/", views.PendingPaymentsView.as_view()),
     path("connections/", views.ConnectionListView.as_view()),
     path(
         "connections/<int:pk>/resync/",

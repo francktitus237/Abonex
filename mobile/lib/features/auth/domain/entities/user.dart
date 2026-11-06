@@ -73,6 +73,13 @@ abstract class Workspace with _$Workspace {
     String? defaultCurrency,
     @Default([]) List<String> extraCurrencies,
     @Default(false) bool configured,
+
+    /// Profil société (espaces entreprise) : raison sociale,
+    /// numéro fiscal, secteur, taille.
+    @Default('') String legalName,
+    @Default('') String taxId,
+    @Default('') String sector,
+    @Default('') String size,
   }) = _Workspace;
 
   bool get isBusiness => kind == 'business';

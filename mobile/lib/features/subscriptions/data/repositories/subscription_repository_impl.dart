@@ -127,9 +127,12 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   }
 
   @override
-  Future<Result<Subscription>> markPaid(String id) async {
+  Future<Result<Subscription>> markPaid(
+    String id, {
+    Map<String, dynamic>? payment,
+  }) async {
     try {
-      return Ok(await _remote.updateStatus(id, 'paid'));
+      return Ok(await _remote.updateStatus(id, 'paid', extra: payment));
     } on DioException catch (e) {
       return Err(_toFailure(ApiException.fromDio(e)));
     } catch (_) {

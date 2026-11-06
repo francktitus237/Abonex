@@ -20,6 +20,45 @@ class WorkspaceRemoteDataSource {
     await _dio.patch<void>('workspace/budget/', data: {'monthly_budget': amount});
   }
 
+  /// GET /payments/ — déclarations en attente (owner/manager).
+  Future<List<Map<String, dynamic>>> pendingPayments() async {
+    final res = await _dio.get<List<dynamic>>('payments/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// GET /memberships/ — espaces accessibles (multi-espaces §4.2).
+  Future<List<Map<String, dynamic>>> memberships() async {
+    final res = await _dio.get<List<dynamic>>('memberships/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// POST `memberships/<id>/activate/` — bascule l'espace actif.
+  Future<void> activateMembership(int id) =>
+      _dio.post<void>('memberships/$id/activate/');
+
+  /// GET /audit/ — journal d'audit de l'espace (propriétaire).
+  Future<List<Map<String, dynamic>>> auditLog() async {
+    final res = await _dio.get<List<dynamic>>('audit/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// POST `payments/<id>/verdict/` — valide ou refuse une
+  /// déclaration d'assistant (motif optionnel au refus).
+  Future<void> paymentVerdict(
+    int id,
+    String verdict, {
+    String? reason,
+  }) => _dio.post<void>(
+    'payments/$id/verdict/',
+    data: {'verdict': verdict, 'reason': ?reason},
+  );
+
   /// GET /insights/ — recommandations intelligentes : doublons,
   /// alternatives moins chères, reste à vivre, total mensuel.
   Future<Map<String, dynamic>> insights() async {
@@ -83,6 +122,12 @@ class WorkspaceRemoteDataSource {
       data: {'password': password},
     );
   }
+
+  /// PATCH /workspace/setup/ — infos société (nom affiché,
+  /// raison sociale, NIU, secteur, taille). Réservé
+  /// owner/manager côté serveur.
+  Future<void> updateCompany(Map<String, String> data) =>
+      _dio.patch<void>(ApiEndpoints.workspaceSetup, data: data);
 
   /// PATCH /workspace/setup/ → user mis à jour (avec workspace).
   Future<UserModel> setup({

@@ -51,6 +51,10 @@ _WorkspaceModel _$WorkspaceModelFromJson(Map<String, dynamic> json) =>
               .toList() ??
           const [],
       configured: json['configured'] as bool? ?? false,
+      legalName: json['legal_name'] as String? ?? '',
+      taxId: json['tax_id'] as String? ?? '',
+      sector: json['sector'] as String? ?? '',
+      size: json['size'] as String? ?? '',
     );
 
 Map<String, dynamic> _$WorkspaceModelToJson(_WorkspaceModel instance) =>
@@ -62,4 +66,8 @@ Map<String, dynamic> _$WorkspaceModelToJson(_WorkspaceModel instance) =>
       'default_currency': instance.defaultCurrency,
       'extra_currencies': instance.extraCurrencies,
       'configured': instance.configured,
+      'legal_name': instance.legalName,
+      'tax_id': instance.taxId,
+      'sector': instance.sector,
+      'size': instance.size,
     };

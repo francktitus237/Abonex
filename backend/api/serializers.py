@@ -23,7 +23,12 @@ class WorkspaceBudgetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Workspace
-        fields = ["monthly_budget"]
+        fields = [
+            "name", "kind", "country", "default_currency",
+            "extra_currencies", "configured", "monthly_budget",
+            "legal_name", "tax_id", "sector", "size",
+        ]
+        read_only_fields = ["kind", "configured"]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -151,5 +156,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ["id", "amount", "due_date", "paid_at"]
+        fields = [
+            "id", "amount", "amount_paid", "method", "reference",
+            "status", "approved_by", "rejection_reason",
+            "due_date", "paid_at",
+        ]
         read_only_fields = fields

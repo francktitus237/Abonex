@@ -325,8 +325,17 @@ class _DetailBody extends StatelessWidget {
   }
 
   Future<void> _markPaid(BuildContext context) async {
+    // Échéances (non-RDV) : le « paiement réel » — montant
+    // effectivement payé, mode, référence — est collecté avant
+    // la déclaration (étude §4.6/C).
+    Map<String, dynamic>? payment;
+    if (!subscription.isEvent) {
+      payment = await _askPayment(context, subscription);
+      if (!context.mounted || payment == null) return;
+    }
     final result = await context.read<SubscriptionsCubit>().markPaid(
       subscription,
+      payment: payment,
     );
     if (!context.mounted) return;
     toastification.show(
@@ -346,6 +355,88 @@ class _DetailBody extends StatelessWidget {
               },
       ),
       autoCloseDuration: const Duration(seconds: 3),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _askPayment(
+    BuildContext context,
+    Subscription sub,
+  ) {
+    final amount = TextEditingController(
+      text: sub.amount.toStringAsFixed(0),
+    );
+    final reference = TextEditingController();
+    String method = '';
+    const methods = [
+      '', 'momo', 'om', 'virement', 'especes', 'carte', 'cheque',
+      'autre',
+    ];
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => AlertDialog(
+          title: Text(ctx.tr('paid.title')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amount,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: ctx.tr('paid.amount'),
+                  suffixText: sub.currency,
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: method,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('paid.method'),
+                ),
+                items: [
+                  for (final m in methods)
+                    DropdownMenuItem(
+                      value: m,
+                      child: Text(
+                        m.isEmpty ? '—' : ctx.tr('paid.m_$m'),
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setSheet(() => method = v ?? ''),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: reference,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('paid.ref'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                final parsed =
+                    double.tryParse(
+                      amount.text.trim().replaceAll(',', '.'),
+                    );
+                Navigator.of(ctx).pop({
+                  'amount_paid': ?parsed,
+                  'method': method,
+                  'reference': reference.text.trim(),
+                });
+              },
+              child: Text(ctx.tr('paid.confirm')),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

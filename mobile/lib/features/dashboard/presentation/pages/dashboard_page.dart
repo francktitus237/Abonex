@@ -430,7 +430,15 @@ class _InsightsCard extends StatelessWidget {
               ),
               if (rest != null)
                 Text(
-                  context.tr('ins.rest', {
+                  context.tr(
+                    switch (context.read<AuthCubit>().state) {
+                          Authenticated(user: final u) =>
+                            u.workspace?.isBusiness ?? false,
+                          _ => false,
+                        }
+                        ? 'ins.restBiz'
+                        : 'ins.rest',
+                    {
                     'amount': AppFormatters.money(rest, base),
                   }),
                   style: theme.textTheme.bodySmall?.copyWith(

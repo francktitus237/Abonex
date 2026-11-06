@@ -96,8 +96,14 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
   void _resync() => unawaited(refresh(quiet: true));
 
   /// Marque une échéance comme payée — met à jour la liste en place.
-  Future<Result<Subscription>> markPaid(Subscription sub) async {
-    final result = await _repository.markPaid(sub.id);
+  Future<Result<Subscription>> markPaid(
+    Subscription sub, {
+    Map<String, dynamic>? payment,
+  }) async {
+    final result = await _repository.markPaid(
+      sub.id,
+      payment: payment,
+    );
     if (result case Ok(value: final updated)) {
       final current = state.subscriptions ?? [];
       final next = [

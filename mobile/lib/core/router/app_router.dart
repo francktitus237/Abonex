@@ -20,6 +20,8 @@ import '../../features/subscriptions/presentation/pages/subscription_detail_page
 import '../../features/subscriptions/presentation/pages/subscriptions_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/workspace/presentation/pages/employees_page.dart';
+import '../../features/workspace/presentation/pages/audit_log_page.dart';
+import '../../features/workspace/presentation/pages/pending_payments_page.dart';
 import '../../features/workspace/presentation/pages/integrations_page.dart';
 import '../storage/settings_storage.dart';
 import '../widgets/app_shell.dart';
@@ -49,6 +51,12 @@ abstract final class AppRoutes {
 
   /// Centre de notifications in-app.
   static const notifications = '/notifications';
+
+  /// Validations de paiements déclarés par les assistants.
+  static const pendingPayments = '/pending-payments';
+
+  /// Journal d'audit — propriétaire uniquement.
+  static const audit = '/audit';
 
   /// Import CSV / connexions aux comptes fournisseurs.
   static const integrations = '/integrations';
@@ -212,6 +220,14 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.integrations,
         builder: (_, _) => const IntegrationsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.audit,
+        builder: (_, _) => const AuditLogPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.pendingPayments,
+        builder: (_, _) => const PendingPaymentsPage(),
       ),
       GoRoute(
         path: AppRoutes.employees,
