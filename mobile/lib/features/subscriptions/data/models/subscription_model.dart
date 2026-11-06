@@ -20,6 +20,8 @@ class SubscriptionModel extends Subscription {
     super.startDate,
     super.endDate,
     super.dueTime,
+    super.isShared,
+    super.paymentUrl,
   });
 
   /// "14:30:00" (DRF TimeField) → TimeOfDay.
@@ -62,6 +64,8 @@ class SubscriptionModel extends Subscription {
           ? DateTime.tryParse(json['end_date'] as String)
           : null,
       dueTime: _parseTime(json['due_time']),
+      isShared: json['is_shared'] as bool? ?? false,
+      paymentUrl: json['payment_url'] as String? ?? '',
     );
   }
 }

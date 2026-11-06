@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../di/injection.dart';
 import '../l10n/app_strings.dart';
+import '../navigation/tab_reselect.dart';
 import '../storage/settings_storage.dart';
 
 /// Coquille de navigation basse — les 5 onglets du cahier des charges :
@@ -98,12 +99,16 @@ class _AppShellState extends State<AppShell> {
                     selected: i == widget.shell.currentIndex,
                     onTap: () {
                       HapticFeedback.selectionClick();
+                      final sameTab = i == widget.shell.currentIndex;
                       widget.shell.goBranch(
                         i,
                         // Re-taper l'onglet actif ramène à sa racine
                         // (comportement standard des apps fintech).
-                        initialLocation: i == widget.shell.currentIndex,
+                        initialLocation: sameTab,
                       );
+                      // …et la page remonte en haut + se rafraîchit
+                      // (scroll-to-top + pull silencieux).
+                      if (sameTab) getIt<TabReselect>().fire(i);
                     },
                   ),
               ],

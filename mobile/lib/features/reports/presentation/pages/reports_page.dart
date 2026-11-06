@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/tab_reselect.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/animated_fade_in.dart';
@@ -29,15 +33,39 @@ class _ReportsPageState extends State<ReportsPage> {
   /// (un total FCFA+USD n'a pas de sens comptable).
   String? _currency;
 
+  /// Scroll principal — re-tap sur « Rapports » remonte en
+  /// haut et rafraîchit silencieusement.
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     context.read<SubscriptionsCubit>().ensureLoaded();
+    getIt<TabReselect>().tick.addListener(_onTabReselect);
     // Devise principale du workspace comme défaut.
     _currency = switch (context.read<AuthCubit>().state) {
       Authenticated(user: final u) => u.workspace?.defaultCurrency,
       _ => null,
     };
+  }
+
+  void _onTabReselect() {
+    if (getIt<TabReselect>().lastIndex != 3 || !mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(context.read<SubscriptionsCubit>().refresh(quiet: true));
+  }
+
+  @override
+  void dispose() {
+    getIt<TabReselect>().tick.removeListener(_onTabReselect);
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -91,6 +119,7 @@ class _ReportsPageState extends State<ReportsPage> {
           final items = billed.where((s) => s.currency == active).toList();
 
           return ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(
               20,
               8,

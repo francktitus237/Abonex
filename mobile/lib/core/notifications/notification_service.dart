@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,6 +15,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/subscriptions/domain/entities/subscription.dart';
+import '../../features/subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../config/env.dart';
 import '../di/injection.dart';
 import '../l10n/app_strings.dart';
@@ -700,6 +702,14 @@ class NotificationService {
         data: {'status': 'paid'},
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
+      // PATCH réussi : l'échéance a été avancée au cycle suivant
+      // côté serveur → resync silencieux de la liste affichée.
+      // getIt peut être indisponible en isolate de fond : silence.
+      try {
+        if (getIt.isRegistered<SubscriptionsCubit>()) {
+          unawaited(getIt<SubscriptionsCubit>().refresh(quiet: true));
+        }
+      } catch (_) {}
     } catch (_) {}
   }
 

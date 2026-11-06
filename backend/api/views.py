@@ -560,6 +560,137 @@ class EmployeeDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# ---- Intelligence : coût mensuel équivalent par cycle ----
+_MONTHLY_FACTOR = {
+    "monthly": 1.0,
+    "quarterly": 1 / 3,
+    "yearly": 1 / 12,
+    "weekly": 52 / 12,
+    "daily": 365 / 12,
+    "once": 0.0,
+}
+
+
+class InsightsView(APIView):
+    """GET /insights/ — recommandations intelligentes :
+    doublons, alternatives moins chères (catalogue plans),
+    total mensuel équivalent, reste à vivre vs budget."""
+
+    def get(self, request):
+        profile = request.user.profile
+        ws = profile.workspace
+        base = ws.default_currency or "XAF"
+        subs = list(
+            Subscription.objects.filter(workspace=ws).exclude(
+                category="event"
+            )
+        )
+        try:
+            rates = rates_for(base) or {}
+        except Exception:
+            rates = {}
+
+        def to_base(amount, currency):
+            if currency == base:
+                return amount
+            rate = rates.get(currency)
+            return amount / rate if rate else None
+
+        def monthly_equiv(s):
+            factor = _MONTHLY_FACTOR.get(s.cycle, 1.0)
+            return float(s.amount) * factor
+
+        # ---------- Dépense mensuelle équivalente (base) ----------
+        monthly_total = 0.0
+        for s in subs:
+            conv = to_base(monthly_equiv(s), s.currency)
+            if conv is not None:
+                monthly_total += conv
+
+        # ---------- Doublons : même fournisseur (ou nom) -------
+        from collections import defaultdict
+
+        by_name = defaultdict(list)
+        for s in subs:
+            key = (s.provider or s.name).strip().lower()
+            if key:
+                by_name[key].append(s)
+        duplicates = [
+            {
+                "name": g[0].provider or g[0].name,
+                "count": len(g),
+                "monthly_total": round(
+                    sum(monthly_equiv(s) for s in g), 2
+                ),
+                "currency": g[0].currency,
+            }
+            for g in by_name.values()
+            if len(g) > 1
+        ]
+
+        # ---------- Alternatives moins chères (catalogue) -----
+        from .catalog import CATALOG
+
+        plans_by_provider = {}
+        for p in CATALOG:
+            name = p["name"].lower()
+            for plan in p.get("plans") or []:
+                factor = _MONTHLY_FACTOR.get(plan.get("cycle"), 1.0)
+                plans_by_provider.setdefault(name, []).append(
+                    {
+                        "provider": p["name"],
+                        "label": plan["label"],
+                        "monthly": plan["amount"] * factor,
+                        "currency": plan["currency"],
+                    }
+                )
+        cheaper = []
+        for s in subs:
+            key = (s.provider or "").strip().lower() or s.name.strip().lower()
+            plans = plans_by_provider.get(key)
+            if not plans:
+                continue
+            current = monthly_equiv(s)
+            same_ccy = [p for p in plans if p["currency"] == s.currency]
+            best = min(same_ccy, key=lambda p: p["monthly"], default=None)
+            # Économie significative : > 5 % et > 0.5 unité/mois.
+            if best and best["monthly"] < current * 0.95 and (
+                current - best["monthly"]
+            ) > 0.5:
+                cheaper.append(
+                    {
+                        "subscription": s.name,
+                        "current_monthly": round(current, 2),
+                        "suggestion": f"{best['provider']} {best['label']}",
+                        "suggested_monthly": round(best["monthly"], 2),
+                        "saving_monthly": round(
+                            current - best["monthly"], 2
+                        ),
+                        "currency": s.currency,
+                    }
+                )
+        cheaper.sort(key=lambda c: c["saving_monthly"], reverse=True)
+
+        # ---------- Reste à vivre ----------
+        rest = None
+        if ws.monthly_budget is not None:
+            rest = round(float(ws.monthly_budget) - monthly_total, 2)
+
+        return Response(
+            {
+                "monthly_total": round(monthly_total, 2),
+                "base_currency": base,
+                "monthly_budget": ws.monthly_budget,
+                "reste_a_vivre": rest,
+                "duplicates": duplicates,
+                "cheaper_alternatives": cheaper,
+                "potential_monthly_saving": round(
+                    sum(c["saving_monthly"] for c in cheaper), 2
+                ),
+            }
+        )
+
+
 class ExportCsvView(APIView):
     """GET /export/csv/ — export RGPD + comptabilité : toutes les
     données de l'espace courant en CSV (abonnements + paiements)."""

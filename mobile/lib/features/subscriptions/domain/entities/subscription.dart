@@ -80,6 +80,8 @@ class Subscription {
     this.startDate,
     this.endDate,
     this.dueTime,
+    this.isShared = false,
+    this.paymentUrl = '',
   });
 
   final String id;
@@ -110,6 +112,14 @@ class Subscription {
 
   /// Heure de l'échéance — renseignée pour les rendez-vous.
   final TimeOfDay? dueTime;
+
+  /// Abonnement du foyer : charge partagée par la famille
+  /// (CDC — abonnements « household » côté particuliers).
+  final bool isShared;
+
+  /// Lien de paiement direct (portail client/page marchande) —
+  /// bouton « Payer » sur le détail.
+  final String paymentUrl;
 
   /// Rendez-vous / événement — uniquement la catégorie dédiée.
   /// Un abonnement ponctuel (facture « une seule fois ») reste un

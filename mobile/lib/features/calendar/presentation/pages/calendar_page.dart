@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/tab_reselect.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -63,12 +67,36 @@ class _CalendarPageState extends State<CalendarPage> {
   late DateTime _visibleMonth;
   DateTime? _selectedDay;
 
+  /// Scroll principal — re-tap sur « Calendrier » remonte
+  /// en haut et rafraîchit silencieusement.
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _visibleMonth = DateTime(now.year, now.month);
     context.read<SubscriptionsCubit>().ensureLoaded();
+    getIt<TabReselect>().tick.addListener(_onTabReselect);
+  }
+
+  void _onTabReselect() {
+    if (getIt<TabReselect>().lastIndex != 2 || !mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(context.read<SubscriptionsCubit>().refresh(quiet: true));
+  }
+
+  @override
+  void dispose() {
+    getIt<TabReselect>().tick.removeListener(_onTabReselect);
+    _scroll.dispose();
+    super.dispose();
   }
 
   void _shiftMonth(int delta) {
@@ -123,6 +151,7 @@ class _CalendarPageState extends State<CalendarPage> {
               : items.where((s) => _occursOn(s, selected)).toList();
 
           return ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(
               20,
               4,

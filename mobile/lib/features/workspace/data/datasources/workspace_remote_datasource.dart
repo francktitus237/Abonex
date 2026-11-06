@@ -20,6 +20,13 @@ class WorkspaceRemoteDataSource {
     await _dio.patch<void>('workspace/budget/', data: {'monthly_budget': amount});
   }
 
+  /// GET /insights/ — recommandations intelligentes : doublons,
+  /// alternatives moins chères, reste à vivre, total mensuel.
+  Future<Map<String, dynamic>> insights() async {
+    final res = await _dio.get<Map<String, dynamic>>('insights/');
+    return res.data ?? <String, dynamic>{};
+  }
+
   // ---------- Employés (espaces entreprise) ----------
 
   /// GET /employees/ → employés de l'espace courant.

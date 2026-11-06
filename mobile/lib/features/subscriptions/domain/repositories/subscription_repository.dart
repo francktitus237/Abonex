@@ -20,6 +20,8 @@ abstract class SubscriptionRepository {
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? dueTime,
+    bool? isShared,
+    String? paymentUrl,
   });
 
   /// Modifie un abonnement existant (PATCH partiel).
@@ -41,6 +43,8 @@ abstract class SubscriptionRepository {
     bool clearStartDate,
     bool clearEndDate,
     bool clearDueTime,
+    bool? isShared,
+    String? paymentUrl,
   });
 
   /// Marque un abonnement comme payé (PATCH status).

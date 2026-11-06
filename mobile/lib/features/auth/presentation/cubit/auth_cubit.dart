@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/utils/result.dart';
+import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'auth_state.dart';
@@ -26,8 +28,24 @@ class AuthCubit extends Cubit<AuthState> {
     });
   }
 
+  /// Re-synchronise le profil (/auth/me/) — re-tap onglet
+  /// Profil, photo/mise à jour serveur, workspace modifié
+  /// ailleurs. Silence en cas d'erreur réseau.
+  Future<void> refresh() async {
+    if (state is! Authenticated) return;
+    final result = await _repository.currentUser();
+    if (result case Ok(value: final user)) {
+      emit(AuthState.authenticated(user));
+    }
+  }
+
   /// Appelé par LoginCubit après une connexion réussie.
-  void onAuthenticated(User user) => emit(AuthState.authenticated(user));
+  void onAuthenticated(User user) {
+    // Nouveau compte : vider la liste de l'ancien workspace
+    // et déverrouiller ensureLoaded pour recharger.
+    getIt<SubscriptionsCubit>().resetForAccountChange();
+    emit(AuthState.authenticated(user));
+  }
 
   /// Inscription réelle via l'API : en cas de succès la session
   /// démarre immédiatement (tokens déjà persistés par le repository).
@@ -48,6 +66,7 @@ class AuthCubit extends Cubit<AuthState> {
       kind: kind,
     );
     if (result case Ok(value: final user)) {
+      getIt<SubscriptionsCubit>().resetForAccountChange();
       emit(AuthState.authenticated(user));
     }
     return result;
@@ -99,12 +118,14 @@ class AuthCubit extends Cubit<AuthState> {
   /// (session expirée pendant l'usage) → retour forcé au login.
   void onSessionExpired() {
     if (state is! Unauthenticated) {
+      getIt<SubscriptionsCubit>().resetForAccountChange();
       emit(const AuthState.unauthenticated());
     }
   }
 
   Future<void> logout() async {
     await _repository.logout();
+    getIt<SubscriptionsCubit>().resetForAccountChange();
     emit(const AuthState.unauthenticated());
   }
 }

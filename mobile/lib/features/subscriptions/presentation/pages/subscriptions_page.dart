@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:toastification/toastification.dart';
 import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/tab_reselect.dart';
 import '../../../../core/router/app_router.dart';
 
 import '../../../../core/utils/formatters.dart';
@@ -39,10 +42,34 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   // les deux ne se mélangent jamais dans la même liste.
   bool _showEvents = false;
 
+  /// Scroll principal — re-tap sur « Abonnements » remonte
+  /// en haut et rafraîchit silencieusement.
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     context.read<SubscriptionsCubit>().ensureLoaded();
+    getIt<TabReselect>().tick.addListener(_onTabReselect);
+  }
+
+  void _onTabReselect() {
+    if (getIt<TabReselect>().lastIndex != 1 || !mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(context.read<SubscriptionsCubit>().refresh(quiet: true));
+  }
+
+  @override
+  void dispose() {
+    getIt<TabReselect>().tick.removeListener(_onTabReselect);
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -242,6 +269,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     return RefreshIndicator(
       onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
       child: ListView.separated(
+        controller: _scroll,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 96 + AppShell.barInset),
         itemCount: filtered.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -388,6 +416,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   TimeOfDay? _dueTime;
   // Date de prise réelle de l'abonnement — null = inconnue.
   DateTime? _startDate;
+  // Abonnement du foyer (charge partagée en famille) et lien
+  // de paiement direct vers le portail du fournisseur.
+  bool _isShared = false;
+  final _paymentUrl = TextEditingController();
   // Fin de contrat éventuelle — null = sans fin.
   DateTime? _endDate;
   bool _submitting = false;
@@ -426,6 +458,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _firstDue = e.nextDueDate;
       _dueTime = e.dueTime;
       _startDate = e.startDate;
+      _isShared = e.isShared;
+      _paymentUrl.text = e.paymentUrl;
       _endDate = e.endDate;
     }
     // Fournisseurs connus du pays → autocomplétion du champ.
@@ -479,6 +513,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     _provider.dispose();
     _amount.dispose();
     _description.dispose();
+    _paymentUrl.dispose();
     super.dispose();
   }
 
@@ -578,6 +613,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             startDate: _isEvent ? null : _startDate,
             endDate: _isEvent ? null : _endDate,
             dueTime: _isEvent ? _dueTime : null,
+            isShared: !_isEvent && _isShared,
+            paymentUrl: _isEvent ? '' : _paymentUrl.text.trim(),
           )
         : await cubit.update(
             id: existing.id,
@@ -596,6 +633,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             endDate: _endDate,
             clearDueTime: !_isEvent || _dueTime == null,
             dueTime: _dueTime,
+            isShared: !_isEvent && _isShared,
+            paymentUrl: _isEvent ? '' : _paymentUrl.text.trim(),
           );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -1038,6 +1077,24 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     ),
                   ),
                   children: [
+                    // Abonnement du foyer : charge partagée en
+                    // famille — taguée « Foyer » dans la liste.
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(context.tr('form.shared')),
+                      subtitle: Text(context.tr('form.sharedSub')),
+                      value: _isShared,
+                      onChanged: (v) => setState(() => _isShared = v),
+                    ),
+                    TextFormField(
+                      controller: _paymentUrl,
+                      keyboardType: TextInputType.url,
+                      decoration: InputDecoration(
+                        labelText: context.tr('form.paymentUrl'),
+                        prefixIcon: const Icon(LucideIcons.link, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     // Date de prise réelle — peut être inconnue.
                     OutlinedButton.icon(
                       onPressed: _pickStartDate,

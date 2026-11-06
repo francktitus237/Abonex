@@ -61,7 +61,9 @@ abstract final class AppTheme {
     // téléchargée et mise en cache au premier lancement.
     // Tracking négatif sur les titres : la signature visuelle des
     // apps fintech modernes (Linear, Revolut, Ramp).
-    final base = GoogleFonts.interTextTheme(
+    // Police de la refonte visuelle : Manrope — plus moderne
+    // et lisible qu'Inter sur les petits libellés.
+    final base = GoogleFonts.manropeTextTheme(
       ThemeData(brightness: brightness).textTheme,
     );
     final textTheme = base.copyWith(

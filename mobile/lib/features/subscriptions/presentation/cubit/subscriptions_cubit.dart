@@ -64,8 +64,13 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     return refresh();
   }
 
-  Future<void> refresh() async {
-    emit(const SubscriptionsLoading());
+  /// Recharge depuis l'API. `quiet` garde la liste affichée
+  /// pendant le rafraîchissement (pas de skeleton après une
+  /// action déjà reflétée en local — ajout, paie serveur, etc.).
+  Future<void> refresh({bool quiet = false}) async {
+    if (!quiet || state.subscriptions == null) {
+      emit(const SubscriptionsLoading());
+    }
     final result = await _repository.getSubscriptions();
     emit(switch (result) {
       Ok(value: final list) => SubscriptionsLoaded(list),
@@ -76,6 +81,19 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       unawaited(getIt<NotificationService>().scheduleDueReminders(list));
     }
   }
+
+  /// Changement de compte (logout, session expirée) : la liste
+  /// affichée appartenait à l'ancien workspace — on oublie tout
+  /// et on déverrouille ensureLoaded pour le prochain login.
+  void resetForAccountChange() {
+    _requested = false;
+    emit(const SubscriptionsInitial());
+  }
+
+  /// Re-synchronise en silence après une mutation locale :
+  /// le serveur peut recalculer des champs (status, prochaine
+  /// occurrence d'un RDV récurrent, paie générée, dédoublonnage).
+  void _resync() => unawaited(refresh(quiet: true));
 
   /// Marque une échéance comme payée — met à jour la liste en place.
   Future<Result<Subscription>> markPaid(Subscription sub) async {
@@ -88,6 +106,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       ];
       emit(SubscriptionsLoaded(next));
       unawaited(getIt<NotificationService>().scheduleDueReminders(next));
+      _resync();
     }
     return result;
   }
@@ -103,6 +122,7 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       ];
       emit(SubscriptionsLoaded(next));
       unawaited(getIt<NotificationService>().scheduleDueReminders(next));
+      _resync();
     }
     return result;
   }
@@ -128,6 +148,8 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? dueTime,
+    bool? isShared,
+    String? paymentUrl,
   }) async {
     final result = await _repository.createSubscription(
       name: name,
@@ -142,12 +164,15 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       startDate: startDate,
       endDate: endDate,
       dueTime: dueTime,
+      isShared: isShared,
+      paymentUrl: paymentUrl,
     );
     if (result case Ok(value: final created)) {
       final current = state.subscriptions ?? [];
       final next = [...current, created];
       emit(SubscriptionsLoaded(next));
       unawaited(getIt<NotificationService>().scheduleDueReminders(next));
+      _resync();
     }
     return result;
   }
@@ -170,6 +195,8 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     bool clearStartDate = false,
     bool clearEndDate = false,
     bool clearDueTime = false,
+    bool? isShared,
+    String? paymentUrl,
   }) async {
     final result = await _repository.updateSubscription(
       id: id,
@@ -188,11 +215,14 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       clearStartDate: clearStartDate,
       clearEndDate: clearEndDate,
       clearDueTime: clearDueTime,
+      isShared: isShared,
+      paymentUrl: paymentUrl,
     );
     if (result case Ok(value: final updated)) {
       final current = state.subscriptions ?? [];
       final next = [for (final s in current) s.id == updated.id ? updated : s];
       emit(SubscriptionsLoaded(next));
+      _resync();
       unawaited(getIt<NotificationService>().scheduleDueReminders(next));
     }
     return result;

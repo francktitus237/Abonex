@@ -40,6 +40,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? dueTime,
+    bool? isShared,
+    String? paymentUrl,
   }) async {
     try {
       return Ok(
@@ -56,6 +58,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'currency': currency ?? 'XAF',
           'description': ?description,
           'country': ?country,
+          'is_shared': ?isShared,
+          'payment_url': ?paymentUrl,
         }),
       );
     } on DioException catch (e) {
@@ -83,6 +87,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     bool clearStartDate = false,
     bool clearEndDate = false,
     bool clearDueTime = false,
+    bool? isShared,
+    String? paymentUrl,
   }) async {
     try {
       return Ok(
@@ -101,6 +107,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           'currency': ?currency,
           'description': ?description,
           'country': ?country,
+          'is_shared': ?isShared,
+          'payment_url': ?paymentUrl,
           if (clearStartDate)
             'start_date': null
           else if (startDate != null)

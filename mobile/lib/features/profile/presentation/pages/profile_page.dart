@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -17,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/tab_reselect.dart';
 import '../../../../core/notifications/notification_service.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/settings_storage.dart';
@@ -33,8 +35,42 @@ import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 
 /// Onglet Profil : identité du compte + réglages P1 du CDC
 /// (thème, langue, biométrie) + déconnexion.
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  /// Scroll principal — re-tap sur « Profil » remonte en haut
+  /// et recharge le profil utilisateur (/auth/me/).
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    getIt<TabReselect>().tick.addListener(_onTabReselect);
+  }
+
+  void _onTabReselect() {
+    if (getIt<TabReselect>().lastIndex != 4 || !mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(context.read<AuthCubit>().refresh());
+  }
+
+  @override
+  void dispose() {
+    getIt<TabReselect>().tick.removeListener(_onTabReselect);
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +79,8 @@ class ProfilePage extends StatelessWidget {
       body: BlocBuilder<AuthCubit, AuthState>(
         builder: (context, state) {
           return switch (state) {
-            Authenticated(:final user) => _ProfileView(user: user),
+            Authenticated(:final user) =>
+              _ProfileView(user: user, scroll: _scroll),
             // Pendant le bootstrap ou une déconnexion en cours.
             _ => const Center(child: CircularProgressIndicator()),
           };
@@ -54,15 +91,17 @@ class ProfilePage extends StatelessWidget {
 }
 
 class _ProfileView extends StatelessWidget {
-  const _ProfileView({required this.user});
+  const _ProfileView({required this.user, required this.scroll});
 
   final User user;
+  final ScrollController scroll;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return ListView(
+      controller: scroll,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20 + AppShell.barInset),
       children: [
         // ---------- Carte identité ----------
@@ -124,9 +163,10 @@ class _ProfileView extends StatelessWidget {
                   trailing: const Icon(LucideIcons.chevronRight, size: 18),
                   onTap: () => context.push(AppRoutes.integrations),
                 ),
-                // Espace entreprise : gestion des employés et
-                // de la masse salariale (paies = échéances payroll).
-                if (user.workspace?.isBusiness ?? false) ...[
+                // Employés : entreprise ET particulier — un
+                // particulier suit aussi sa ménagère ou son
+                // vigile (salaires = échéances payroll).
+                ...[
                   const Divider(indent: 56),
                   ListTile(
                     leading: _TileIcon(icon: LucideIcons.userRoundCog),

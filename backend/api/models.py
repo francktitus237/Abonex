@@ -151,6 +151,12 @@ class Subscription(models.Model):
     due_time = models.TimeField(null=True, blank=True)
     # Date de fin de contrat — null = renouvellement sans fin.
     end_date = models.DateField(null=True, blank=True)
+    # Abonnement du foyer : charge partagée par la famille
+    # (Netflix famille, box internet…). Déduit du budget du foyer.
+    is_shared = models.BooleanField(default=False)
+    # Lien de paiement direct (portail client, page marchande…) —
+    # bouton « Payer » dans le détail de l'abonnement.
+    payment_url = models.URLField(max_length=500, blank=True, default="")
     cycle = models.CharField(max_length=16, choices=CYCLES, default="monthly")
     status = models.CharField(
         max_length=16, choices=STATUSES, default="dueSoon"

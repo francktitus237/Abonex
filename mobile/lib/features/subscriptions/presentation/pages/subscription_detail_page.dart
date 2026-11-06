@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:toastification/toastification.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/data/countries.dart';
 import '../../../../core/di/injection.dart';
@@ -284,6 +285,18 @@ class _DetailBody extends StatelessWidget {
             ),
           ),
         if (sub.status != SubscriptionStatus.paid) const SizedBox(height: 12),
+        // Lien de paiement direct — ouvre le portail du
+        // fournisseur (champ « Lien de paiement » du formulaire).
+        if (sub.paymentUrl.isNotEmpty)
+          OutlinedButton.icon(
+            onPressed: () => launchUrl(
+              Uri.parse(sub.paymentUrl),
+              mode: LaunchMode.externalApplication,
+            ),
+            icon: const Icon(LucideIcons.creditCard, size: 18),
+            label: Text(context.tr('detail.payNow')),
+          ),
+        if (sub.paymentUrl.isNotEmpty) const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => showSubscriptionFormSheet(context, existing: sub),
           icon: const Icon(LucideIcons.pencil, size: 18),

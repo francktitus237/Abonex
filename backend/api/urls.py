@@ -19,6 +19,7 @@ urlpatterns = [
     ),
     path("devices/", views.DeviceTokenView.as_view()),
     path("export/csv/", views.ExportCsvView.as_view()),
+    path("insights/", views.InsightsView.as_view()),
     path("employees/", views.EmployeeListCreateView.as_view()),
     path(
         "employees/<int:pk>/",

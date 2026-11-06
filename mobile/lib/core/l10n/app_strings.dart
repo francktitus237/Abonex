@@ -110,6 +110,8 @@ abstract final class AppStrings {
     'dash.greeting': 'Bonjour, {name}',
     'dash.spent': 'Dépensé ce mois',
     'dash.toPay': 'Reste à payer',
+    'dash.next': 'Prochain',
+    'dash.paidRatio': '{p} % du mois déjà réglé',
     'dash.count': '{n} abonnement{s} suivi{s}',
     'dash.events': '{n} rendez-vous',
     'dash.updateHint':
@@ -180,6 +182,15 @@ abstract final class AppStrings {
     'form.amountInvalid': 'Montant invalide',
     'form.cycle': 'Cycle',
     'form.recurrence': 'Répéter le rappel',
+    'form.shared': 'Abonnement du foyer',
+    'form.sharedSub': 'Charge partagée avec la famille',
+    'form.paymentUrl': 'Lien de paiement (optionnel)',
+    'ins.title': 'Optimiser votre budget',
+    'ins.dup': '{count}× « {name} » — doublon possible',
+    'ins.cheaper': '{name} : {plan} revient à {cost}/mois',
+    'ins.rest': 'Reste à vivre : {amount}/mois',
+    'ins.total': '{amount} d\u2019échéances mensuelles',
+    'ins.saving': 'Économie possible : {amount}/mois',
     'form.category': 'Catégorie',
     'form.country': 'Pays de l\'abonnement',
     'form.firstDue': 'Première échéance : {date}',
@@ -227,6 +238,7 @@ abstract final class AppStrings {
     'detail.at': 'à {time}',
     'detail.markPaid': 'Marquer comme payé',
     'detail.markDone': 'Marquer comme terminé',
+    'detail.payNow': 'Payer maintenant',
     'detail.deleteTitle': 'Supprimer ?',
     'detail.deleteBody':
         '« {name} » sera définitivement retiré de votre suivi.',
@@ -463,11 +475,12 @@ abstract final class AppStrings {
     'onb.2.desc':
         'Rappels automatiques avant chaque paiement, alerte plein écran '
         'le jour J : ne payez plus jamais de pénalité de retard.',
-    'onb.3.badge': 'Équipe & sécurité',
-    'onb.3.title': 'Collaborez en toute\nsérénité',
+    'onb.3.badge': 'Intelligence & sécurité',
+    'onb.3.title': 'Réduisez vos\ndépenses',
     'onb.3.desc':
-        'Invitez vos collaborateurs avec des rôles précis : chacun voit '
-        'et fait exactement ce que vous avez décidé.',
+        'Abonex repère les doublons, compare les tarifs des '
+        'fournisseurs et calcule votre reste à vivre — équipe '
+        'et foyer collaborent avec des rôles précis.',
     'onb.expenses': 'Dépenses du mois',
     'onb.bills': 'Factures',
     'onb.rent': 'Loyers',
@@ -716,6 +729,8 @@ abstract final class AppStrings {
     'dash.greeting': 'Hello, {name}',
     'dash.spent': 'Spent this month',
     'dash.toPay': 'Left to pay',
+    'dash.next': 'Next',
+    'dash.paidRatio': '{p}% of the month settled',
     'dash.count': '{n} subscription{s} tracked',
     'dash.events': '{n} appointment{s}',
     'dash.updateHint':
@@ -780,6 +795,15 @@ abstract final class AppStrings {
     'form.amountInvalid': 'Invalid amount',
     'form.cycle': 'Billing cycle',
     'form.recurrence': 'Repeat reminder',
+    'form.shared': 'Household subscription',
+    'form.sharedSub': 'Expense shared with the family',
+    'form.paymentUrl': 'Payment link (optional)',
+    'ins.title': 'Optimize your budget',
+    'ins.dup': '{count}× "{name}" — possible duplicate',
+    'ins.cheaper': '{name}: {plan} costs {cost}/month',
+    'ins.rest': 'Disposable income: {amount}/month',
+    'ins.total': '{amount} of monthly dues',
+    'ins.saving': 'Possible saving: {amount}/month',
     'form.category': 'Category',
     'form.country': 'Subscription country',
     'form.firstDue': 'First due date: {date}',
@@ -826,6 +850,7 @@ abstract final class AppStrings {
     'detail.at': 'at {time}',
     'detail.markPaid': 'Mark as paid',
     'detail.markDone': 'Mark as done',
+    'detail.payNow': 'Pay now',
     'detail.deleteTitle': 'Delete?',
     'detail.deleteBody': '"{name}" will be permanently removed from tracking.',
     'detail.deleted': 'Subscription deleted.',
@@ -1042,11 +1067,12 @@ abstract final class AppStrings {
     'onb.2.desc':
         'Automatic reminders before each payment, full-screen alert on '
         'the day: never pay a late fee again.',
-    'onb.3.badge': 'Team & security',
-    'onb.3.title': 'Collaborate with\npeace of mind',
+    'onb.3.badge': 'Intelligence & security',
+    'onb.3.title': 'Cut down\nyour spending',
     'onb.3.desc':
-        'Invite collaborators with precise roles: everyone sees and does '
-        'exactly what you decided.',
+        'Abonex spots duplicates, compares provider prices and computes '
+        'your disposable income — team and household collaborate with '
+        'precise roles.',
     'onb.expenses': 'Monthly spending',
     'onb.bills': 'Bills',
     'onb.rent': 'Rent',

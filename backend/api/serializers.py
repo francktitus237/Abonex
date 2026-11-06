@@ -100,6 +100,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "end_date",
             "cycle",
             "status",
+            "is_shared",
+            "payment_url",
         ]
         read_only_fields = [
             "id", "provider_country", "provider_flag", "country_flag",

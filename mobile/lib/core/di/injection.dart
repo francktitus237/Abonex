@@ -16,6 +16,7 @@ import '../../features/subscriptions/data/repositories/subscription_repository_i
 import '../../features/subscriptions/domain/repositories/subscription_repository.dart';
 import '../../features/subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../../features/workspace/data/datasources/workspace_remote_datasource.dart';
+import '../navigation/tab_reselect.dart';
 import '../network/dio_client.dart';
 import '../notifications/notification_service.dart';
 import '../router/app_router.dart';
@@ -95,6 +96,7 @@ Future<void> configureDependencies() async {
 
   // ---------- Feature : settings ----------
   // Singleton : le thème et la langue sont lus en continu par app.dart.
+  getIt.registerLazySingleton<TabReselect>(TabReselect.new);
   getIt.registerLazySingleton<SettingsCubit>(
     () => SettingsCubit(storage: getIt(), biometric: getIt()),
   );

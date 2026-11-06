@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/tab_reselect.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -37,10 +40,35 @@ class _DashboardPageState extends State<DashboardPage> {
   // Popup de rappel affiché une seule fois par session.
   bool _reminderShown = false;
 
+  /// Scroll principal — re-tap sur « Accueil » remonte en haut.
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     context.read<SubscriptionsCubit>().ensureLoaded();
+    getIt<TabReselect>().tick.addListener(_onTabReselect);
+  }
+
+  /// Re-tap sur l'onglet actif : retour en haut + resync
+  /// silencieux (pas de skeleton — la page reste affichée).
+  void _onTabReselect() {
+    if (getIt<TabReselect>().lastIndex != 0 || !mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(context.read<SubscriptionsCubit>().refresh(quiet: true));
+  }
+
+  @override
+  void dispose() {
+    getIt<TabReselect>().tick.removeListener(_onTabReselect);
+    _scroll.dispose();
+    super.dispose();
   }
 
   /// Popup in-app : rappelle les échéances urgentes dès que la
@@ -166,6 +194,7 @@ class _DashboardPageState extends State<DashboardPage> {
           return RefreshIndicator(
             onRefresh: () => context.read<SubscriptionsCubit>().refresh(),
             child: ListView(
+              controller: _scroll,
               padding: const EdgeInsets.fromLTRB(
                 20,
                 8,
@@ -184,6 +213,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       mainCurrency: mainCurrency,
                       subCount: items.where((s) => !s.isEvent).length,
                       eventCount: items.where((s) => s.isEvent).length,
+                      nextDue: upcoming.isNotEmpty ? upcoming.first : null,
                     ),
                   ),
                 const SizedBox(height: 14),
@@ -197,6 +227,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   AnimatedFadeIn(child: _OverdueBanner(subs: overdueSubs)),
                 if (!loading && overdueSubs.isNotEmpty)
                   const SizedBox(height: 14),
+                // --- Recommandations intelligentes ---
+                if (!loading) const AnimatedFadeIn(child: _InsightsCard()),
+                if (!loading) const SizedBox(height: 14),
 
                 // --- Budget mensuel ---
                 if (loading)
@@ -339,6 +372,121 @@ class _UpdateHintCard extends StatelessWidget {
 }
 
 /// Bandeau d'alerte : échéances en retard — action immédiate attendue.
+/// Recommandations intelligentes : total mensuel, reste à
+/// vivre vs budget, doublons et alternatives moins chères
+/// (endpoint /insights/ — calculs côté serveur).
+class _InsightsCard extends StatelessWidget {
+  const _InsightsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return FutureBuilder<Map<String, dynamic>>(
+      future: getIt<WorkspaceRemoteDataSource>().insights(),
+      builder: (context, snap) {
+        final data = snap.data;
+        if (data == null) return const SizedBox.shrink();
+        final base = data['base_currency'] as String? ?? 'XAF';
+        final monthly = (data['monthly_total'] as num?)?.toDouble() ?? 0;
+        final rest = (data['reste_a_vivre'] as num?)?.toDouble();
+        final dups = (data['duplicates'] as List?) ?? const [];
+        final cheaper =
+            (data['cheaper_alternatives'] as List?) ?? const [];
+        final saving =
+            (data['potential_monthly_saving'] as num?)?.toDouble() ?? 0;
+        final hasTips = dups.isNotEmpty || cheaper.isNotEmpty;
+        if (monthly <= 0 && !hasTips) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.secondaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(AppTheme.radius + 4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.sparkles, size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.tr('ins.title'),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                context.tr('ins.total', {
+                  'amount': AppFormatters.money(monthly, base),
+                }),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (rest != null)
+                Text(
+                  context.tr('ins.rest', {
+                    'amount': AppFormatters.money(rest, base),
+                  }),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: rest < 0 ? scheme.error : scheme.onSurfaceVariant,
+                  ),
+                ),
+              if (saving > 0)
+                Text(
+                  context.tr('ins.saving', {
+                    'amount': AppFormatters.money(
+                      saving,
+                      cheaper.isNotEmpty
+                          ? (cheaper.first
+                                  as Map)['currency']
+                              as String? ??
+                              base
+                          : base,
+                    ),
+                  }),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ...dups.take(2).map(
+                (d) => Text(
+                  context.tr('ins.dup', {
+                    'count': '${(d as Map)['count']}',
+                    'name': '${d['name']}',
+                  }),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.error,
+                  ),
+                ),
+              ),
+              ...cheaper.take(2).map(
+                (c) => Text(
+                  context.tr('ins.cheaper', {
+                    'name': '${(c as Map)['subscription']}',
+                    'plan': '${c['suggestion']}',
+                    'cost': AppFormatters.money(
+                      (c['suggested_monthly'] as num?)?.toDouble() ?? 0,
+                      c['currency'] as String? ?? base,
+                    ),
+                  }),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _OverdueBanner extends StatelessWidget {
   const _OverdueBanner({required this.subs});
 
@@ -356,31 +504,44 @@ class _OverdueBanner extends StatelessWidget {
     final totalText = byCurrency.entries
         .map((e) => AppFormatters.money(e.value, e.key))
         .join(' + ');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+    // Bannière cliquable → dialogue listant TOUTES les
+    // échéances en retard (montant/date par devise).
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.radius - 4),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.circleAlert, size: 20, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              context.tr('dash.overdue', {
-                'n': '${subs.length}',
-                's': subs.length > 1 ? 's' : '',
-                'total': totalText.isEmpty ? '' : ' — $totalText',
-              }),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => _ReminderDialog(overdue: subs),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppTheme.radius - 4),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
-        ],
+          child: Row(
+            children: [
+              Icon(LucideIcons.circleAlert, size: 20, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  context.tr('dash.overdue', {
+                    'n': '${subs.length}',
+                    's': subs.length > 1 ? 's' : '',
+                    'total': totalText.isEmpty ? '' : ' — $totalText',
+                  }),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(LucideIcons.chevronRight, size: 18, color: color),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -788,6 +949,7 @@ class _TotalCard extends StatelessWidget {
     required this.mainCurrency,
     required this.subCount,
     required this.eventCount,
+    this.nextDue,
   });
 
   /// Totaux par devise — ex. {XAF: 850000, USD: 45}.
@@ -803,6 +965,9 @@ class _TotalCard extends StatelessWidget {
   /// natures différentes — jamais mélangées dans un seul compteur.
   final int subCount;
   final int eventCount;
+
+  /// Prochaine échéance à payer/venir — ligne « Prochain : X ».
+  final Subscription? nextDue;
 
   @override
   Widget build(BuildContext context) {
@@ -894,95 +1059,154 @@ class _TotalCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.tr('dash.spent'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          _ConvertedAmount(
-                            byCurrency: spentByCurrency,
-                            target: mainCurrency,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          if (spentByCurrency.length > 1)
-                            Text(
-                              _breakdown(spentByCurrency),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                            ),
-                        ],
+                const SizedBox(height: 20),
+                // ---- Chiffre héros : reste à payer ----
+                Text(
+                  context.tr('dash.toPay'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.emerald.withValues(alpha: 0.95),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                _ConvertedAmount(
+                  byCurrency: dueByCurrency,
+                  target: mainCurrency,
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1,
+                  ),
+                ),
+                if (dueByCurrency.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      _breakdown(dueByCurrency),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.55),
                       ),
                     ),
-                    Container(
-                      width: 1,
-                      height: 44,
-                      color: Colors.white.withValues(alpha: 0.15),
+                  ),
+                const SizedBox(height: 16),
+                // ---- Progression du mois : part déjà réglée ----
+                _PaidRatioBar(
+                  spentByCurrency: spentByCurrency,
+                  dueByCurrency: dueByCurrency,
+                  target: mainCurrency,
+                ),
+                const SizedBox(height: 14),
+                // ---- Ligne secondaire : dépensé ce mois ----
+                Row(
+                  children: [
+                    Icon(
+                      LucideIcons.arrowDownCircle,
+                      size: 15,
+                      color: Colors.white.withValues(alpha: 0.65),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.tr('dash.toPay'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.emerald.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          _ConvertedAmount(
-                            byCurrency: dueByCurrency,
-                            target: mainCurrency,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          if (dueByCurrency.length > 1)
-                            Text(
-                              _breakdown(dueByCurrency),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                            ),
-                        ],
+                    const SizedBox(width: 6),
+                    Text(
+                      context.tr('dash.spent'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.65),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: _ConvertedAmount(
+                        byCurrency: spentByCurrency,
+                        target: mainCurrency,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  context.tr('dash.count', {
-                        'n': '$subCount',
-                        's': subCount > 1 ? 's' : '',
-                      }) +
-                      // « rendez-vous » est invariable en français ;
-                      // la ligne n'apparaît que s'il y en a.
-                      (eventCount > 0
-                          ? ' · ${context.tr('dash.events', {
-                              'n': '$eventCount',
-                              's': eventCount > 1 ? 's' : '',
-                            })}'
-                          : ''),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.55),
-                  ),
+                const SizedBox(height: 8),
+                // ---- Compteurs sur leur propre ligne : plus de
+                // collision avec le montant dépensé ----
+                Row(
+                  children: [
+                    Icon(
+                      LucideIcons.repeat,
+                      size: 13,
+                      color: Colors.white.withValues(alpha: 0.55),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        context.tr('dash.count', {
+                              'n': '$subCount',
+                              's': subCount > 1 ? 's' : '',
+                            }) +
+                            // « rendez-vous » est invariable en
+                            // français ; affiché seulement s'il y en a.
+                            (eventCount > 0
+                                ? ' · ${context.tr('dash.events', {
+                                    'n': '$eventCount',
+                                    's': eventCount > 1 ? 's' : '',
+                                  })}'
+                                : ''),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                // ---- Prochaine échéance ----
+                if (nextDue != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          nextDue!.isEvent
+                              ? LucideIcons.calendarClock
+                              : LucideIcons.repeat,
+                          size: 15,
+                          color: AppColors.emerald,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${context.tr('dash.next')}: ${nextDue!.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          nextDue!.isEvent
+                              ? AppFormatters.dateLong(nextDue!.nextDueDate)
+                              : AppFormatters.money(
+                                  nextDue!.amount,
+                                  nextDue!.currency,
+                                ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.emerald,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -1072,58 +1296,82 @@ class _ReminderDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          for (final s in overdue.take(3))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Icon(s.category.icon, size: 15, color: s.category.color),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          // TOUTES les échéances en retard — scrollable si la
+          // liste est longue, chaque ligne ouvre le détail.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: overdue.length,
+              itemBuilder: (_, i) {
+                final s = overdue[i];
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    context.push('${AppRoutes.subscriptions}/${s.id}');
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
                       children: [
-                        Text(
-                          s.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
+                        Icon(
+                          s.category.icon,
+                          size: 15,
+                          color: s.category.color,
                         ),
-                        if (s.description.isNotEmpty)
-                          Text(
-                            s.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                s.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              if (s.description.isNotEmpty)
+                                Text(
+                                  s.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
                           ),
+                        ),
+                        Text(
+                          s.isEvent
+                              ? (s.dueTime != null
+                                    ? AppFormatters.dateTimeLong(s.dueAt)
+                                    : AppFormatters.dateLong(
+                                        s.nextDueDate,
+                                      ))
+                              : AppFormatters.money(
+                                  s.amount,
+                                  s.currency,
+                                ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          LucideIcons.chevronRight,
+                          size: 14,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ],
                     ),
                   ),
-                  Text(
-                    s.isEvent
-                        ? (s.dueTime != null
-                              ? AppFormatters.dateTimeLong(s.dueAt)
-                              : AppFormatters.dateLong(s.nextDueDate))
-                        : AppFormatters.money(s.amount, s.currency),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          if (overdue.length > 3)
-            Text(
-              context.tr('reminder.more', {
-                'n': '${overdue.length - 3}',
-                's': overdue.length - 3 > 1 ? 's' : '',
-              }),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
+          ),
         ],
       ),
       actionsAlignment: MainAxisAlignment.center,
@@ -1140,6 +1388,106 @@ class _ReminderDialog extends StatelessWidget {
           child: Text(context.tr('reminder.viewDue')),
         ),
       ],
+    );
+  }
+}
+
+/// Barre de progression du mois : part des échéances déjà
+/// réglées (dépensé / (dépensé + reste à payer)), convertie
+/// dans la devise de base via les taux réels.
+class _PaidRatioBar extends StatelessWidget {
+  const _PaidRatioBar({
+    required this.spentByCurrency,
+    required this.dueByCurrency,
+    required this.target,
+  });
+
+  final Map<String, double> spentByCurrency;
+  final Map<String, double> dueByCurrency;
+  final String target;
+
+  Future<double?> _ratio() async {
+    final conv = getIt<CurrencyConverter>();
+    double total(Map<String, double> m) =>
+        m.values.fold(0.0, (a, b) => a + b);
+    // Même devise partout → calcul direct sans appel réseau.
+    final currencies = {...spentByCurrency.keys, ...dueByCurrency.keys};
+    if (currencies.length <= 1) {
+      final s = total(spentByCurrency);
+      final d = total(dueByCurrency);
+      return s + d > 0 ? s / (s + d) : null;
+    }
+    final results = await Future.wait([
+      conv.convertAll(
+        spentByCurrency.entries.map((e) => (amount: e.value, currency: e.key)),
+        target,
+      ),
+      conv.convertAll(
+        dueByCurrency.entries.map((e) => (amount: e.value, currency: e.key)),
+        target,
+      ),
+    ]);
+    final s = results[0];
+    final d = results[1];
+    if (s + d <= 0) return null;
+    return s / (s + d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<double?>(
+      future: _ratio(),
+      builder: (context, snap) {
+        final ratio = snap.data;
+        // Rien à payer ni dépensé → pas de barre.
+        if (ratio == null) return const SizedBox.shrink();
+        final pct = (ratio * 100).round();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: SizedBox(
+                height: 6,
+                child: Stack(
+                  children: [
+                    Container(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
+                      duration: const Duration(milliseconds: 700),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, _) => FractionallySizedBox(
+                        widthFactor: v,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.emerald,
+                                AppColors.emerald.withValues(alpha: 0.75),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              context.tr('dash.paidRatio', {'p': '$pct'}),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

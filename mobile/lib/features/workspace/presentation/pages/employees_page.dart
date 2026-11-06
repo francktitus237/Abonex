@@ -15,6 +15,7 @@ import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
+import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
 import '../../data/datasources/workspace_remote_datasource.dart';
 import '../../domain/entities/employee.dart';
 
@@ -404,6 +405,10 @@ class _EmployeeFormState extends State<_EmployeeForm> {
       final json = widget.existing == null
           ? await ds.createEmployee(payload)
           : await ds.updateEmployee(widget.existing!.id, payload);
+      // La paie est régénérée côté serveur → resync silencieux.
+      unawaited(
+        getIt<SubscriptionsCubit>().refresh(quiet: true),
+      );
       if (mounted) Navigator.of(context).pop(Employee.fromJson(json));
     } catch (_) {
       if (mounted) setState(() => _submitting = false);
