@@ -12,6 +12,7 @@ import '../../../../core/widgets/ambient_background.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../cubit/login_cubit.dart';
 import '../cubit/login_state.dart';
+import '../widgets/language_button.dart';
 
 /// Écran de connexion. Le widget ne contient AUCUNE logique métier :
 /// la validation de forme est locale, tout le reste est dans LoginCubit.
@@ -79,7 +80,14 @@ class _LoginViewState extends State<_LoginView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 12),
+                        // Langue modifiable AVANT connexion — le choix
+                        // s'applique à l'app entière immédiatement.
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: LanguageButton(),
+                        ),
+                        const SizedBox(height: 12),
 
                         // --- En-tête : marque + slogan ---
                         const Center(child: AppLogo()),

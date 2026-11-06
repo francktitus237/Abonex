@@ -12,6 +12,7 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/ambient_background.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../cubit/auth_cubit.dart';
+import '../widgets/language_button.dart';
 
 /// Inscription réelle : POST /auth/register/ via AuthCubit.
 /// En cas de succès, la session démarre et le router
@@ -106,6 +107,12 @@ class _RegisterPageState extends State<RegisterPage> {
           onPressed: () => context.go('/login'),
           icon: const Icon(LucideIcons.arrowLeft),
         ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: Center(child: LanguageButton()),
+          ),
+        ],
       ),
       body: AmbientBackground(
         child: SafeArea(
