@@ -465,28 +465,33 @@ abstract final class AppStrings {
     'onb.skip': 'Passer',
     'onb.next': 'Continuer',
     'onb.start': 'Commencer',
-    'onb.1.badge': 'Suivi des dépenses',
-    'onb.1.title': 'Maîtrisez chaque franc\ndépensé',
+    'onb.1.badge': 'Tout-en-un',
+    'onb.1.title': 'Toutes vos dépenses,\nenfin réunies',
     'onb.1.desc':
-        'Abonex centralise vos abonnements, factures, loyers et salaires '
-        '— entreprise ou foyer, vous savez toujours où va votre argent.',
-    'onb.2.badge': 'Rappels intelligents',
-    'onb.2.title': 'Zéro échéance\noubliée',
+        'Abonnements, loyers, salaires, factures — en FCFA, en euros '
+        'ou en dollars, Abonex additionne tout pour vous, '
+        'foyer comme entreprise.',
+    'onb.2.badge': 'Alarmes intégrées',
+    'onb.2.title': 'L\u2019échéance arrive,\nvous êtes prêt',
     'onb.2.desc':
-        'Rappels automatiques avant chaque paiement, alerte plein écran '
-        'le jour J : ne payez plus jamais de pénalité de retard.',
-    'onb.3.badge': 'Intelligence & sécurité',
-    'onb.3.title': 'Réduisez vos\ndépenses',
+        'Des rappels de plus en plus insistants à l\u2019approche du '
+        'jour J et une alarme plein écran — même application fermée, '
+        'jamais de pénalité de retard.',
+    'onb.3.badge': 'Intelligence',
+    'onb.3.title': 'Payez moins,\nvivez plus',
     'onb.3.desc':
-        'Abonex repère les doublons, compare les tarifs des '
-        'fournisseurs et calcule votre reste à vivre — équipe '
-        'et foyer collaborent avec des rôles précis.',
+        'Doublons repérés, tarifs comparés chez d\u2019autres '
+        'fournisseurs, reste à vivre calculé : Abonex vous fait '
+        'économiser chaque mois.',
     'onb.expenses': 'Dépenses du mois',
     'onb.bills': 'Factures',
     'onb.rent': 'Loyers',
     'onb.salary': 'Salaires',
     'onb.rentTomorrow': 'Loyer demain',
     'onb.dueToday': 'Échéance du jour',
+    'onb.dueNow': 'Alarme !',
+    'ins.dupWord': 'doublon',
+    'ins.restLabel': 'Reste à vivre',
 
     // Guide de première connexion
     'guide.badge': 'PRISE EN MAIN',
@@ -1057,28 +1062,33 @@ abstract final class AppStrings {
     'onb.skip': 'Skip',
     'onb.next': 'Continue',
     'onb.start': 'Get started',
-    'onb.1.badge': 'Expense tracking',
-    'onb.1.title': 'Master every penny\nyou spend',
+    'onb.1.badge': 'All-in-one',
+    'onb.1.title': 'Every expense,\nfinally together',
     'onb.1.desc':
-        'Abonex centralizes your subscriptions, bills, rent and payroll '
-        '— business or household, you always know where your money goes.',
-    'onb.2.badge': 'Smart reminders',
-    'onb.2.title': 'Never miss\na due date',
+        'Subscriptions, rent, payroll, bills — in FCFA, euros or '
+        'dollars, Abonex adds it all up for you, household '
+        'or business.',
+    'onb.2.badge': 'Built-in alarms',
+    'onb.2.title': 'Due date coming?\nYou\u2019re ready',
     'onb.2.desc':
-        'Automatic reminders before each payment, full-screen alert on '
-        'the day: never pay a late fee again.',
-    'onb.3.badge': 'Intelligence & security',
-    'onb.3.title': 'Cut down\nyour spending',
+        'Reminders that insist more as the day approaches, plus a '
+        'full-screen alarm — even with the app closed, '
+        'never a late fee.',
+    'onb.3.badge': 'Intelligence',
+    'onb.3.title': 'Pay less,\nlive more',
     'onb.3.desc':
-        'Abonex spots duplicates, compares provider prices and computes '
-        'your disposable income — team and household collaborate with '
-        'precise roles.',
+        'Duplicates spotted, prices compared across providers, '
+        'disposable income computed: Abonex saves you money '
+        'every month.',
     'onb.expenses': 'Monthly spending',
     'onb.bills': 'Bills',
     'onb.rent': 'Rent',
     'onb.salary': 'Payroll',
     'onb.rentTomorrow': 'Rent tomorrow',
     'onb.dueToday': 'Due today',
+    'onb.dueNow': 'Alarm!',
+    'ins.dupWord': 'duplicate',
+    'ins.restLabel': 'Disposable income',
 
     'guide.badge': 'GETTING STARTED',
     'guide.skip': 'Skip',

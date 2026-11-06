@@ -7,7 +7,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/storage/settings_storage.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_logo.dart';
@@ -294,141 +293,311 @@ BoxDecoration _cardDeco(double radius) => BoxDecoration(
   ],
 );
 
-// ---------- 1. Suivi des dépenses ----------
+/// Élément flottant : flotte doucement en continu (flottement
+/// vertical sinusoïdal + légère rotation optionnelle).
+class _Floaty extends StatefulWidget {
+  const _Floaty({
+    required this.child,
+    this.phase = 0,
+    this.amplitude = 6,
+    this.rotation = 0,
+  });
+
+  final Widget child;
+  final double phase;
+  final double amplitude;
+  final double rotation;
+
+  @override
+  State<_Floaty> createState() => _FloatyState();
+}
+
+class _FloatyState extends State<_Floaty>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, child) {
+        final t = _c.value * 2 * math.pi + widget.phase;
+        return Transform.translate(
+          offset: Offset(0, math.sin(t) * widget.amplitude),
+          child: Transform.rotate(
+            angle: widget.rotation * math.sin(t),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// Cloche qui « sonne » : balancement périodique répété.
+class _WigglyBell extends StatefulWidget {
+  const _WigglyBell();
+
+  @override
+  State<_WigglyBell> createState() => _WigglyBellState();
+}
+
+class _WigglyBellState extends State<_WigglyBell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, child) {
+        // Secousse par salves : sinus amorti qui repart à 0.
+        final t = _c.value;
+        final wobble = t < 0.5
+            ? math.sin(t * 4 * math.pi) * (1 - t * 2) * 0.16
+            : 0.0;
+        return Transform.rotate(angle: wobble, child: child);
+      },
+      child: Container(
+        width: 62,
+        height: 62,
+        decoration: BoxDecoration(
+          color: _navy,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.notifications_active_rounded,
+          color: Colors.white,
+          size: 30,
+        ),
+      ),
+    );
+  }
+}
+
+/// Pastille de devise flottante (« FCFA », « € », « $ »).
+class _CurrencyChip extends StatelessWidget {
+  const _CurrencyChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.65),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: _t(14, FontWeight.w800, Colors.white),
+      ),
+    );
+  }
+}
+
+// ---------- 1. Tout-en-un : héros du dashboard + tuiles ----------
 class _ExpensesArt extends StatelessWidget {
   const _ExpensesArt();
 
   @override
   Widget build(BuildContext context) {
-    final legend = [
-      (context.tr('nav.subscriptions'), AppColors.emerald),
-      (context.tr('onb.rent'), _blue),
-      (context.tr('onb.salary'), _orange),
-      (context.tr('onb.bills'), _red),
-    ];
     return Stack(
       children: [
+        // Carte héros : réplique miniature du vrai dashboard —
+        // « Reste à payer » + barre de progression.
         Positioned(
-          left: 38,
-          top: 50,
-          width: 284,
-          height: 250,
+          left: 30,
+          top: 34,
+          width: 300,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-            decoration: _cardDeco(26),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0B1F44), Color(0xFF1B4184)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 30,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  context.tr('onb.expenses'),
-                  style: _t(14, FontWeight.w600, _grey),
+                  context.tr('dash.toPay').toUpperCase(),
+                  style: _t(12, FontWeight.w700, const Color(0xFF7DD3B0)),
                 ),
                 const SizedBox(height: 6),
-                Text('1 250 000', style: _t(38, FontWeight.w800, _navy)),
-                const SizedBox(height: 2),
                 Text(
-                  'FCFA',
-                  style: _t(16, FontWeight.w800, AppColors.lightPrimary),
+                  '1 250 000 FCFA',
+                  style: _t(34, FontWeight.w800, Colors.white),
                 ),
-                const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFE2E8F0)),
                 const SizedBox(height: 12),
-                Expanded(
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 92,
-                        height: 92,
-                        child: CustomPaint(
-                          painter: _DonutPainter(),
-                          child: Center(
-                            child: Text(
-                              '100 %',
-                              style: _t(13, FontWeight.w800, _navy),
-                            ),
-                          ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: SizedBox(
+                    height: 6,
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: Colors.white.withValues(alpha: 0.15),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (final (label, color) in legend)
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    label,
-                                    style: _t(13, FontWeight.w600, _navy),
-                                  ),
-                                ],
-                              ),
-                          ],
+                        FractionallySizedBox(
+                          widthFactor: 0.62,
+                          child: Container(color: AppColors.emerald),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '62 %',
+                  style: _t(
+                    12,
+                    FontWeight.w700,
+                    Colors.white.withValues(alpha: 0.6),
                   ),
                 ),
               ],
             ),
           ),
         ),
-        // Pièce dorée « F ».
+        // Tuile abonnement — style des vraies cartes de la liste.
         Positioned(
-          right: 14,
-          top: 26,
-          child: Container(
-            width: 56,
-            height: 56,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _gold,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.65),
-                width: 3,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Text('F', style: _t(28, FontWeight.w800, Colors.white)),
+          left: 52,
+          top: 196,
+          width: 256,
+          child: _MiniTile(
+            icon: LucideIcons.clapperboard,
+            color: _red,
+            name: 'Netflix',
+            trailing: '15,99 €',
+          ),
+        ),
+        Positioned(
+          left: 66,
+          top: 252,
+          width: 256,
+          child: _MiniTile(
+            icon: LucideIcons.house,
+            color: _blue,
+            name: context.tr('onb.rent'),
+            trailing: '150 000 FCFA',
+          ),
+        ),
+        // Devises flottantes — l'app additionne même multi-devises.
+        const Positioned(
+          right: 16,
+          top: 20,
+          child: _Floaty(
+            amplitude: 7,
+            child: _CurrencyChip(label: '€', color: _gold),
+          ),
+        ),
+        const Positioned(
+          right: 6,
+          top: 128,
+          child: _Floaty(
+            phase: 2.1,
+            amplitude: 5,
+            child: _CurrencyChip(label: '\$', color: _blue),
+          ),
+        ),
+        const Positioned(
+          left: 8,
+          top: 150,
+          child: _Floaty(
+            phase: 4.2,
+            amplitude: 6,
+            child: _CurrencyChip(label: 'FCFA', color: AppColors.emerald),
           ),
         ),
         // Pastille « Payé ».
         Positioned(
-          left: 34,
-          top: 312,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: AppColors.emerald,
-              borderRadius: BorderRadius.circular(99),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.check_rounded, size: 18, color: _navy),
-                const SizedBox(width: 6),
-                Text(
-                  context.tr('status.paid'),
-                  style: _t(14, FontWeight.w800, _navy),
-                ),
-              ],
+          left: 60,
+          top: 318,
+          child: _Floaty(
+            phase: 1.2,
+            amplitude: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.emerald,
+                borderRadius: BorderRadius.circular(99),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.emerald.withValues(alpha: 0.4),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: _navy,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    context.tr('status.paid'),
+                    style: _t(14, FontWeight.w800, _navy),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -437,257 +606,137 @@ class _ExpensesArt extends StatelessWidget {
   }
 }
 
-class _DonutPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    const stroke = 18.0;
-    final rect = (Offset.zero & size).deflate(stroke / 2);
-    const segments = [
-      (0.40, AppColors.emerald),
-      (0.25, _blue),
-      (0.20, _orange),
-      (0.15, _red),
-    ];
-    var start = -math.pi / 2;
-    for (final (share, color) in segments) {
-      final sweep = 2 * math.pi * share;
-      canvas.drawArc(
-        rect,
-        start,
-        sweep - 0.06,
-        false,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke,
-      );
-      start += sweep;
-    }
-  }
+/// Tuile façon « prochaine échéance » : icône catégorie + nom +
+/// montant, comme dans la vraie liste.
+class _MiniTile extends StatelessWidget {
+  const _MiniTile({
+    required this.icon,
+    required this.color,
+    required this.name,
+    required this.trailing,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String name;
+  final String trailing;
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: _cardDeco(16),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _t(16, FontWeight.w700, _navy),
+            ),
+          ),
+          Text(trailing, style: _t(15, FontWeight.w800, _navy)),
+        ],
+      ),
+    );
+  }
 }
 
-// ---------- 2. Rappels intelligents ----------
+// ---------- 2. Rappels qui insistent + alarme ----------
 class _RemindersArt extends StatelessWidget {
   const _RemindersArt();
 
   @override
   Widget build(BuildContext context) {
-    const weeks = [
-      [13, 14, 15, 16, 17, 18, 19],
-      [20, 21, 22, 23, 24, 25, 26],
-      [27, 28, 29, 30, 31, 1, 2],
-    ];
-    final letters = context.tr('cal.weekdays').split(' ');
-
-    Widget cell(Widget child) => Expanded(child: Center(child: child));
-
     return Stack(
       children: [
-        // Calendrier.
-        Positioned(
-          left: 50,
-          top: 44,
-          width: 260,
-          height: 182,
-          child: Container(
-            decoration: _cardDeco(24),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                Container(
-                  height: 38,
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.only(left: 18),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF34D399), AppColors.lightPrimary],
-                    ),
-                  ),
-                  child: Text(
-                    AppFormatters.monthLong(DateTime.now()).toUpperCase(),
-                    style: _t(16, FontWeight.w800, Colors.white),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Row(
-                          children: [
-                            for (final l in letters)
-                              cell(
-                                Text(l, style: _t(11, FontWeight.w700, _grey)),
-                              ),
-                          ],
-                        ),
-                        for (final week in weeks)
-                          Row(
-                            children: [
-                              for (final d in week)
-                                cell(
-                                  d == 25
-                                      ? Container(
-                                          width: 26,
-                                          height: 26,
-                                          alignment: Alignment.center,
-                                          decoration: const BoxDecoration(
-                                            color: _orange,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Text(
-                                            '$d',
-                                            style: _t(
-                                              12,
-                                              FontWeight.w800,
-                                              Colors.white,
-                                            ),
-                                          ),
-                                        )
-                                      : Text(
-                                          '$d',
-                                          style: _t(
-                                            12,
-                                            FontWeight.w600,
-                                            (d < 10)
-                                                ? const Color(0xFFCBD5E1)
-                                                : _navy,
-                                          ),
-                                        ),
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Cloche avec badge.
+        // Cloche animée en haut à droite — l'alarme « sonne ».
+        const Positioned(right: 22, top: 18, child: _WigglyBell()),
+        // Badge rouge de compteur sur la cloche.
         Positioned(
           right: 18,
-          top: 22,
-          child: SizedBox(
-            width: 70,
-            height: 70,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 62,
-                  height: 62,
-                  margin: const EdgeInsets.only(top: 8),
-                  decoration: BoxDecoration(
-                    color: _navy,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
-                  ),
-                  child: const Icon(
-                    Icons.notifications_rounded,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: Text(
-                      '1',
-                      style: _t(12, FontWeight.w800, Colors.white),
-                    ),
-                  ),
-                ),
-              ],
+          top: 14,
+          child: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _red,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
             ),
+            child: Text('3', style: _t(12, FontWeight.w800, Colors.white)),
           ),
         ),
-        // Notification « Loyer demain ».
+        // Grande heure — l'alarme plein écran du jour J.
         Positioned(
-          left: 60,
-          top: 238,
-          width: 240,
-          height: 58,
+          left: 46,
+          top: 30,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: _cardDeco(18),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(
-                    color: _orange,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.notifications_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr('onb.rentTomorrow'),
-                      style: _t(17, FontWeight.w800, _navy),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('150 000 FCFA', style: _t(13, FontWeight.w600, _grey)),
-                  ],
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(
+              horizontal: 22,
+              vertical: 14,
             ),
-          ),
-        ),
-        // Alerte « Échéance du jour ».
-        Positioned(
-          left: 80,
-          top: 306,
-          width: 200,
-          height: 42,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: _cardDeco(14),
-            child: Row(
+            decoration: _cardDeco(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: const BoxDecoration(
-                    color: _red,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.priority_high_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 10),
                 Text(
-                  context.tr('onb.dueToday'),
-                  style: _t(14, FontWeight.w800, _navy),
+                  '09:00',
+                  style: _t(42, FontWeight.w800, _navy),
+                ),
+                Text(
+                  context.tr('onb.dueToday').toUpperCase(),
+                  style: _t(11, FontWeight.w800, _red),
                 ),
               ],
             ),
+          ),
+        ),
+        // Escalade des rappels — de plus en plus insistants.
+        Positioned(
+          left: 34,
+          top: 148,
+          width: 252,
+          child: _ReminderCard(
+            when: 'J-7',
+            label: 'Netflix',
+            detail: '15,99 €',
+            color: _grey,
+          ),
+        ),
+        Positioned(
+          left: 48,
+          top: 210,
+          width: 262,
+          child: _ReminderCard(
+            when: 'J-1',
+            label: context.tr('onb.rentTomorrow'),
+            detail: '150 000 FCFA',
+            color: _orange,
+          ),
+        ),
+        Positioned(
+          left: 62,
+          top: 272,
+          width: 272,
+          child: _ReminderCard(
+            when: context.tr('onb.dueToday'),
+            label: context.tr('onb.dueNow'),
+            detail: '',
+            color: _red,
+            alarm: true,
           ),
         ),
       ],
@@ -695,142 +744,284 @@ class _RemindersArt extends StatelessWidget {
   }
 }
 
-// ---------- 3. Équipe & sécurité ----------
+/// Carte notification de l'escalade — plus le jour approche,
+/// plus la couleur chauffe (gris → orange → rouge alarme).
+class _ReminderCard extends StatelessWidget {
+  const _ReminderCard({
+    required this.when,
+    required this.label,
+    required this.detail,
+    required this.color,
+    this.alarm = false,
+  });
+
+  final String when;
+  final String label;
+  final String detail;
+  final Color color;
+  final bool alarm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: alarm
+            ? Border.all(color: _red, width: 2)
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: alarm
+                ? _red.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.2),
+            blurRadius: alarm ? 20 : 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              alarm
+                  ? Icons.alarm_rounded
+                  : Icons.notifications_rounded,
+              color: Colors.white,
+              size: 17,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _t(
+                    15,
+                    FontWeight.w800,
+                    alarm ? _red : _navy,
+                  ),
+                ),
+                if (detail.isNotEmpty)
+                  Text(detail, style: _t(12, FontWeight.w600, _grey)),
+              ],
+            ),
+          ),
+          Text(when, style: _t(12, FontWeight.w800, color)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------- 3. Intelligence : doublons, tarifs, reste à vivre ----------
 class _TeamArt extends StatelessWidget {
   const _TeamArt();
 
   @override
   Widget build(BuildContext context) {
-    Widget avatar({
-      required double cx,
-      required Color shirt,
-      required Color badgeColor,
-      required IconData badgeIcon,
-    }) {
-      return Positioned(
-        left: cx - 38,
-        top: 252,
-        width: 76,
-        height: 76,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8EEF7),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 4),
-              ),
-              child: Icon(Icons.person_rounded, size: 46, color: shirt),
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2.5),
-                ),
-                child: Icon(badgeIcon, size: 15, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Stack(
       children: [
-        // Lignes pointillées bouclier → membres.
-        Positioned.fill(child: CustomPaint(painter: _DottedLinesPainter())),
-        // Halo derrière le bouclier.
+        // Halo émeraude derrière la carte.
         Positioned(
-          left: 60,
-          top: 0,
+          left: 40,
+          top: 20,
           child: Container(
-            width: 240,
-            height: 240,
+            width: 280,
+            height: 280,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  AppColors.emerald.withValues(alpha: 0.35),
+                  AppColors.emerald.withValues(alpha: 0.3),
                   AppColors.emerald.withValues(alpha: 0),
                 ],
               ),
             ),
           ),
         ),
-        // Bouclier.
-        const Positioned(
-          left: 0,
-          right: 0,
-          top: 30,
-          child: Icon(
-            Icons.verified_user_rounded,
-            size: 170,
-            color: AppColors.emerald,
-          ),
-        ),
-        // Cadenas.
+        // Carte « Optimiser votre budget » — la vraie feature.
         Positioned(
-          right: 40,
-          top: 40,
+          left: 34,
+          top: 46,
+          width: 292,
           child: Container(
-            width: 50,
-            height: 50,
-            decoration: _cardDeco(15),
-            child: const Icon(Icons.lock_rounded, color: _navy, size: 26),
+            padding: const EdgeInsets.all(18),
+            decoration: _cardDeco(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.sparkles,
+                      size: 17,
+                      color: AppColors.lightPrimary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      context.tr('ins.title'),
+                      style: _t(15, FontWeight.w800, _navy),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Doublon détecté — alerte rouge.
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.copy_all_rounded,
+                        size: 15,
+                        color: _red,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '2× Netflix — ${context.tr('ins.dupWord')}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _t(13, FontWeight.w700, _red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Alternative moins chère — économie verte.
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.emerald.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.trendingDown,
+                        size: 15,
+                        color: AppColors.emerald,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Canal+ Essentiel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _t(13, FontWeight.w700, _navy),
+                        ),
+                      ),
+                      Text(
+                        '−5,01 €',
+                        style: _t(
+                          14,
+                          FontWeight.w800,
+                          AppColors.emerald,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                const SizedBox(height: 10),
+                // Reste à vivre — la promesse du boss.
+                Text(
+                  context.tr('ins.restLabel'),
+                  style: _t(12, FontWeight.w600, _grey),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '820 € / mois',
+                  style: _t(26, FontWeight.w800, AppColors.lightPrimary),
+                ),
+              ],
+            ),
           ),
         ),
-        // Membres : propriétaire, gestionnaire, lecteur.
-        avatar(
-          cx: 95,
-          shirt: AppColors.lightPrimary,
-          badgeColor: _gold,
-          badgeIcon: Icons.workspace_premium_rounded,
+        // Étincelles flottantes — le côté « magique » de l'IA.
+        const Positioned(
+          right: 30,
+          top: 26,
+          child: _Floaty(
+            amplitude: 6,
+            rotation: 0.15,
+            child: Icon(
+              LucideIcons.sparkles,
+              size: 34,
+              color: _gold,
+            ),
+          ),
         ),
-        avatar(
-          cx: 180,
-          shirt: _blue,
-          badgeColor: AppColors.lightPrimary,
-          badgeIcon: Icons.edit_rounded,
+        const Positioned(
+          left: 18,
+          top: 150,
+          child: _Floaty(
+            phase: 3.1,
+            amplitude: 5,
+            rotation: -0.12,
+            child: Icon(
+              LucideIcons.sparkle,
+              size: 24,
+              color: AppColors.emerald,
+            ),
+          ),
         ),
-        avatar(
-          cx: 265,
-          shirt: _orange,
-          badgeColor: _blue,
-          badgeIcon: Icons.visibility_rounded,
+        // Pastille « économie » qui flotte.
+        Positioned(
+          right: 44,
+          top: 288,
+          child: _Floaty(
+            phase: 1.8,
+            amplitude: 5,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 13,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.emerald,
+                borderRadius: BorderRadius.circular(99),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.emerald.withValues(alpha: 0.4),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                '−30 €/mois',
+                style: _t(14, FontWeight.w800, _navy),
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
-}
-
-class _DottedLinesPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.45)
-      ..style = PaintingStyle.fill;
-    const from = Offset(180, 190);
-    for (final x in const [95.0, 180.0, 265.0]) {
-      final to = Offset(x, 258);
-      final delta = to - from;
-      final steps = (delta.distance / 9).floor();
-      for (var i = 1; i < steps; i++) {
-        canvas.drawCircle(from + delta * (i / steps), 1.8, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Badge émeraude flottant sous l'image.
