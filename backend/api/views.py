@@ -30,12 +30,15 @@ from .connectors.powens import (
 )
 from .rates import rates_for
 from .models import (
-    AuditLog, Employee, Invitation, Membership, Payment, Profile,
-    ProviderConnection, Subscription, Workspace,
+    Attachment, AuditLog, Budget, Comment, Department, Employee,
+    Invitation, Membership, Payment, Profile, ProviderConnection,
+    Subscription, Workspace,
 )
 from .serializers import (
-    EmployeeSerializer, PaymentSerializer, SubscriptionSerializer,
-    UserSerializer, WorkspaceSerializer, WorkspaceBudgetSerializer,
+    AttachmentSerializer, BudgetSerializer, DepartmentSerializer,
+    EmployeeSerializer,
+    PaymentSerializer, SubscriptionSerializer, UserSerializer,
+    WorkspaceSerializer, WorkspaceBudgetSerializer,
 )
 
 
@@ -683,6 +686,58 @@ class InsightsView(APIView):
         if ws.monthly_budget is not None:
             rest = round(float(ws.monthly_budget) - monthly_total, 2)
 
+        # ---------- Budgets par poste (catégorie/département) --
+        # Usage = dépense mensuelle équivalente du périmètre
+        # convertie en base, comparée au budget : alertes au
+        # seuil configuré (80 % défaut) et au dépassement.
+        budgets_usage = []
+        for b in Budget.objects.filter(
+            workspace=ws
+        ).select_related("department"):
+            spent = 0.0
+            missing = False
+            for s in subs:
+                if b.department_id:
+                    if s.department_id != b.department_id:
+                        continue
+                elif s.category != b.category:
+                    continue
+                conv = to_base(monthly_equiv(s), s.currency)
+                if conv is None:
+                    missing = True
+                    continue
+                spent += conv
+            usage = (
+                round(spent / float(b.amount) * 100, 1)
+                if b.amount
+                else 0.0
+            )
+            budgets_usage.append(
+                {
+                    "id": b.id,
+                    "label": (
+                        b.department.name
+                        if b.department_id
+                        else b.category
+                    ),
+                    "scope": (
+                        "department" if b.department_id
+                        else "category"
+                    ),
+                    "budget": float(b.amount),
+                    "spent": round(spent, 2),
+                    "usage_percent": usage,
+                    "alert_threshold": b.alert_threshold,
+                    "status": (
+                        "over" if usage >= 100
+                        else "warning"
+                        if usage >= b.alert_threshold
+                        else "ok"
+                    ),
+                    "conversion_missing": missing,
+                }
+            )
+
         return Response(
             {
                 "monthly_total": round(monthly_total, 2),
@@ -694,6 +749,7 @@ class InsightsView(APIView):
                 "potential_monthly_saving": round(
                     sum(c["saving_monthly"] for c in cheaper), 2
                 ),
+                "budgets": budgets_usage,
             }
         )
 
@@ -728,7 +784,7 @@ class ExportCsvView(APIView):
         for p in Payment.objects.filter(
             workspace=ws
         ).select_related("subscription", "recorded_by"):
-            w.writerow(
+            w.writerow(  # noqa: E501
                 [
                     "payment", p.pk, p.subscription.name, "", "", "",
                     p.amount, p.subscription.currency, "paid", p.due_date,
@@ -742,6 +798,219 @@ class ExportCsvView(APIView):
         )
         resp["Content-Disposition"] = (
             'attachment; filename="abonex_export.csv"'
+        )
+        return resp
+
+
+class ExportXlsxView(APIView):
+    """GET /export/xlsx/ — journal comptable Excel (étude §F) :
+    feuille Paiements (montant prévu/réel, mode, référence,
+    statut, déclaré par) + feuille Échéances."""
+
+    def get(self, request):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+
+        ws = request.user.profile.workspace
+        wb = Workbook()
+        head_fill = PatternFill("solid", fgColor="1E3A8A")
+        head_font = Font(bold=True, color="FFFFFF")
+
+        # --- Journal des paiements ---
+        pay = wb.active
+        pay.title = "Journal des paiements"
+        headers = [
+            "Date", "Échéance", "Montant prévu", "Montant payé",
+            "Devise", "Mode", "Référence", "Statut", "Déclaré par",
+            "Échéance du",
+        ]
+        pay.append(headers)
+        for cell in pay[1]:
+            cell.fill = head_fill
+            cell.font = head_font
+        for p in (
+            Payment.objects.filter(workspace=ws)
+            .select_related("subscription", "recorded_by")
+            .order_by("-due_date")
+        ):
+            pay.append([
+                p.paid_at.strftime("%Y-%m-%d") if p.paid_at else "",
+                p.subscription.name,
+                float(p.amount),
+                float(p.amount_paid) if p.amount_paid is not None
+                else float(p.amount),
+                p.subscription.currency,
+                p.method or "",
+                p.reference or "",
+                p.status,
+                p.recorded_by.get_full_name() or p.recorded_by.email
+                if p.recorded_by else "",
+                str(p.due_date),
+            ])
+        for col, width in zip("ABCDEFGHIJ", (12, 28, 14, 14, 8, 14, 18, 10, 22, 14)):
+            pay.column_dimensions[col].width = width
+
+        # --- Échéances actives ---
+        sub = wb.create_sheet("Échéances")
+        sub.append([
+            "Nom", "Fournisseur", "Catégorie", "Montant", "Devise",
+            "Cycle", "Statut", "Prochaine échéance", "Département",
+        ])
+        for cell in sub[1]:
+            cell.fill = head_fill
+            cell.font = head_font
+        for s in _visible_subscriptions(request).select_related(
+            "department"
+        ):
+            sub.append([
+                s.name, s.provider or "", s.category,
+                float(s.amount), s.currency, s.cycle, s.status,
+                str(s.next_due_date),
+                s.department.name if s.department else "",
+            ])
+        for col, width in zip("ABCDEFGHI", (28, 18, 12, 12, 8, 10, 10, 18, 16)):
+            sub.column_dimensions[col].width = width
+
+        from django.http import HttpResponse
+        import io as _io
+
+        buf = _io.BytesIO()
+        wb.save(buf)
+        resp = HttpResponse(
+            buf.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+        resp["Content-Disposition"] = (
+            'attachment; filename="abonex_journal.xlsx"'
+        )
+        return resp
+
+
+def _monthly_pdf(ws, subscriptions):
+    """Génère le PDF du rapport mensuel (étude §F) — partagé par
+    l'export GET /export/pdf/ ET la commande d'envoi automatique
+    `send_monthly_reports` (cron). Retourne les octets du PDF."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    import io as _io
+
+    base = ws.default_currency or "XAF"
+    subs = list(subscriptions.exclude(category="event"))
+    try:
+        rates = rates_for(base) or {}
+    except Exception:
+        rates = {}
+
+    def to_base(amount, currency):
+        if currency == base:
+            return float(amount)
+        rate = rates.get(currency)
+        return float(amount) / rate if rate else None
+
+    from collections import defaultdict
+
+    by_cat = defaultdict(float)
+    total = 0.0
+    for s in subs:
+        factor = _MONTHLY_FACTOR.get(s.cycle, 1.0)
+        conv = to_base(float(s.amount) * factor, s.currency)
+        if conv is None:
+            continue
+        total += conv
+        by_cat[s.category] += conv
+    overdue = sum(
+        1 for s in subs if s.status == "overdue"
+    )
+    pending = Payment.objects.filter(
+        workspace=ws, status="pending"
+    ).count()
+
+    buf = _io.BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+    y = height - 20 * mm
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(
+        20 * mm, y, ws.legal_name or ws.name
+    )
+    y -= 7 * mm
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(
+        20 * mm,
+        y,
+        f"Rapport de charges — {timezone.localdate():%d/%m/%Y}",
+    )
+    if ws.tax_id:
+        y -= 5 * mm
+        pdf.drawString(20 * mm, y, f"N° fiscal : {ws.tax_id}")
+    if ws.sector:
+        y -= 5 * mm
+        pdf.drawString(20 * mm, y, f"Secteur : {ws.sector}")
+    y -= 12 * mm
+    pdf.setFont("Helvetica-Bold", 13)
+    pdf.drawString(
+        20 * mm, y, f"Charges mensuelles : {total:,.2f} {base}"
+    )
+    y -= 7 * mm
+    pdf.setFont("Helvetica", 10)
+    if ws.monthly_budget is not None:
+        rest = float(ws.monthly_budget) - total
+        pdf.drawString(
+            20 * mm,
+            y,
+            f"Budget : {float(ws.monthly_budget):,.2f} {base} · "
+            f"Marge : {rest:,.2f} {base}",
+        )
+        y -= 6 * mm
+    pdf.drawString(
+        20 * mm,
+        y,
+        f"{len(subs)} échéances actives · {overdue} en retard"
+        f" · {pending} à valider",
+    )
+    y -= 12 * mm
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(20 * mm, y, "Répartition par catégorie")
+    y -= 7 * mm
+    pdf.setFont("Helvetica", 10)
+    for cat, amount in sorted(
+        by_cat.items(), key=lambda kv: -kv[1]
+    ):
+        if y < 25 * mm:
+            pdf.showPage()
+            y = height - 20 * mm
+            pdf.setFont("Helvetica", 10)
+        pct = amount / total * 100 if total else 0
+        pdf.drawString(
+            25 * mm,
+            y,
+            f"{cat} : {amount:,.2f} {base} ({pct:.0f} %)",
+        )
+        y -= 6 * mm
+    pdf.showPage()
+    pdf.save()
+    return buf.getvalue()
+
+
+class ExportPdfView(APIView):
+    """GET /export/pdf/ — rapport mensuel pro (étude §F)."""
+
+    def get(self, request):
+        ws = request.user.profile.workspace
+        pdf_bytes = _monthly_pdf(
+            ws, _visible_subscriptions(request)
+        )
+        from django.http import HttpResponse
+
+        resp = HttpResponse(
+            pdf_bytes, content_type="application/pdf"
+        )
+        resp["Content-Disposition"] = (
+            'attachment; filename="abonex_rapport.pdf"'
         )
         return resp
 
@@ -997,11 +1266,24 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
         return _visible_subscriptions(self.request)
 
     def perform_update(self, serializer):
-        role = self.request.user.profile.role
+        profile = self.request.user.profile
+        role = profile.role
         marking_paid = self.request.data.get("status") == "paid"
-        # Un assistant ne fait que DÉCLARER le paiement : l'échéance
-        # reste due jusqu'à validation owner/manager (étude §4.4).
-        if marking_paid and role == "assistant":
+        # Règles d'approbation (étude §4.4/§B) : un assistant
+        # déclare toujours en « pending » ; un owner/manager
+        # passe aussi en attente SI le montant dépasse le seuil
+        # d'approbation configuré sur l'espace.
+        declared = self.request.data.get("amount_paid")
+        amount = float(
+            declared if declared is not None
+            else serializer.instance.amount
+        )
+        threshold = profile.workspace.approval_threshold
+        needs_approval = marking_paid and (
+            role == "assistant"
+            or (threshold is not None and amount > float(threshold))
+        )
+        if needs_approval:
             subscription = serializer.save(status="dueSoon")
             payment, created = Payment.objects.get_or_create(
                 subscription=subscription,
@@ -1010,7 +1292,7 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
                 defaults={
                     "recorded_by": self.request.user,
                     "amount": subscription.amount,
-                    "amount_paid": self.request.data.get("amount_paid"),
+                    "amount_paid": declared,
                     "method": self.request.data.get("method", ""),
                     "reference": self.request.data.get("reference", ""),
                     "status": "pending",
@@ -1119,6 +1401,337 @@ class PaymentApprovalView(APIView):
             after={"verdict": verdict},
         )
         return Response({"status": verdict})
+
+
+class DepartmentListCreateView(generics.ListCreateAPIView):
+    """GET/POST /departments/ — centres de coûts de l'espace
+    (étude §B). Écriture owner/manager via SubscriptionPermission."""
+
+    serializer_class = DepartmentSerializer
+    permission_classes = [IsAuthenticated, SubscriptionPermission]
+
+    def get_queryset(self):
+        return Department.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(workspace=self.request.user.profile.workspace)
+
+
+class DepartmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = DepartmentSerializer
+    permission_classes = [IsAuthenticated, SubscriptionPermission]
+
+    def get_queryset(self):
+        return Department.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class BudgetListCreateView(generics.ListCreateAPIView):
+    """GET/POST /budgets/ — budgets par catégorie ou département
+    (étude §B). Écriture owner/manager."""
+
+    serializer_class = BudgetSerializer
+    permission_classes = [IsAuthenticated, SubscriptionPermission]
+
+    def get_queryset(self):
+        return Budget.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(workspace=self.request.user.profile.workspace)
+
+
+class BudgetDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = BudgetSerializer
+    permission_classes = [IsAuthenticated, SubscriptionPermission]
+
+    def get_queryset(self):
+        return Budget.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class TreasuryView(APIView):
+    """GET /treasury/?days=90&start_balance=X — prévision de
+    trésorerie (étude §C) : solde de départ saisi + échéances
+    projetées → solde final, solde minimum, première date
+    « solde insuffisant ». Multi-devises converti en base."""
+
+    def get(self, request):
+        from datetime import timedelta as _td
+
+        profile = request.user.profile
+        ws = profile.workspace
+        base = ws.default_currency or "XAF"
+        days = min(int(request.query_params.get("days") or 90), 365)
+        try:
+            start = float(request.query_params.get("start_balance") or 0)
+        except ValueError:
+            start = 0.0
+        try:
+            rates = rates_for(base) or {}
+        except Exception:
+            rates = {}
+
+        def to_base(amount, currency):
+            if currency == base:
+                return float(amount)
+            rate = rates.get(currency)
+            return float(amount) / rate if rate else None
+
+        # Projection des occurrences : chaque échéance active est
+        # reprojetée sur son cycle jusqu'à l'horizon demandé.
+        today = timezone.localdate()
+        horizon = today + _td(days=days)
+        step_days = {
+            "daily": 1,
+            "weekly": 7,
+            "monthly": 30,
+            "quarterly": 91,
+            "yearly": 365,
+            "once": None,
+        }
+        subs = _visible_subscriptions(request).exclude(
+            category="event"
+        ).select_related()
+        events = []
+        for s in subs:
+            conv = to_base(s.amount, s.currency)
+            if conv is None:
+                continue
+            step = step_days.get(s.cycle)
+            d = s.next_due_date
+            if d is None:
+                continue
+            if step is None:  # ponctuel
+                if today <= d <= horizon:
+                    events.append((d, conv))
+                continue
+            while d <= horizon:
+                if d >= today:
+                    events.append((d, conv))
+                d += _td(days=step)
+        events.sort()
+        # Courbe : solde après chaque échéance — le minimum et la
+        # première date négative donnent l'alerte trésorerie.
+        balance = start
+        min_balance = start
+        first_negative = None
+        for d, amt in events:
+            balance -= amt
+            if balance < min_balance:
+                min_balance = balance
+            if balance < 0 and first_negative is None:
+                first_negative = d.isoformat()
+        return Response(
+            {
+                "days": days,
+                "base_currency": base,
+                "start_balance": start,
+                "end_balance": round(balance, 2),
+                "min_balance": round(min_balance, 2),
+                "total_planned": round(sum(a for _, a in events), 2),
+                "events": len(events),
+                "first_negative_date": first_negative,
+            }
+        )
+
+
+class AttachmentListCreateView(APIView):
+    """GET /attachments/?subscription=<id>|payment=<id> — liste
+    des justificatifs · POST multipart {file, subscription|payment,
+    name?} — upload d'un reçu/facture (étude §C)."""
+
+    permission_classes = [IsAuthenticated, SubscriptionPermission]
+
+    def get(self, request):
+        ws = request.user.profile.workspace
+        qs = Attachment.objects.filter(workspace=ws)
+        sub = request.query_params.get("subscription")
+        pay = request.query_params.get("payment")
+        if sub:
+            qs = qs.filter(subscription_id=sub)
+        if pay:
+            qs = qs.filter(payment_id=pay)
+        return Response(
+            AttachmentSerializer(
+                qs, many=True, context={"request": request}
+            ).data
+        )
+
+    def post(self, request):
+        ws = request.user.profile.workspace
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            return Response(
+                {"file": ["Fichier requis."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Rattachement : soit une échéance de l'espace, soit un
+        # paiement de l'espace — jamais un objet étranger.
+        sub_id = request.data.get("subscription")
+        pay_id = request.data.get("payment")
+        sub = pay = None
+        if sub_id:
+            sub = get_object_or_404(
+                Subscription, pk=sub_id, workspace=ws
+            )
+        elif pay_id:
+            pay = get_object_or_404(
+                Payment, pk=pay_id, workspace=ws
+            )
+        else:
+            return Response(
+                {"detail": ["subscription ou payment requis."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        attachment = Attachment.objects.create(
+            workspace=ws,
+            subscription=sub,
+            payment=pay,
+            file=uploaded,
+            name=request.data.get("name") or uploaded.name or "",
+            uploaded_by=request.user,
+        )
+        return Response(
+            AttachmentSerializer(
+                attachment, context={"request": request}
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AttachmentDetailView(APIView):
+    """DELETE /attachments/<id>/ — supprime le justificatif
+    (owner/manager ou auteur de l'upload)."""
+
+    def delete(self, request, pk):
+        profile = request.user.profile
+        attachment = get_object_or_404(
+            Attachment, pk=pk, workspace=profile.workspace
+        )
+        if (
+            attachment.uploaded_by_id != request.user.id
+            and profile.role not in {"owner", "manager"}
+        ):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CommentListCreateView(APIView):
+    """GET/POST /subscriptions/<id>/comments/ — discussion d'une
+    échéance (étude §G) : tout membre de l'espace lit et écrit
+    ; la suppression se fait côté auteur ou propriétaire via
+    /comments/<id>/."""
+
+    def _subscription(self, request, pk):
+        return get_object_or_404(
+            _visible_subscriptions(request), pk=pk
+        )
+
+    def get(self, request, pk):
+        subscription = self._subscription(request, pk)
+        return Response(
+            [
+                {
+                    "id": c.id,
+                    "author": (
+                        c.author.get_full_name() or c.author.email
+                        if c.author
+                        else ""
+                    ),
+                    "text": c.text,
+                    "at": c.created_at,
+                }
+                for c in subscription.comments.select_related(
+                    "author"
+                )
+            ]
+        )
+
+    def post(self, request, pk):
+        subscription = self._subscription(request, pk)
+        text = (request.data.get("text") or "").strip()
+        if not text:
+            return Response(
+                {"text": ["Commentaire vide."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        comment = Comment.objects.create(
+            workspace=subscription.workspace,
+            subscription=subscription,
+            author=request.user,
+            text=text[:1000],
+        )
+        return Response({"id": comment.id}, status=status.HTTP_201_CREATED)
+
+
+class CommentDetailView(APIView):
+    """DELETE /comments/<id>/ — auteur ou propriétaire."""
+
+    def delete(self, request, pk):
+        profile = request.user.profile
+        comment = get_object_or_404(
+            Comment, pk=pk, workspace=profile.workspace
+        )
+        if (
+            comment.author_id != request.user.id
+            and profile.role != "owner"
+        ):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        comment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MonthlyReportEmailView(APIView):
+    """POST /report/monthly/send/ — envoie le rapport mensuel
+    PDF par e-mail au propriétaire (étude §F/G). Nécessite
+    EMAIL_HOST configuré côté serveur."""
+
+    def post(self, request):
+        profile = request.user.profile
+        if profile.role not in {"owner", "manager"}:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        from django.conf import settings as dj_settings
+        from django.core.mail import EmailMessage
+
+        if getattr(dj_settings, "EMAIL_HOST", None) is None:
+            return Response(
+                {"detail": ["SMTP non configuré sur le serveur."]},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        # Le PDF du rapport mensuel partage la logique d'export —
+        # on réutilise la vue en appelant sa méthode get.
+        response = ExportPdfView().get(request)
+        pdf_bytes = response.content
+        owner = (
+            User.objects.filter(
+                profile__workspace=profile.workspace,
+                profile__role="owner",
+            )
+            .order_by("id")
+            .first()
+        )
+        recipient = (owner or request.user).email
+        mail = EmailMessage(
+            subject=f"Rapport mensuel — {profile.workspace.name}",
+            body=(
+                "Votre rapport de charges mensuel est en pièce "
+                "jointe (PDF). — Abonex"
+            ),
+            to=[recipient],
+        )
+        mail.attach(
+            "rapport_mensuel.pdf", pdf_bytes, "application/pdf"
+        )
+        mail.send(fail_silently=False)
+        return Response({"sent_to": recipient})
 
 
 class PendingPaymentsView(APIView):

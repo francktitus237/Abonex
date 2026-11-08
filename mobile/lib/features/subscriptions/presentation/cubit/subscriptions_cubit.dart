@@ -156,6 +156,9 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     TimeOfDay? dueTime,
     bool? isShared,
     String? paymentUrl,
+    int? department,
+    int? noticePeriodDays,
+    int? assignee,
   }) async {
     final result = await _repository.createSubscription(
       name: name,
@@ -172,6 +175,9 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       dueTime: dueTime,
       isShared: isShared,
       paymentUrl: paymentUrl,
+      department: department,
+      noticePeriodDays: noticePeriodDays,
+      assignee: assignee,
     );
     if (result case Ok(value: final created)) {
       final current = state.subscriptions ?? [];
@@ -203,6 +209,9 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
     bool clearDueTime = false,
     bool? isShared,
     String? paymentUrl,
+    int? department,
+    int? noticePeriodDays,
+    int? assignee,
   }) async {
     final result = await _repository.updateSubscription(
       id: id,
@@ -223,6 +232,9 @@ class SubscriptionsCubit extends Cubit<SubscriptionsState> {
       clearDueTime: clearDueTime,
       isShared: isShared,
       paymentUrl: paymentUrl,
+      department: department,
+      noticePeriodDays: noticePeriodDays,
+      assignee: assignee,
     );
     if (result case Ok(value: final updated)) {
       final current = state.subscriptions ?? [];

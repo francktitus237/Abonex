@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:toastification/toastification.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/l10n/app_strings.dart';
@@ -18,6 +22,7 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../subscriptions/domain/entities/subscription.dart';
 import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
+import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
 
 /// Onglet Rapports : répartition par catégorie (donut)
 /// + prévision de dépenses sur 6 mois (barres).
@@ -161,6 +166,20 @@ class _ReportsPageState extends State<ReportsPage> {
                 AnimatedFadeIn(
                   delay: const Duration(milliseconds: 100),
                   child: _MonthlyForecast(items: items, currency: active),
+                ),
+                const SizedBox(height: 20),
+                // Prévision de trésorerie 90 j (étude §C) — solde
+                // de départ + échéances projetées → alerte
+                // « solde insuffisant ».
+                // Exports professionnels (étude §F) : journal
+                // comptable Excel + rapport mensuel PDF —
+                // téléchargés avec l'auth de l'app puis partagés.
+                AnimatedFadeIn(
+                  child: _ExportCard(),
+                ),
+                const SizedBox(height: 20),
+                AnimatedFadeIn(
+                  child: _TreasuryCard(currency: active),
                 ),
               ],
             ],
@@ -497,6 +516,301 @@ class _MonthlyForecast extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Prévision de trésorerie (étude §C) : solde de départ saisi +
+/// échéances projetées sur 30/60/90 j → solde final, solde
+/// minimum, première date « solde insuffisant ».
+class _TreasuryCard extends StatefulWidget {
+  const _TreasuryCard({required this.currency});
+
+  final String currency;
+
+  @override
+  State<_TreasuryCard> createState() => _TreasuryCardState();
+}
+
+class _TreasuryCardState extends State<_TreasuryCard> {
+  final _start = TextEditingController();
+  int _days = 90;
+  Map<String, dynamic>? _result;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _start.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    setState(() => _loading = true);
+    try {
+      final data = await getIt<WorkspaceRemoteDataSource>().treasury(
+        days: _days,
+        startBalance: double.tryParse(
+              _start.text.trim().replaceAll(',', '.'),
+            ) ??
+            0,
+      );
+      if (mounted) setState(() => _result = data);
+    } catch (_) {
+      if (mounted) setState(() => _result = null);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final r = _result;
+    final firstNeg = r?['first_negative_date'] as String?;
+    final endBal = (r?['end_balance'] as num?)?.toDouble();
+    final base = '${r?['base_currency'] ?? widget.currency}';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.landmark, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                context.tr('tre.title'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _start,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: context.tr('tre.start'),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SegmentedButton<int>(
+                segments: [
+                  for (final d in const [30, 60, 90])
+                    ButtonSegment(value: d, label: Text('${d}j')),
+                ],
+                selected: {_days},
+                onSelectionChanged: (s) =>
+                    setState(() => _days = s.first),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: _loading ? null : _run,
+            icon: const Icon(LucideIcons.play, size: 16),
+            label: Text(context.tr('tre.run')),
+          ),
+          if (_loading) const LinearProgressIndicator(),
+          if (r != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${context.tr('tre.planned')}: '
+              '${AppFormatters.money((r['total_planned'] as num?)?.toDouble() ?? 0, base)} · '
+              '${r['events']} ${context.tr('tre.events')}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${context.tr('tre.end')}: '
+              '${AppFormatters.money(endBal ?? 0, base)}',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: (endBal ?? 0) < 0 ? scheme.error : scheme.primary,
+              ),
+            ),
+            if (firstNeg != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                context.tr('tre.negative', {'date': firstNeg}),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Exports professionnels (étude §F) : journal comptable Excel
+/// et rapport mensuel PDF — téléchargés via Dio (auth) dans le
+/// dossier temporaire puis partagés (share_plus).
+class _ExportCard extends StatefulWidget {
+  @override
+  State<_ExportCard> createState() => _ExportCardState();
+}
+
+class _ExportCardState extends State<_ExportCard> {
+  String? _busy;
+
+  Future<void> _sendReport() async {
+    final okMsg = context.tr('exp.sent');
+    final errMsg = context.tr('exp.sendError');
+    setState(() => _busy = 'mail');
+    try {
+      final res = await getIt<WorkspaceRemoteDataSource>()
+          .sendMonthlyReport();
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          title: Text(
+            res['sent_to'] != null
+                ? '$okMsg → ${res['sent_to']}'
+                : okMsg,
+          ),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Future<void> _export(String format) async {
+    final okMsg = context.tr('exp.shared');
+    final errMsg = context.tr('exp.error');
+    setState(() => _busy = format);
+    try {
+      final bytes = await getIt<WorkspaceRemoteDataSource>()
+          .exportBytes(format);
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/abonex_rapport.${format == 'xlsx' ? 'xlsx' : 'pdf'}',
+      );
+      await file.writeAsBytes(bytes);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)]),
+      );
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          title: Text(okMsg),
+          autoCloseDuration: const Duration(seconds: 2),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.fileDown,
+                  size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.tr('exp.title'),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy != null
+                      ? null
+                      : () => _export('xlsx'),
+                  icon: const Icon(LucideIcons.sheet, size: 16),
+                  label: Text(context.tr('exp.xlsx')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: _busy != null
+                      ? null
+                      : () => _export('pdf'),
+                  icon: const Icon(LucideIcons.fileText, size: 16),
+                  label: Text(context.tr('exp.pdf')),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Rapport mensuel par e-mail au propriétaire (étude
+          // §F/G) — nécessite EMAIL_HOST configuré côté serveur.
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: _busy != null ? null : _sendReport,
+              icon: const Icon(LucideIcons.mail, size: 16),
+              label: Text(context.tr('exp.send')),
+            ),
+          ),
+        ],
       ),
     );
   }

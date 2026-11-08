@@ -422,6 +422,19 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   final _paymentUrl = TextEditingController();
   // Fin de contrat éventuelle — null = sans fin.
   DateTime? _endDate;
+  // Département de rattachement (espaces entreprise) — la
+  // liste est chargée paresseusement, le champ reste caché
+  // s'il n'y en a aucun (compte perso typique).
+  int? _department;
+  List<Map<String, dynamic>>? _departments;
+  // Préavis de résiliation (jours avant l'échéance/fin de
+  // contrat pour agir sans reconduction) — alerte « résilier
+  // avant le … ».
+  final _noticeDays = TextEditingController();
+  // Responsable assigné (étude §B) — liste des membres chargée
+  // paresseusement (propriétaire uniquement côté API ; caché sinon).
+  int? _assignee;
+  List<Map<String, dynamic>>? _members;
   bool _submitting = false;
 
   @override
@@ -461,9 +474,35 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       _isShared = e.isShared;
       _paymentUrl.text = e.paymentUrl;
       _endDate = e.endDate;
+      _department = e.department;
+      _noticeDays.text = '${e.noticePeriodDays ?? ''}';
+      _assignee = e.assignee;
     }
     // Fournisseurs connus du pays → autocomplétion du champ.
     _loadProviders();
+    _loadDepartments();
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      final list = await getIt<WorkspaceRemoteDataSource>().members();
+      if (mounted) setState(() => _members = list);
+    } catch (_) {
+      // Non-propriétaire : /users/ refuse → champ caché.
+      if (mounted) setState(() => _members = const []);
+    }
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final list =
+          await getIt<WorkspaceRemoteDataSource>().departments();
+      if (mounted) setState(() => _departments = list);
+    } catch (_) {
+      // Sans départements (compte perso) : le champ reste caché.
+      if (mounted) setState(() => _departments = const []);
+    }
   }
 
   Future<void> _loadProviders() async {
@@ -514,6 +553,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     _amount.dispose();
     _description.dispose();
     _paymentUrl.dispose();
+    _noticeDays.dispose();
     super.dispose();
   }
 
@@ -615,6 +655,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             dueTime: _isEvent ? _dueTime : null,
             isShared: !_isEvent && _isShared,
             paymentUrl: _isEvent ? '' : _paymentUrl.text.trim(),
+            department: _isEvent ? null : _department,
+            noticePeriodDays: _isEvent
+                ? null
+                : int.tryParse(_noticeDays.text.trim()),
+            assignee: _isEvent ? null : _assignee,
           )
         : await cubit.update(
             id: existing.id,
@@ -635,6 +680,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             dueTime: _dueTime,
             isShared: !_isEvent && _isShared,
             paymentUrl: _isEvent ? '' : _paymentUrl.text.trim(),
+            department: _isEvent ? null : _department,
+            noticePeriodDays: _isEvent
+                ? null
+                : int.tryParse(_noticeDays.text.trim()),
+            assignee: _isEvent ? null : _assignee,
           );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -1092,6 +1142,83 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                       decoration: InputDecoration(
                         labelText: context.tr('form.paymentUrl'),
                         prefixIcon: const Icon(LucideIcons.link, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Département / centre de coûts (entreprise) —
+                    // affiché seulement s'il en existe.
+                    if ((_departments ?? []).isNotEmpty) ...[
+                      DropdownButtonFormField<int>(
+                        initialValue: _department,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: context.tr('form.department'),
+                          prefixIcon: const Icon(
+                            LucideIcons.folders,
+                            size: 18,
+                          ),
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            child: Text(context.tr('form.deptNone')),
+                          ),
+                          for (final d in _departments!)
+                            DropdownMenuItem(
+                              value: d['id'] as int,
+                              child: Text('${d['name']}'),
+                            ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _department = v),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    // Responsable assigné — membres de l'espace
+                    // (propriétaire uniquement, sinon caché).
+                    if ((_members ?? []).isNotEmpty) ...[
+                      DropdownButtonFormField<int>(
+                        initialValue: _assignee,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: context.tr('form.assignee'),
+                          prefixIcon: const Icon(
+                            LucideIcons.userCheck,
+                            size: 18,
+                          ),
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            child: Text(context.tr('form.assigneeNone')),
+                          ),
+                          for (final m in _members!)
+                            DropdownMenuItem(
+                              value: m['id'] as int,
+                              child: Text(
+                                '${m['first_name'] ?? ''} ${m['last_name'] ?? ''}'
+                                        .trim()
+                                        .isNotEmpty
+                                    ? '${m['first_name'] ?? ''} ${m['last_name'] ?? ''}'.trim()
+                                    : '${m['email']}',
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _assignee = v),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    // Préavis de résiliation — alerte avant
+                    // reconduction (contrats, forfaits).
+                    TextFormField(
+                      controller: _noticeDays,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: context.tr('form.notice'),
+                        helperText: context.tr('form.noticeSub'),
+                        prefixIcon: const Icon(
+                          LucideIcons.bellRing,
+                          size: 18,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +18,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../data/datasources/subscription_remote_datasource.dart';
 import '../../domain/entities/subscription.dart';
 import '../cubit/subscriptions_cubit.dart';
 import 'subscriptions_page.dart';
@@ -257,6 +261,17 @@ class _DetailBody extends StatelessWidget {
                             sub.country,
                       ].join(' ').trim(),
                     ),
+                  if (sub.endDate != null &&
+                      sub.noticePeriodDays != null)
+                    (
+                      icon: LucideIcons.bellRing,
+                      label: context.tr('detail.noticeDeadline'),
+                      value: AppFormatters.dateLong(
+                        sub.endDate!.subtract(
+                          Duration(days: sub.noticePeriodDays!),
+                        ),
+                      ),
+                    ),
                   if (sub.description.isNotEmpty)
                     (
                       icon: LucideIcons.mapPin,
@@ -273,7 +288,13 @@ class _DetailBody extends StatelessWidget {
             currency: sub.currency,
           ),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        // --- Justificatifs : reçus, factures PDF (étude §C) ---
+        _Attachments(subscriptionId: sub.id),
+        const SizedBox(height: 16),
+        // --- Commentaires d'équipe (étude §G) ---
+        _Comments(subscriptionId: sub.id),
+        const SizedBox(height: 16),
 
         // --- Actions ---
         if (sub.status != SubscriptionStatus.paid)
@@ -706,6 +727,335 @@ class _InfoCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Justificatifs de l'échéance (étude §C) : photos de reçus,
+/// factures PDF — liste, upload (file_picker), ouverture
+/// navigateur, suppression (auteur ou owner/manager côté API).
+class _Attachments extends StatefulWidget {
+  const _Attachments({required this.subscriptionId});
+
+  final String subscriptionId;
+
+  @override
+  State<_Attachments> createState() => _AttachmentsState();
+}
+
+class _AttachmentsState extends State<_Attachments> {
+  List<Map<String, dynamic>>? _items;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  SubscriptionRemoteDataSource get _remote =>
+      getIt<SubscriptionRemoteDataSource>();
+
+  Future<void> _load() async {
+    try {
+      final items = await _remote.attachments(widget.subscriptionId);
+      if (mounted) setState(() => _items = items);
+    } catch (_) {
+      if (mounted) setState(() => _items = const []);
+    }
+  }
+
+  Future<void> _pick() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+    );
+    if (files.isEmpty) return;
+    final file = files.single;
+    final path = file.path;
+    if (path == null || !mounted) return;
+    final errMsg = context.tr('att.error');
+    setState(() => _busy = true);
+    try {
+      await _remote.uploadAttachment(
+        subscriptionId: widget.subscriptionId,
+        path: path,
+        filename: file.name,
+      );
+      unawaited(_load());
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _delete(int id) async {
+    try {
+      await _remote.deleteAttachment(id);
+      unawaited(_load());
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final items = _items;
+    if (items == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.paperclip, size: 16,
+                  color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.tr('att.title'),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _busy ? null : _pick,
+                icon: const Icon(LucideIcons.plus, size: 16),
+                label: Text(context.tr('att.add')),
+              ),
+            ],
+          ),
+          if (_busy) const LinearProgressIndicator(),
+          if (items.isEmpty)
+            Text(
+              context.tr('att.empty'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            )
+          else
+            for (final a in items)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  LucideIcons.fileText,
+                  size: 18,
+                  color: scheme.primary,
+                ),
+                title: Text(
+                  '${a['name']?.toString().isNotEmpty == true ? a['name'] : 'document'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  final url = a['file_url'] as String? ?? '';
+                  if (url.isNotEmpty) {
+                    launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                },
+                trailing: IconButton(
+                  icon: Icon(LucideIcons.trash2,
+                      size: 16, color: scheme.error),
+                  onPressed: () => _delete(a['id'] as int),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Commentaires d'équipe sur l'échéance (étude §G) : discussion
+/// contextuelle — tout membre lit/écrit, auteur ou propriétaire
+/// supprime (règle côté serveur).
+class _Comments extends StatefulWidget {
+  const _Comments({required this.subscriptionId});
+
+  final String subscriptionId;
+
+  @override
+  State<_Comments> createState() => _CommentsState();
+}
+
+class _CommentsState extends State<_Comments> {
+  final _ctrl = TextEditingController();
+  List<Map<String, dynamic>>? _items;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  SubscriptionRemoteDataSource get _remote =>
+      getIt<SubscriptionRemoteDataSource>();
+
+  Future<void> _load() async {
+    try {
+      final items = await _remote.comments(widget.subscriptionId);
+      if (mounted) setState(() => _items = items);
+    } catch (_) {
+      if (mounted) setState(() => _items = const []);
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _sending = true);
+    try {
+      await _remote.addComment(widget.subscriptionId, text);
+      _ctrl.clear();
+      unawaited(_load());
+    } catch (_) {} finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final items = _items;
+    if (items == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.messagesSquare, size: 16,
+                  color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                context.tr('com.title'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                context.tr('com.empty'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            for (final c in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      child: Text(
+                        '${c['author']}'.isNotEmpty
+                            ? '${c['author']}'[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${c['author']}',
+                            style: theme.textTheme.labelMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          Text(
+                            '${c['text']}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(LucideIcons.trash2,
+                          size: 14, color: scheme.error),
+                      onPressed: () async {
+                        try {
+                          await _remote.deleteComment(
+                            c['id'] as int,
+                          );
+                          unawaited(_load());
+                        } catch (_) {}
+                      },
+                    ),
+                  ],
+                ),
+              ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  decoration: InputDecoration(
+                    hintText: context.tr('com.hint'),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _send(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: _sending ? null : _send,
+                icon: const Icon(LucideIcons.send, size: 16),
+              ),
+            ],
+          ),
         ],
       ),
     );

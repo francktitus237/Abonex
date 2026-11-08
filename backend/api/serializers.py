@@ -1,7 +1,10 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Employee, Payment, Subscription, Workspace
+from .models import (
+    Attachment, Budget, Department, Employee, Payment,
+    Subscription, Workspace,
+)
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -27,6 +30,7 @@ class WorkspaceBudgetSerializer(serializers.ModelSerializer):
             "name", "kind", "country", "default_currency",
             "extra_currencies", "configured", "monthly_budget",
             "legal_name", "tax_id", "sector", "size",
+            "approval_threshold",
         ]
         read_only_fields = ["kind", "configured"]
 
@@ -107,6 +111,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "status",
             "is_shared",
             "payment_url",
+            "department",
+            "assignee",
+            "notice_period_days",
         ]
         read_only_fields = [
             "id", "provider_country", "provider_flag", "country_flag",
@@ -138,6 +145,58 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         if not data.get("country"):
             data["country"] = instance.workspace.country or ""
         return data
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ["id", "name", "manager", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class BudgetSerializer(serializers.ModelSerializer):
+    """Budget par catégorie OU par département — exactement
+    l'un des deux champs doit être renseigné."""
+
+    class Meta:
+        model = Budget
+        fields = [
+            "id", "department", "category", "amount",
+            "alert_threshold", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, attrs):
+        department = attrs.get("department")
+        category = attrs.get("category", "")
+        if bool(department) == bool(category):
+            raise serializers.ValidationError(
+                "Renseignez un département OU une catégorie."
+            )
+        return attrs
+
+
+class AttachmentSerializer(serializers.ModelSerializer):
+    """Justificatif — file_url absolu (comme avatar_url) pour que
+    l'app ouvre le document sans reconstruire l'URL."""
+
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Attachment
+        fields = [
+            "id", "subscription", "payment", "name", "file",
+            "file_url", "uploaded_by", "created_at",
+        ]
+        read_only_fields = ["id", "file_url", "uploaded_by", "created_at"]
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        return (
+            request.build_absolute_uri(obj.file.url)
+            if request is not None
+            else obj.file.url
+        )
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
