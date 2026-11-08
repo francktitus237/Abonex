@@ -31,19 +31,22 @@ from .connectors.powens import (
 from .rates import rates_for
 from .models import (
     Attachment, AuditLog, Budget, Comment, Department, Employee,
-    Invitation, Membership, Payment, Profile, ProviderConnection,
-    Subscription, Workspace,
+    Invitation, Membership, Payment, PayrollItem, Profile,
+    ProviderConnection, Subscription, Supplier, Webhook,
+    Workspace,
 )
 from .serializers import (
     AttachmentSerializer, BudgetSerializer, DepartmentSerializer,
-    EmployeeSerializer,
-    PaymentSerializer, SubscriptionSerializer, UserSerializer,
+    EmployeeSerializer, PayrollItemSerializer,
+    PaymentSerializer, SubscriptionSerializer, SupplierSerializer,
+    UserSerializer, WebhookSerializer,
     WorkspaceSerializer, WorkspaceBudgetSerializer,
 )
 
 
 from .permissions import (
-    EmployeePermission, IsOwner, SubscriptionPermission,
+    EmployeePermission, IsOwner, IsOwnerOrManager,
+    SubscriptionPermission,
 )
 
 
@@ -73,6 +76,19 @@ class LoginView(APIView):
                 {"detail": "Identifiants incorrects."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        # 2FA : profil activé → on renvoie un pre-token signé à
+        # 5 minutes ; le vrai JWT arrive après /auth/2fa/verify/.
+        if auth_user.profile.totp_enabled:
+            from django.core.signing import dumps
+
+            return Response(
+                {
+                    "requires_2fa": True,
+                    "pre_token": dumps(
+                        {"uid": auth_user.pk}, salt="2fa"
+                    ),
+                }
+            )
         refresh = RefreshToken.for_user(auth_user)
         return Response(
             {
@@ -80,6 +96,112 @@ class LoginView(APIView):
                 "refresh": str(refresh),
                 "user": UserSerializer(
                     auth_user, context={"request": request}
+                ).data,
+            }
+        )
+
+
+class TotpSetupView(APIView):
+    """POST /auth/2fa/setup/ — génère le secret TOTP et renvoie
+    l'URI otpauth:// pour l'app d'authentification (QR)."""
+
+    def post(self, request):
+        import pyotp
+
+        profile = request.user.profile
+        secret = pyotp.random_base32()
+        profile.totp_secret = secret
+        profile.save(update_fields=["totp_secret"])
+        uri = pyotp.TOTP(secret).provisioning_uri(
+            name=request.user.email, issuer_name="Abonex"
+        )
+        return Response({"uri": uri})
+
+
+class TotpEnableView(APIView):
+    """POST /auth/2fa/enable/ {code} — active la 2FA si le code
+    généré par l'app correspond au secret provisoire."""
+
+    def post(self, request):
+        import pyotp
+
+        profile = request.user.profile
+        code = str(request.data.get("code") or "").strip()
+        if not profile.totp_secret:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        if not pyotp.TOTP(profile.totp_secret).verify(
+            code, valid_window=1
+        ):
+            return Response(
+                {"detail": "Code invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile.totp_enabled = True
+        profile.save(update_fields=["totp_enabled"])
+        return Response({"enabled": True})
+
+
+class TotpDisableView(APIView):
+    """POST /auth/2fa/disable/ {code} — désactive après
+    vérification du code en cours."""
+
+    def post(self, request):
+        import pyotp
+
+        profile = request.user.profile
+        code = str(request.data.get("code") or "").strip()
+        if not pyotp.TOTP(profile.totp_secret).verify(
+            code, valid_window=1
+        ):
+            return Response(
+                {"detail": "Code invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile.totp_enabled = False
+        profile.totp_secret = ""
+        profile.save(
+            update_fields=["totp_enabled", "totp_secret"]
+        )
+        return Response({"enabled": False})
+
+
+class TotpVerifyView(APIView):
+    """POST /auth/2fa/verify/ {pre_token, code} — 2ᵉ étape du
+    login : vérifie le code TOTP puis délivre les JWT."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = "login"
+
+    def post(self, request):
+        import pyotp
+        from django.core.signing import (
+            BadSignature, SignatureExpired, loads,
+        )
+
+        pre = request.data.get("pre_token") or ""
+        code = str(request.data.get("code") or "").strip()
+        try:
+            uid = loads(pre, salt="2fa", max_age=300)["uid"]
+        except (BadSignature, SignatureExpired):
+            return Response(
+                {"detail": "Session expirée, reconnectez-vous."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = get_object_or_404(User, pk=uid)
+        if not pyotp.TOTP(user.profile.totp_secret).verify(
+            code, valid_window=1
+        ):
+            return Response(
+                {"detail": "Code invalide."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(
+                    user, context={"request": request}
                 ).data,
             }
         )
@@ -1206,6 +1328,65 @@ def _visible_subscriptions(request):
     return qs
 
 
+def _fire_webhooks(workspace, event, payload):
+    """POST JSON vers les webhooks actifs abonnés à `event`
+    (étude Phase 4 — connecteurs comptables). Échecs ignorés :
+    un webhook ne bloque jamais le flux applicatif."""
+    try:
+        import json as _json
+        import urllib.request
+
+        for hook in Webhook.objects.filter(
+            workspace=workspace, active=True
+        ):
+            if event not in (hook.events or ""):
+                continue
+            body = _json.dumps(
+                {"event": event, "data": payload}
+            ).encode()
+            req = urllib.request.Request(
+                hook.url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Abonex-Secret": hook.secret,
+                },
+            )
+            try:
+                urllib.request.urlopen(req, timeout=5)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+class WebhookListCreateView(generics.ListCreateAPIView):
+    """GET/POST /webhooks/ — intégrations externes (étude §4)."""
+
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = WebhookSerializer
+
+    def get_queryset(self):
+        return Webhook.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class WebhookDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = WebhookSerializer
+
+    def get_queryset(self):
+        return Webhook.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+
 def _audit(request, action, obj_type, obj_repr, before=None, after=None):
     """Écrit une ligne de journal d'audit (étude §4.5)."""
     AuditLog.objects.create(
@@ -1242,6 +1423,15 @@ class SubscriptionListCreateView(generics.ListCreateAPIView):
             owner=self.request.user,
             workspace=self.request.user.profile.workspace,
             status=computed,
+        )
+        _fire_webhooks(
+            subscription.workspace,
+            "subscription",
+            {
+                "id": subscription.pk,
+                "name": subscription.name,
+                "amount": str(subscription.amount),
+            },
         )
         _audit(
             self.request,
@@ -1326,6 +1516,15 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
             # L'échéance payée appartient au passé : on fait avancer
             # la prochaine échéance d'un cycle complet.
             _advance_due(subscription)
+            _fire_webhooks(
+                self.request.user.profile.workspace,
+                "payment",
+                {
+                    "id": subscription.pk,
+                    "name": subscription.name,
+                    "amount": str(subscription.amount),
+                },
+            )
             _audit(
                 self.request,
                 "pay",
@@ -1391,6 +1590,11 @@ class PaymentApprovalView(APIView):
             sub.status = "paid"
             sub.save(update_fields=["status"])
             _advance_due(sub)
+            _fire_webhooks(
+                payment.workspace,
+                "payment",
+                {"id": sub.pk, "name": sub.name},
+            )
         _audit(
             request,
             verdict.replace("approved", "approve").replace(
@@ -1732,6 +1936,238 @@ class MonthlyReportEmailView(APIView):
         )
         mail.send(fail_silently=False)
         return Response({"sent_to": recipient})
+
+
+class SupplierListCreateView(generics.ListCreateAPIView):
+    """GET/POST /suppliers/ — fournisseurs/contrats (étude §E1)."""
+
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = SupplierSerializer
+
+    def get_queryset(self):
+        return Supplier.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class SupplierDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = SupplierSerializer
+
+    def get_queryset(self):
+        return Supplier.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class PayrollItemListCreateView(generics.ListCreateAPIView):
+    """GET/POST /payroll-items/?employee=<id>&period=YYYY-MM —
+    primes, avances, retenues, heures supp (étude Phase 3)."""
+
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = PayrollItemSerializer
+
+    def get_queryset(self):
+        qs = PayrollItem.objects.filter(
+            workspace=self.request.user.profile.workspace
+        ).select_related("employee")
+        for key in ("employee", "period"):
+            value = self.request.GET.get(key)
+            if value:
+                qs = qs.filter(**{key: value})
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class PayrollItemDetailView(generics.DestroyAPIView):
+    permission_classes = [IsOwnerOrManager]
+    serializer_class = PayrollItemSerializer
+
+    def get_queryset(self):
+        return PayrollItem.objects.filter(
+            workspace=self.request.user.profile.workspace
+        )
+
+
+class PayslipView(APIView):
+    """GET /employees/<id>/payslip/?period=YYYY-MM — bulletin de
+    paie PDF (étude §D/Phase 3) : en-tête société, salaire,
+    éléments du mois, net à payer."""
+
+    permission_classes = [IsOwnerOrManager]
+
+    def get(self, request, pk):
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+        import io
+
+        ws = request.user.profile.workspace
+        emp = get_object_or_404(Employee, pk=pk, workspace=ws)
+        period = request.GET.get(
+            "period", timezone.localdate().strftime("%Y-%m")
+        )
+        items = list(emp.payroll_items.filter(period=period))
+
+        def sign(item):
+            return (
+                -float(item.amount)
+                if item.kind
+                in {"advance", "deduction", "contribution", "tax"}
+                else float(item.amount)
+            )
+
+        net = float(emp.salary) + sum(sign(i) for i in items)
+
+        buf = io.BytesIO()
+        pdf = canvas.Canvas(buf, pagesize=A4)
+        w, h = A4
+        y = h - 20 * mm
+        pdf.setFont("Helvetica-Bold", 18)
+        pdf.drawString(20 * mm, y, ws.legal_name or ws.name)
+        y -= 8 * mm
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.drawString(
+            20 * mm, y, f"Bulletin de paie — {period}"
+        )
+        y -= 9 * mm
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(
+            20 * mm, y, f"Employé : {emp.name}"
+            + (f" — {emp.position}" if emp.position else "")
+        )
+        if emp.contract:
+            y -= 5 * mm
+            pdf.drawString(20 * mm, y, f"Contrat : {emp.contract}")
+        if emp.hire_date:
+            y -= 5 * mm
+            pdf.drawString(
+                20 * mm,
+                y,
+                f"Embauché le : {emp.hire_date:%d/%m/%Y}",
+            )
+        if emp.payment_info:
+            y -= 5 * mm
+            pdf.drawString(
+                20 * mm, y, f"Versement : {emp.payment_info}"
+            )
+        y -= 11 * mm
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(20 * mm, y, "Lignes de paie")
+        y -= 7 * mm
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(
+            25 * mm,
+            y,
+            f"Salaire de base : {float(emp.salary):,.2f} "
+            f"{emp.currency}",
+        )
+        y -= 6 * mm
+        for item in items:
+            label = dict(PayrollItem.KINDS)[item.kind]
+            pdf.drawString(
+                25 * mm,
+                y,
+                f"{label} — {item.label} : "
+                f"{sign(item):+,.2f} {emp.currency}",
+            )
+            y -= 6 * mm
+        y -= 5 * mm
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.drawString(
+            20 * mm,
+            y,
+            f"NET À PAYER : {net:,.2f} {emp.currency}",
+        )
+        pdf.showPage()
+        pdf.save()
+
+        from django.http import HttpResponse
+
+        resp = HttpResponse(
+            buf.getvalue(), content_type="application/pdf"
+        )
+        resp["Content-Disposition"] = (
+            f'attachment; filename="bulletin_{emp.name}_{period}.pdf"'
+        )
+        return resp
+
+
+class MyPayslipView(APIView):
+    """GET /employees/me/payslip/?period= — portail employé
+    (étude §D) : le salarié lié récupère SON bulletin PDF, sans
+    droit owner/manager requis."""
+
+    def get(self, request):
+        emp = Employee.objects.filter(
+            user=request.user,
+            workspace=request.user.profile.workspace,
+        ).first()
+        if emp is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return PayslipView().get(request, pk=emp.pk)
+
+
+class PayAllView(APIView):
+    """POST /employees/pay-all/ — paie groupée (étude §D/Phase 3) :
+    marque PAYÉES toutes les échéances payroll actives du mois
+    en cours, agrégeant les éléments de paie (primes/avances…).
+    Retourne le récapitulatif à afficher avant confirmation."""
+
+    permission_classes = [IsOwnerOrManager]
+
+    def post(self, request):
+        ws = request.user.profile.workspace
+        period = request.data.get(
+            "period", timezone.localdate().strftime("%Y-%m")
+        )
+        results = []
+        for emp in ws.employees.filter(active=True).select_related(
+            "subscription"
+        ):
+            sub = emp.subscription
+            if sub is None:
+                continue
+            items = list(emp.payroll_items.filter(period=period))
+            net = float(emp.salary) + sum(
+                -float(i.amount)
+                if i.kind
+                in {"advance", "deduction", "contribution", "tax"}
+                else float(i.amount)
+                for i in items
+            )
+            sub.amount = net
+            sub.save(update_fields=["amount"])
+            if sub.status != "paid":
+                sub.status = "paid"
+                sub.save(update_fields=["status"])
+            Payment.objects.update_or_create(
+                subscription=sub,
+                workspace=ws,
+                due_date=sub.next_due_date,
+                defaults={
+                    "amount": net,
+                    "status": "approved",
+                    "recorded_by": request.user,
+                    "paid_at": timezone.now(),
+                },
+            )
+            results.append({"employee": emp.name, "net": net})
+            _audit(
+                request, "pay", "payment",
+                f"Paie {emp.name} ({period})",
+                after={"net": net},
+            )
+        return Response({"period": period, "paid": results})
 
 
 class PendingPaymentsView(APIView):

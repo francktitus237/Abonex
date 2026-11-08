@@ -77,3 +77,14 @@ final class UnexpectedFailure extends Failure {
   @override
   String get localizedMessage => _orDefault('error.unexpected');
 }
+
+/// 2FA requise — le login attend le code TOTP ; `preToken`
+/// doit être renvoyé à /auth/2fa/verify/ (étude Phase 4).
+final class TwoFaRequired extends Failure {
+  const TwoFaRequired(this.preToken, [super.message = '']);
+
+  final String preToken;
+
+  @override
+  String get localizedMessage => 'Code de vérification requis';
+}

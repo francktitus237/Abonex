@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../../core/data/countries.dart';
@@ -40,6 +43,60 @@ class _EmployeesPageState extends State<EmployeesPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// Paie groupée du mois (étude §D/Phase 3) : confirmation →
+  /// POST employees/pay-all/ → récap + resync échéances.
+  Future<void> _payAll() async {
+    final period = DateTime.now().toIso8601String().substring(0, 7);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('emp.payAll')),
+        content: Text(
+          ctx.tr('emp.payAllConfirm', {'period': period}),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(ctx.tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(ctx.tr('common.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final okMsg = context.tr('emp.payAllDone');
+    final errMsg = context.tr('emp.error');
+    try {
+      final res = await getIt<WorkspaceRemoteDataSource>()
+          .payAll(period);
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          title: Text(
+            '$okMsg — ${(res['paid'] as List?)?.length ?? 0}',
+          ),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+      unawaited(
+        getIt<SubscriptionsCubit>().refresh(quiet: true),
+      );
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -100,6 +157,14 @@ class _EmployeesPageState extends State<EmployeesPage> {
       appBar: AppBar(
         title: Text(context.tr('emp.title')),
         actions: [
+          // Paie groupée du mois (étude §D/Phase 3) : marque
+          // payées toutes les échéances payroll actives et
+          // agrège primes/avances/retenues du mois.
+          IconButton(
+            tooltip: context.tr('emp.payAll'),
+            onPressed: _payAll,
+            icon: const Icon(LucideIcons.banknote, size: 20),
+          ),
           IconButton(
             tooltip: context.tr('common.refresh'),
             onPressed: _load,
@@ -231,6 +296,134 @@ class _EmployeeTile extends StatelessWidget {
   final Employee employee;
   final VoidCallback onTap;
 
+  /// Ajoute prime/avance/retenue/HS pour le mois courant —
+  /// agrégé à la paie groupée et au bulletin (étude §D).
+  Future<void> _addItem(BuildContext context) async {
+    final period =
+        DateTime.now().toIso8601String().substring(0, 7);
+    final label = TextEditingController();
+    final amount = TextEditingController();
+    var kind = 'bonus';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => AlertDialog(
+          title: Text(ctx.tr('emp.addItem')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: kind,
+                items: [
+                  for (final k in [
+                    'bonus', 'advance', 'deduction', 'overtime',
+                    'contribution', 'tax',
+                  ])
+                    DropdownMenuItem(
+                      value: k,
+                      child: Text(ctx.tr('item.$k')),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setSheet(() => kind = v ?? 'bonus'),
+                decoration: InputDecoration(
+                  labelText: ctx.tr('item.kind'),
+                ),
+              ),
+              TextField(
+                controller: label,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('item.label'),
+                ),
+              ),
+              TextField(
+                controller: amount,
+                keyboardType:
+                    const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: ctx.tr('item.amount'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final value = double.tryParse(
+      amount.text.trim().replaceAll(',', '.'),
+    );
+    if (value == null || label.text.trim().isEmpty) return;
+    final okMsg = context.tr('emp.itemAdded');
+    final errMsg = context.tr('emp.error');
+    try {
+      await getIt<WorkspaceRemoteDataSource>().addPayrollItem({
+        'employee': employee.id,
+        'kind': kind,
+        'label': label.text.trim(),
+        'amount': value.toStringAsFixed(2),
+        'period': period,
+      });
+      if (context.mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          title: Text(okMsg),
+          autoCloseDuration: const Duration(seconds: 2),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  /// Bulletin PDF du mois → téléchargé puis partagé (étude §D).
+  Future<void> _payslip(BuildContext context) async {
+    final period =
+        DateTime.now().toIso8601String().substring(0, 7);
+    final errMsg = context.tr('emp.payslipErr');
+    try {
+      final bytes = await getIt<WorkspaceRemoteDataSource>()
+          .payslipBytes(employee.id, period);
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/bulletin_${employee.name}_$period.pdf',
+      );
+      await file.writeAsBytes(bytes);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)]),
+      );
+    } catch (_) {
+      if (context.mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -300,6 +493,22 @@ class _EmployeeTile extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: scheme.primary,
                 ),
+              ),
+              // Élément de paie : prime/avance/retenue/HS.
+              IconButton(
+                tooltip: context.tr('emp.addItem'),
+                visualDensity: VisualDensity.compact,
+                icon: Icon(LucideIcons.circlePlus,
+                    size: 18, color: scheme.primary),
+                onPressed: () => _addItem(context),
+              ),
+              // Bulletin de paie PDF du mois (étude §D).
+              IconButton(
+                tooltip: context.tr('emp.payslip'),
+                visualDensity: VisualDensity.compact,
+                icon: Icon(LucideIcons.fileText,
+                    size: 18, color: scheme.primary),
+                onPressed: () => _payslip(context),
               ),
             ],
           ),

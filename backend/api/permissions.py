@@ -64,3 +64,14 @@ class SubscriptionPermission(BasePermission):
                 return True
             return profile.role == "assistant" and set(request.data) == {"status"} and request.data.get("status") == "paid"
         return False
+
+
+class IsOwnerOrManager(BasePermission):
+    """Owner + manager — gouvernance (paie, budgets, verdicts)."""
+
+    def has_permission(self, request, view):
+        profile = getattr(request.user, "profile", None)
+        return (
+            profile is not None
+            and profile.role in {"owner", "manager"}
+        )

@@ -28,6 +28,31 @@ class AuthRepositoryImpl implements AuthRepository {
       return Ok(session.user.toEntity());
     } on DioException catch (e) {
       return Err(_toFailure(ApiException.fromDio(e)));
+    } on TwoFaRequiredException catch (e) {
+      // 2FA : le formulaire passe en saisie du code TOTP.
+      return Err(TwoFaRequired(e.preToken));
+    } catch (_) {
+      return const Err(UnexpectedFailure());
+    }
+  }
+
+  @override
+  Future<Result<User>> verify2fa({
+    required String preToken,
+    required String code,
+  }) async {
+    try {
+      final session = await _remote.verify2fa(
+        preToken: preToken,
+        code: code,
+      );
+      await _local.saveSession(
+        tokens: session.tokens,
+        user: session.user,
+      );
+      return Ok(session.user.toEntity());
+    } on DioException catch (e) {
+      return Err(_toFailure(ApiException.fromDio(e)));
     } catch (_) {
       return const Err(UnexpectedFailure());
     }

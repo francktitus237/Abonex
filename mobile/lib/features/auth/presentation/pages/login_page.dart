@@ -41,12 +41,14 @@ class _LoginViewState extends State<_LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _codeController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
@@ -54,7 +56,21 @@ class _LoginViewState extends State<_LoginView> {
     // Valide les champs localement AVANT de frapper l'API.
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
-    context.read<LoginCubit>().submit(
+    final cubit = context.read<LoginCubit>();
+    // 2FA : un pre_token attend dans fieldErrors['_2fa'] —
+    // la 2ᵉ étape envoie le code TOTP au lieu du mot de passe.
+    final state = cubit.state;
+    final preToken = state is LoginFailure
+        ? state.fieldErrors['_2fa']
+        : null;
+    if (preToken != null) {
+      cubit.verify2fa(
+        preToken: preToken,
+        code: _codeController.text.trim(),
+      );
+      return;
+    }
+    cubit.submit(
       email: _emailController.text,
       password: _passwordController.text,
     );
@@ -168,6 +184,43 @@ class _LoginViewState extends State<_LoginView> {
                               ? context.tr('auth.passwordMin')
                               : null,
                           onFieldSubmitted: (_) => _submit(),
+                        ),
+
+                        // Champ code 2FA — affiché seulement quand
+                        // le backend a demandé le TOTP.
+                        BlocBuilder<LoginCubit, LoginState>(
+                          builder: (context, state) {
+                            if (state is LoginFailure &&
+                                state.fieldErrors['_2fa'] != null) {
+                              return Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 12,
+                                ),
+                                child: TextFormField(
+                                  controller: _codeController,
+                                  keyboardType:
+                                      TextInputType.number,
+                                  maxLength: 6,
+                                  autofillHints: const [
+                                    AutofillHints.oneTimeCode,
+                                  ],
+                                  decoration: InputDecoration(
+                                    labelText: context.tr(
+                                      'auth.code2fa',
+                                    ),
+                                    counterText: '',
+                                    prefixIcon: const Icon(
+                                      LucideIcons.shieldCheck,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  onFieldSubmitted: (_) =>
+                                      _submit(),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
                         ),
 
                         Align(

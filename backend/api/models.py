@@ -60,6 +60,10 @@ class Profile(models.Model):
     )
     role = models.CharField(max_length=16, choices=ROLES, default="viewer")
     language = models.CharField(max_length=8, blank=True, default="fr")
+    # 2FA TOTP (étude Phase 4) : secret + activation — login
+    # en deux étapes (pre_token signé → code → tokens JWT).
+    totp_secret = models.CharField(max_length=40, blank=True)
+    totp_enabled = models.BooleanField(default=False)
 
 
 class Membership(models.Model):
@@ -262,9 +266,57 @@ class Employee(models.Model):
         related_name="employee",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Fiche enrichie (étude §D/Phase 3) : date d'embauche, type
+    # de contrat, département, coordonnées de versement (MoMo,
+    # RIB…) — affichées sur le bulletin PDF.
+    hire_date = models.DateField(null=True, blank=True)
+    contract = models.CharField(max_length=60, blank=True)
+    department = models.ForeignKey(
+        "Department", on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="employees",
+    )
+    payment_info = models.CharField(max_length=255, blank=True)
+    # Portail employé (étude Phase 3) : compte utilisateur lié —
+    # le salarié consulte son bulletin et son historique de paie.
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_profile",
+    )
 
     class Meta:
         ordering = ["name"]
+
+
+class PayrollItem(models.Model):
+    """Élément de paie (étude Phase 3) : prime, avance sur
+    salaire, retenue, heures supplémentaires — rattaché à un
+    employé et à une période YYYY-MM ; la paie groupée et le
+    bulletin les agrègent au salaire net."""
+
+    KINDS = [
+        ("bonus", "Prime"),
+        ("advance", "Avance sur salaire"),
+        ("deduction", "Retenue"),
+        ("overtime", "Heures supplémentaires"),
+        ("contribution", "Cotisation"),
+        ("tax", "Impôt sur salaire"),
+    ]
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE,
+        related_name="payroll_items",
+    )
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE,
+        related_name="payroll_items",
+    )
+    kind = models.CharField(max_length=12, choices=KINDS)
+    label = models.CharField(max_length=120)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    period = models.CharField(max_length=7)  # YYYY-MM
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-period", "employee__name"]
 
 
 class Department(models.Model):
@@ -379,6 +431,54 @@ class Comment(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+
+
+class Supplier(models.Model):
+    """Fournisseur/contrat (étude §E1) : contact, modalités de
+    règlement, délai de paiement, préavis — base du suivi des
+    fournisseurs et des renégociations."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE,
+        related_name="suppliers",
+    )
+    name = models.CharField(max_length=120)
+    contact = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    email = models.EmailField(blank=True)
+    # Modalité préférée de règlement (momo, virement, chèque…).
+    payment_method = models.CharField(max_length=20, blank=True)
+    # Délai de règlement en jours (30, 45…) et préavis contractuel.
+    payment_terms_days = models.PositiveIntegerField(default=30)
+    notice_period_days = models.PositiveIntegerField(default=30)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class Webhook(models.Model):
+    """Webhook sortant (étude Phase 4) : URL notifiée par POST
+    JSON sur les événements clés (paiement, échéance créée,
+    échéance en retard) — base des connecteurs comptables."""
+
+    EVENTS = [
+        ("payment", "Paiement"),
+        ("subscription", "Échéance"),
+        ("overdue", "Retard"),
+    ]
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="webhooks"
+    )
+    url = models.URLField(max_length=400)
+    secret = models.CharField(max_length=120, blank=True)
+    events = models.CharField(max_length=120, default="payment")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["url"]
 
 
 class Attachment(models.Model):

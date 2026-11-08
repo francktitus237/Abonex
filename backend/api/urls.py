@@ -5,6 +5,10 @@ from . import views
 
 urlpatterns = [
     path("auth/login/", views.LoginView.as_view()),
+    path("auth/2fa/setup/", views.TotpSetupView.as_view()),
+    path("auth/2fa/enable/", views.TotpEnableView.as_view()),
+    path("auth/2fa/disable/", views.TotpDisableView.as_view()),
+    path("auth/2fa/verify/", views.TotpVerifyView.as_view()),
     path("auth/register/", views.RegisterView.as_view()),
     path("auth/token/refresh/", TokenRefreshView.as_view()),
     path("auth/logout/", views.LogoutView.as_view()),
@@ -32,6 +36,33 @@ urlpatterns = [
     path(
         "report/monthly/send/",
         views.MonthlyReportEmailView.as_view(),
+    ),
+    path(
+        "payroll-items/",
+        views.PayrollItemListCreateView.as_view(),
+    ),
+    path(
+        "payroll-items/<int:pk>/",
+        views.PayrollItemDetailView.as_view(),
+    ),
+    path(
+        "employees/<int:pk>/payslip/",
+        views.PayslipView.as_view(),
+    ),
+    path("employees/pay-all/", views.PayAllView.as_view()),
+    path(
+        "employees/me/payslip/",
+        views.MyPayslipView.as_view(),
+    ),
+    path("suppliers/", views.SupplierListCreateView.as_view()),
+    path("webhooks/", views.WebhookListCreateView.as_view()),
+    path(
+        "webhooks/<int:pk>/",
+        views.WebhookDetailView.as_view(),
+    ),
+    path(
+        "suppliers/<int:pk>/",
+        views.SupplierDetailView.as_view(),
     ),
     path("insights/", views.InsightsView.as_view()),
     path("employees/", views.EmployeeListCreateView.as_view()),

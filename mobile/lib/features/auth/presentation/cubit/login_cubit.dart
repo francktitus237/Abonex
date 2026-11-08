@@ -31,6 +31,15 @@ class LoginCubit extends Cubit<LoginState> {
         // le guard du router redirigera vers l'accueil.
         _authCubit.onAuthenticated(user);
         emit(const LoginState.idle());
+      case Err(failure: final f) when f is TwoFaRequired:
+        // 2FA : la page passe en saisie du code — le pre_token
+        // transite via fieldErrors['_2fa'] (pas de nouvel état).
+        emit(
+          LoginState.failure(
+            message: '',
+            fieldErrors: {'_2fa': f.preToken},
+          ),
+        );
       case Err(failure: final failure):
         emit(
           LoginState.failure(
@@ -47,4 +56,29 @@ class LoginCubit extends Cubit<LoginState> {
   /// décide du toast à afficher (l'UI reste dans les widgets).
   Future<Result<void>> forgotPassword(String email) =>
       _repository.forgotPassword(email);
+
+  /// 2FA : 2ᵉ étape — code TOTP + pre_token → session complète.
+  Future<void> verify2fa({
+    required String preToken,
+    required String code,
+  }) async {
+    if (state is LoginSubmitting) return;
+    emit(const LoginState.submitting());
+    final result = await _repository.verify2fa(
+      preToken: preToken,
+      code: code,
+    );
+    switch (result) {
+      case Ok(value: final user):
+        _authCubit.onAuthenticated(user);
+        emit(const LoginState.idle());
+      case Err(failure: final failure):
+        emit(
+          LoginState.failure(
+            message: failure.localizedMessage,
+            fieldErrors: {'_2fa': preToken},
+          ),
+        );
+    }
+  }
 }
