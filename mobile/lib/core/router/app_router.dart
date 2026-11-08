@@ -21,6 +21,7 @@ import '../../features/subscriptions/presentation/pages/subscriptions_page.dart'
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/workspace/presentation/pages/employees_page.dart';
 import '../../features/workspace/presentation/pages/audit_log_page.dart';
+import '../../features/workspace/presentation/pages/governance_page.dart';
 import '../../features/workspace/presentation/pages/pending_payments_page.dart';
 import '../../features/workspace/presentation/pages/integrations_page.dart';
 import '../storage/settings_storage.dart';
@@ -57,6 +58,9 @@ abstract final class AppRoutes {
 
   /// Journal d'audit — propriétaire uniquement.
   static const audit = '/audit';
+
+  /// Pilotage : départements + budgets par poste (entreprise).
+  static const governance = '/governance';
 
   /// Import CSV / connexions aux comptes fournisseurs.
   static const integrations = '/integrations';
@@ -220,6 +224,10 @@ GoRouter buildRouter(AuthCubit authCubit, SettingsStorage settingsStorage) {
       GoRoute(
         path: AppRoutes.integrations,
         builder: (_, _) => const IntegrationsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.governance,
+        builder: (_, _) => const GovernancePage(),
       ),
       GoRoute(
         path: AppRoutes.audit,

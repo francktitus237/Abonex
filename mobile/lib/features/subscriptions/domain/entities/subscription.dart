@@ -82,6 +82,9 @@ class Subscription {
     this.dueTime,
     this.isShared = false,
     this.paymentUrl = '',
+    this.department,
+    this.assignee,
+    this.noticePeriodDays,
   });
 
   final String id;
@@ -120,6 +123,17 @@ class Subscription {
   /// Lien de paiement direct (portail client/page marchande) —
   /// bouton « Payer » sur le détail.
   final String paymentUrl;
+
+  /// Département / centre de coûts (espaces entreprise) —
+  /// pilotage par poste, budgets départementaux (étude §B).
+  final int? department;
+
+  /// Responsable assigné — reçoit les rappels de l'échéance.
+  final int? assignee;
+
+  /// Préavis de résiliation en jours — alerte « résilier
+  /// avant le … » (contrats avec reconduction).
+  final int? noticePeriodDays;
 
   /// Rendez-vous / événement — uniquement la catégorie dédiée.
   /// Un abonnement ponctuel (facture « une seule fois ») reste un

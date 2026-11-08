@@ -22,6 +22,9 @@ class SubscriptionModel extends Subscription {
     super.dueTime,
     super.isShared,
     super.paymentUrl,
+    super.department,
+    super.assignee,
+    super.noticePeriodDays,
   });
 
   /// "14:30:00" (DRF TimeField) → TimeOfDay.
@@ -66,6 +69,9 @@ class SubscriptionModel extends Subscription {
       dueTime: _parseTime(json['due_time']),
       isShared: json['is_shared'] as bool? ?? false,
       paymentUrl: json['payment_url'] as String? ?? '',
+      department: json['department'] as int?,
+      assignee: json['assignee'] as int?,
+      noticePeriodDays: json['notice_period_days'] as int?,
     );
   }
 }

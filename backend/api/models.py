@@ -28,6 +28,13 @@ class Workspace(models.Model):
     extra_currencies = models.JSONField(default=list, blank=True)
     configured = models.BooleanField(default=False)
     monthly_budget = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    # Seuil d'approbation (étude §B) : une déclaration de
+    # paiement dont le montant dépasse ce plafond passe
+    # obligatoirement en « pending » — validée ensuite par
+    # owner/manager via payments/<id>/verdict/.
+    approval_threshold = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
     # ---------- Profil société (comptes entreprise) ----------
     # Raison sociale affichée sur rapports/exports ; `name` reste
     # le nom affiché dans l'app (éditable — étude §4 « une
@@ -200,6 +207,26 @@ class Subscription(models.Model):
     # Suppression douce : archivée au lieu d'effacée — conserve
     # l'historique de paiements (étude §4.5/§4.6).
     archived_at = models.DateTimeField(null=True, blank=True)
+    # Pilotage (étude §B/E) : département de rattachement,
+    # responsable assigné (reçoit les rappels), préavis de
+    # résiliation — alerte « résilier avant le … ».
+    department = models.ForeignKey(
+        "Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subscriptions",
+    )
+    assignee = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_subscriptions",
+    )
+    notice_period_days = models.PositiveSmallIntegerField(
+        null=True, blank=True
+    )
     cycle = models.CharField(max_length=16, choices=CYCLES, default="monthly")
     status = models.CharField(
         max_length=16, choices=STATUSES, default="dueSoon"
@@ -238,6 +265,54 @@ class Employee(models.Model):
 
     class Meta:
         ordering = ["name"]
+
+
+class Department(models.Model):
+    """Département / centre de coûts d'un espace entreprise
+    (étude §B) : les échéances et employés y sont rattachés
+    pour le pilotage budgétaire par poste."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="departments"
+    )
+    name = models.CharField(max_length=120)
+    manager = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_departments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class Budget(models.Model):
+    """Budget par catégorie OU par département (étude §B) — le
+    budget mensuel global du workspace reste `monthly_budget`.
+    Alertes à `alert_threshold` % (80 par défaut) et 100 %."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="budgets"
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="budgets",
+    )
+    # Catégorie de Subscription.CATEGORIES — nulle si le budget
+    # est départemental.
+    category = models.CharField(max_length=16, blank=True, default="")
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    alert_threshold = models.PositiveSmallIntegerField(default=80)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
 
 
 class Payment(models.Model):
@@ -284,6 +359,58 @@ class Payment(models.Model):
 
     class Meta:
         ordering = ["-paid_at"]
+
+
+class Comment(models.Model):
+    """Commentaire d'équipe sur une échéance (étude §G) :
+    discussion contextuelle, @mentions en texte libre."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="comments"
+    )
+    subscription = models.ForeignKey(
+        Subscription, on_delete=models.CASCADE, related_name="comments"
+    )
+    author = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="comments"
+    )
+    text = models.CharField(max_length=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class Attachment(models.Model):
+    """Justificatif (étude §C) : photo de reçu ou PDF de facture
+    rattaché à une échéance OU à un paiement."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="attachments"
+    )
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="attachments",
+    )
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="attachments/")
+    name = models.CharField(max_length=200, blank=True, default="")
+    uploaded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
 
 class AuditLog(models.Model):

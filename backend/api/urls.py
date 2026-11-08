@@ -19,6 +19,20 @@ urlpatterns = [
     ),
     path("devices/", views.DeviceTokenView.as_view()),
     path("export/csv/", views.ExportCsvView.as_view()),
+    path("export/xlsx/", views.ExportXlsxView.as_view()),
+    path("export/pdf/", views.ExportPdfView.as_view()),
+    path(
+        "subscriptions/<int:pk>/comments/",
+        views.CommentListCreateView.as_view(),
+    ),
+    path(
+        "comments/<int:pk>/",
+        views.CommentDetailView.as_view(),
+    ),
+    path(
+        "report/monthly/send/",
+        views.MonthlyReportEmailView.as_view(),
+    ),
     path("insights/", views.InsightsView.as_view()),
     path("employees/", views.EmployeeListCreateView.as_view()),
     path(
@@ -64,6 +78,23 @@ urlpatterns = [
         views.PaymentApprovalView.as_view(),
     ),
     path("audit/", views.AuditLogView.as_view()),
+    path("departments/", views.DepartmentListCreateView.as_view()),
+    path(
+        "departments/<int:pk>/",
+        views.DepartmentDetailView.as_view(),
+    ),
+    path("budgets/", views.BudgetListCreateView.as_view()),
+    path(
+        "budgets/<int:pk>/", views.BudgetDetailView.as_view()
+    ),
+    path("treasury/", views.TreasuryView.as_view()),
+    path(
+        "attachments/", views.AttachmentListCreateView.as_view()
+    ),
+    path(
+        "attachments/<int:pk>/",
+        views.AttachmentDetailView.as_view(),
+    ),
     path("memberships/", views.MembershipListView.as_view()),
     path(
         "memberships/<int:pk>/activate/",

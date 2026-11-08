@@ -28,6 +28,68 @@ class WorkspaceRemoteDataSource {
         .toList();
   }
 
+  /// GET/POST/DELETE /departments/ — centres de coûts (étude §B).
+  Future<List<Map<String, dynamic>>> departments() async {
+    final res = await _dio.get<List<dynamic>>('departments/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> createDepartment(String name) =>
+      _dio.post<void>('departments/', data: {'name': name});
+
+  Future<void> updateDepartment(int id, String name) => _dio.patch<void>(
+    'departments/$id/',
+    data: {'name': name},
+  );
+
+  Future<void> deleteDepartment(int id) =>
+      _dio.delete<void>('departments/$id/');
+
+  /// GET/POST/DELETE /budgets/ — budgets par catégorie ou
+  /// département (étude §B).
+  Future<List<Map<String, dynamic>>> budgets() async {
+    final res = await _dio.get<List<dynamic>>('budgets/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> createBudget(
+    Map<String, dynamic> data,
+  ) => _dio.post<void>('budgets/', data: data);
+
+  Future<void> deleteBudget(int id) =>
+      _dio.delete<void>('budgets/$id/');
+
+  /// GET `export/<format>/` — export comptable : xlsx | pdf.
+  /// Renvoie les octets du fichier (auth requise → pas de
+  /// simple ouverture d'URL).
+  Future<List<int>> exportBytes(String format) async {
+    final res = await _dio.get<List<int>>(
+      'export/$format/',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? const [];
+  }
+
+  /// GET /treasury/?days=90&start_balance=X — prévision de
+  /// trésorerie (étude §C).
+  Future<Map<String, dynamic>> treasury({
+    int days = 90,
+    double startBalance = 0,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      'treasury/',
+      queryParameters: {
+        'days': days,
+        'start_balance': startBalance,
+      },
+    );
+    return res.data ?? {};
+  }
+
   /// GET /memberships/ — espaces accessibles (multi-espaces §4.2).
   Future<List<Map<String, dynamic>>> memberships() async {
     final res = await _dio.get<List<dynamic>>('memberships/');
@@ -121,6 +183,33 @@ class WorkspaceRemoteDataSource {
       ApiEndpoints.me,
       data: {'password': password},
     );
+  }
+
+  /// POST /report/monthly/send/ — rapport mensuel PDF par
+  /// e-mail au propriétaire (étude §F).
+  Future<Map<String, dynamic>> sendMonthlyReport() async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'report/monthly/send/',
+    );
+    return res.data ?? {};
+  }
+
+  /// GET /users/ — membres de l'espace (propriétaire) : liste
+  /// pour l'assignation d'échéances (étude §B).
+  Future<List<Map<String, dynamic>>> members() async {
+    final res = await _dio.get<List<dynamic>>('users/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// GET /workspace/budget/ — réglages de l'espace (inclut
+  /// approval_threshold, budget mensuel, infos société).
+  Future<Map<String, dynamic>> workspaceInfo() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      'workspace/budget/',
+    );
+    return res.data ?? {};
   }
 
   /// PATCH /workspace/setup/ — infos société (nom affiché,

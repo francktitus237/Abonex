@@ -19,6 +19,25 @@ abstract class SubscriptionRemoteDataSource {
     Map<String, dynamic>? extra,
   });
   Future<void> delete(String id);
+
+  /// GET `attachments/?subscription=<id>` — justificatifs.
+  Future<List<Map<String, dynamic>>> attachments(String subscriptionId);
+
+  /// POST /attachments/ multipart — upload reçu/facture.
+  Future<Map<String, dynamic>> uploadAttachment({
+    required String subscriptionId,
+    required String path,
+    String? filename,
+  });
+
+  Future<void> deleteAttachment(int id);
+
+  /// GET `subscriptions/<id>/comments/` — discussion (étude §G).
+  Future<List<Map<String, dynamic>>> comments(String id);
+
+  Future<void> addComment(String id, String text);
+
+  Future<void> deleteComment(int id);
 }
 
 class SubscriptionRemoteDataSourceImpl
@@ -94,4 +113,59 @@ class SubscriptionRemoteDataSourceImpl
   @override
   Future<void> delete(String id) =>
       _dio.delete<void>(ApiEndpoints.subscription(id));
+
+  @override
+  Future<List<Map<String, dynamic>>> attachments(
+    String subscriptionId,
+  ) async {
+    final res = await _dio.get<List<dynamic>>(
+      'attachments/',
+      queryParameters: {'subscription': subscriptionId},
+    );
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadAttachment({
+    required String subscriptionId,
+    required String path,
+    String? filename,
+  }) async {
+    final form = FormData.fromMap({
+      'subscription': subscriptionId,
+      'file': await MultipartFile.fromFile(path, filename: filename),
+    });
+    final res = await _dio.post<Map<String, dynamic>>(
+      'attachments/',
+      data: form,
+    );
+    return res.data ?? {};
+  }
+
+  @override
+  Future<void> deleteAttachment(int id) =>
+      _dio.delete<void>('attachments/$id/');
+
+  @override
+  Future<List<Map<String, dynamic>>> comments(String id) async {
+    final res = await _dio.get<List<dynamic>>(
+      'subscriptions/$id/comments/',
+    );
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  @override
+  Future<void> addComment(String id, String text) =>
+      _dio.post<void>(
+        'subscriptions/$id/comments/',
+        data: {'text': text},
+      );
+
+  @override
+  Future<void> deleteComment(int id) =>
+      _dio.delete<void>('comments/$id/');
 }

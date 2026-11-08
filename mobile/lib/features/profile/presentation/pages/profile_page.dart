@@ -209,6 +209,20 @@ class _ProfileView extends StatelessWidget {
                     onTap: () => _switchSpace(context),
                   ),
                 ],
+                // Pilotage : départements + budgets par poste —
+                // entreprise, owner/manager (étude §B).
+                if ((user.workspace?.isBusiness ?? false) &&
+                    (user.role == UserRole.owner ||
+                        user.role == UserRole.manager)) ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.circleGauge),
+                    title: Text(context.tr('gov.tile')),
+                    subtitle: Text(context.tr('gov.tileSub')),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                    onTap: () => context.push(AppRoutes.governance),
+                  ),
+                ],
                 // Journal d'audit : qui a fait quoi — propriétaire.
                 if (user.role == UserRole.owner) ...[
                   const Divider(indent: 56),
