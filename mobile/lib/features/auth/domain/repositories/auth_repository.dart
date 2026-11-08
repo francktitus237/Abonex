@@ -8,6 +8,13 @@ abstract class AuthRepository {
   /// Connexion email + mot de passe → tokens JWT persistés + user.
   Future<Result<User>> login({required String email, required String password});
 
+  /// 2ᵉ étape du login 2FA : pre_token signé + code TOTP
+  /// → session complète (étude Phase 4).
+  Future<Result<User>> verify2fa({
+    required String preToken,
+    required String code,
+  });
+
   /// Inscription : crée le compte côté serveur puis ouvre la session
   /// (même contrat que login : tokens + user).
   Future<Result<User>> register({

@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from .models import (
     Attachment, Budget, Department, Employee, Payment,
-    Subscription, Workspace,
+    PayrollItem, Subscription, Supplier, Webhook, Workspace,
 )
 
 
@@ -199,6 +199,43 @@ class AttachmentSerializer(serializers.ModelSerializer):
         )
 
 
+class WebhookSerializer(serializers.ModelSerializer):
+    """Webhook sortant (étude Phase 4)."""
+
+    class Meta:
+        model = Webhook
+        fields = [
+            "id", "url", "secret", "events", "active",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class SupplierSerializer(serializers.ModelSerializer):
+    """Fournisseur/contrat (étude §E1)."""
+
+    class Meta:
+        model = Supplier
+        fields = [
+            "id", "name", "contact", "phone", "email",
+            "payment_method", "payment_terms_days",
+            "notice_period_days", "notes", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class PayrollItemSerializer(serializers.ModelSerializer):
+    """Élément de paie — prime, avance, retenue, heures supp."""
+
+    class Meta:
+        model = PayrollItem
+        fields = [
+            "id", "employee", "kind", "label", "amount",
+            "period", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     """Employé d'un espace entreprise — l'abonnement payroll
     généré n'est PAS exposé ici, il vit dans /subscriptions/."""
@@ -208,6 +245,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "position", "salary", "currency",
             "pay_day", "active", "created_at",
+            "hire_date", "contract", "department", "payment_info",
+            "user",
         ]
         read_only_fields = ["id", "created_at"]
 

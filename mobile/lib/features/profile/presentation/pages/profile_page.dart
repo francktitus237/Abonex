@@ -28,6 +28,7 @@ import '../../../../core/widgets/animated_fade_in.dart';
 import '../../../../core/widgets/app_shell.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../subscriptions/presentation/cubit/subscriptions_cubit.dart';
+import '../../../auth/data/datasources/auth_remote_datasource.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../settings/presentation/cubit/settings_cubit.dart';
@@ -132,6 +133,8 @@ class _ProfileView extends StatelessWidget {
               _BiometricTile(),
               const Divider(indent: 56),
               _PasswordTile(),
+              const Divider(indent: 56),
+              _TwoFaTile(),
             ],
           ),
         ),
@@ -247,6 +250,21 @@ class _ProfileView extends StatelessWidget {
                     onTap: () => context.push(AppRoutes.employees),
                   ),
                 ],
+                // Portail employé (étude §D) : le salarié lié à
+                // ce compte télécharge SON bulletin PDF — tout
+                // rôle, workspace entreprise uniquement.
+                if (user.workspace?.kind == 'business') ...[
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: _TileIcon(icon: LucideIcons.fileText),
+                    title: Text(context.tr('emp.mypayslip')),
+                    trailing: const Icon(
+                      LucideIcons.chevronRight,
+                      size: 18,
+                    ),
+                    onTap: () => _downloadMyPayslip(context),
+                  ),
+                ],
               ],
             ),
           ),
@@ -332,6 +350,33 @@ class _ProfileView extends StatelessWidget {
 
 /// Télécharge le CSV RGPD/compta puis propose le partage
 /// (Drive, mail, fichiers…) via la feuille système.
+/// Portail employé (étude §D) : le compte lié à une fiche
+/// employé télécharge son bulletin du mois — 404 côté API si
+/// aucun lien, message explicite.
+Future<void> _downloadMyPayslip(BuildContext context) async {
+  final period = DateTime.now().toIso8601String().substring(0, 7);
+  final errMsg = context.tr('emp.notLinked');
+  try {
+    final bytes = await getIt<WorkspaceRemoteDataSource>()
+        .myPayslipBytes(period);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/bulletin_$period.pdf');
+    await file.writeAsBytes(bytes);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)]),
+    );
+  } catch (_) {
+    if (context.mounted) {
+      toastification.show(
+        context: context,
+        type: ToastificationType.error,
+        title: Text(errMsg),
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+  }
+}
+
 Future<void> _exportData(BuildContext context) async {
   try {
     final dir = await getApplicationDocumentsDirectory();
@@ -1868,5 +1913,82 @@ class _UpdateTileState extends State<_UpdateTile> {
           : const Icon(LucideIcons.chevronRight, size: 18),
       onTap: _check,
     );
+  }
+}
+
+/// Authentification à deux facteurs TOTP (étude Phase 4) :
+/// activer (URI otpauth → code) / désactiver (code requis).
+class _TwoFaTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.shieldCheck),
+      title: Text(context.tr('twofa.tile')),
+      subtitle: Text(context.tr('twofa.tileSub')),
+      trailing: const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: () => _manage(context),
+    );
+  }
+
+  void _toast(BuildContext context, String msg, {bool error = false}) {
+    toastification.show(
+      context: context,
+      type: error ? ToastificationType.error
+          : ToastificationType.success,
+      title: Text(msg),
+      autoCloseDuration: const Duration(seconds: 3),
+    );
+  }
+
+  Future<void> _manage(BuildContext context) async {
+    final ds = getIt<AuthRemoteDataSource>();
+    final okMsg = context.tr('twofa.enabled');
+    final errMsg = context.tr('twofa.error');
+    try {
+      final res = await ds.totpSetup();
+      final uri = '${res['uri'] ?? ''}';
+      if (!context.mounted || uri.isEmpty) return;
+      final code = TextEditingController();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(ctx.tr('twofa.setup')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelectableText(
+                uri,
+                style: const TextStyle(fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: code,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('twofa.code'),
+                  counterText: '',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.tr('common.confirm')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      await ds.totpEnable(code.text.trim());
+      if (context.mounted) _toast(context, okMsg);
+    } catch (_) {
+      if (context.mounted) _toast(context, errMsg, error: true);
+    }
   }
 }

@@ -48,6 +48,16 @@ abstract class AuthRemoteDataSource {
 
   /// POST /auth/password/forgot/ {email}
   Future<void> forgotPassword(String email);
+
+  /// 2FA : verify = 2ᵉ étape du login ; setup/enable/disable
+  /// = gestion du TOTP dans le profil (étude Phase 4).
+  Future<({AuthTokensModel tokens, UserModel user})> verify2fa({
+    required String preToken,
+    required String code,
+  });
+  Future<Map<String, dynamic>> totpSetup();
+  Future<void> totpEnable(String code);
+  Future<void> totpDisable(String code);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -65,6 +75,11 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       data: {'email': email, 'password': password},
     );
     final data = res.data!;
+    // 2FA activée côté compte → le backend répond
+    // {requires_2fa, pre_token} : le code TOTP manque.
+    if (data['requires_2fa'] == true) {
+      throw TwoFaRequiredException(data['pre_token'] as String);
+    }
     return (
       tokens: AuthTokensModel(
         access: data['access'] as String,
@@ -159,4 +174,46 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<void> forgotPassword(String email) async {
     await _dio.post<void>(ApiEndpoints.forgotPassword, data: {'email': email});
   }
+
+  @override
+  Future<({AuthTokensModel tokens, UserModel user})> verify2fa({
+    required String preToken,
+    required String code,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'auth/2fa/verify/',
+      data: {'pre_token': preToken, 'code': code},
+    );
+    final data = res.data!;
+    return (
+      tokens: AuthTokensModel(
+        access: data['access'] as String,
+        refresh: data['refresh'] as String,
+      ),
+      user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> totpSetup() async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'auth/2fa/setup/',
+    );
+    return res.data ?? {};
+  }
+
+  @override
+  Future<void> totpEnable(String code) =>
+      _dio.post<void>('auth/2fa/enable/', data: {'code': code});
+
+  @override
+  Future<void> totpDisable(String code) =>
+      _dio.post<void>('auth/2fa/disable/', data: {'code': code});
+}
+
+/// 2FA : signal métier porté hors DioException — le repository
+/// le convertit en `TwoFaRequired` (Failure).
+class TwoFaRequiredException implements Exception {
+  const TwoFaRequiredException(this.preToken);
+  final String preToken;
 }

@@ -151,6 +151,88 @@ class WorkspaceRemoteDataSource {
     return res.data!;
   }
 
+  /// GET `employees/<id>/payslip/?period=` — bulletin PDF.
+  Future<List<int>> payslipBytes(String id, String period) async {
+    final res = await _dio.get<List<int>>(
+      'employees/$id/payslip/',
+      queryParameters: {'period': period},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? const [];
+  }
+
+  /// GET `employees/me/payslip/` — portail employé : le bulletin
+  /// PDF du salarié lié à ce compte (étude §D).
+  Future<List<int>> myPayslipBytes(String period) async {
+    final res = await _dio.get<List<int>>(
+      'employees/me/payslip/',
+      queryParameters: {'period': period},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? const [];
+  }
+
+  /// POST /employees/pay-all/ — paie groupée du mois.
+  Future<Map<String, dynamic>> payAll(String period) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'employees/pay-all/',
+      data: {'period': period},
+    );
+    return res.data ?? {};
+  }
+
+  /// GET/POST /payroll-items/ — éléments de paie (étude §D).
+  Future<List<Map<String, dynamic>>> payrollItems(int empId) async {
+    final res = await _dio.get<List<dynamic>>(
+      'payroll-items/',
+      queryParameters: {'employee': empId},
+    );
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> addPayrollItem(Map<String, dynamic> payload) =>
+      _dio.post<void>('payroll-items/', data: payload);
+
+  Future<void> deletePayrollItem(int id) =>
+      _dio.delete<void>('payroll-items/$id/');
+
+  /// GET/POST /suppliers/ — fournisseurs/contrats (étude §E1).
+  Future<List<Map<String, dynamic>>> suppliers() async {
+    final res = await _dio.get<List<dynamic>>('suppliers/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> addSupplier(
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      'suppliers/',
+      data: payload,
+    );
+    return res.data ?? {};
+  }
+
+  Future<void> deleteSupplier(int id) =>
+      _dio.delete<void>('suppliers/$id/');
+
+  /// GET/POST /webhooks/ — intégrations externes (étude §4).
+  Future<List<Map<String, dynamic>>> webhooks() async {
+    final res = await _dio.get<List<dynamic>>('webhooks/');
+    return (res.data ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> addWebhook(Map<String, dynamic> payload) =>
+      _dio.post<void>('webhooks/', data: payload);
+
+  Future<void> deleteWebhook(int id) =>
+      _dio.delete<void>('webhooks/$id/');
+
   /// PATCH /employees/ID/ — met à jour + resynchronise la paie.
   Future<Map<String, dynamic>> updateEmployee(
     String id,

@@ -342,6 +342,20 @@ class _GovernancePageState extends State<GovernancePage> {
                         onDelete: () =>
                             _deleteBudget(b['id'] as int),
                       ),
+                  const SizedBox(height: 24),
+                  _SectionTitle(
+                    icon: LucideIcons.truck,
+                    title: context.tr('gov.suppliers'),
+                  ),
+                  const _Suppliers(),
+                  const SizedBox(height: 24),
+                  // Intégrations externes (étude Phase 4) : URL
+                  // notifiée par POST JSON sur paiements/échéances.
+                  _SectionTitle(
+                    icon: LucideIcons.webhook,
+                    title: context.tr('gov.webhooks'),
+                  ),
+                  const _Webhooks(),
                   const SizedBox(height: 80),
                 ],
               ),
@@ -641,6 +655,295 @@ class _ThresholdTileState extends State<_ThresholdTile> {
           onPressed: _edit,
         ),
       ),
+    );
+  }
+}
+
+/// Fournisseurs/contrats (étude §E1) : liste + ajout +
+/// suppression — contact, délai de règlement, préavis.
+class _Suppliers extends StatefulWidget {
+  const _Suppliers();
+
+  @override
+  State<_Suppliers> createState() => _SuppliersState();
+}
+
+class _SuppliersState extends State<_Suppliers> {
+  List<Map<String, dynamic>>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  WorkspaceRemoteDataSource get _ds =>
+      getIt<WorkspaceRemoteDataSource>();
+
+  Future<void> _load() async {
+    try {
+      final list = await _ds.suppliers();
+      if (mounted) setState(() => _items = list);
+    } catch (_) {
+      if (mounted) setState(() => _items = const []);
+    }
+  }
+
+  Future<void> _add() async {
+    final name = TextEditingController();
+    final contact = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('gov.supAdd')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: ctx.tr('gov.name'),
+              ),
+            ),
+            TextField(
+              controller: contact,
+              decoration: InputDecoration(
+                labelText: ctx.tr('gov.supContact'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(ctx.tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(ctx.tr('common.save')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final n = name.text.trim();
+    if (n.isEmpty) return;
+    final okMsg = context.tr('gov.saved');
+    final errMsg = context.tr('gov.error');
+    try {
+      await _ds.addSupplier({
+        'name': n,
+        'contact': contact.text.trim(),
+      });
+      _toast(okMsg);
+      unawaited(_load());
+    } catch (_) {
+      _toast(errMsg, error: true);
+    }
+  }
+
+  void _toast(String msg, {bool error = false}) {
+    if (!mounted) return;
+    toastification.show(
+      context: context,
+      type: error
+          ? ToastificationType.error
+          : ToastificationType.success,
+      title: Text(msg),
+      autoCloseDuration: const Duration(seconds: 2),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    if (items == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Column(
+      children: [
+        if (items.isEmpty)
+          _Hint(text: context.tr('gov.supEmpty'))
+        else
+          for (final s in items)
+            _Tile(
+              title: '${s['name']}',
+              subtitle: [
+                if ('${s['contact']}'.isNotEmpty)
+                  '${s['contact']}',
+                '${s['payment_terms_days'] ?? 30} j',
+              ].join(' · '),
+              onDelete: () async {
+                await _ds.deleteSupplier(s['id'] as int);
+                unawaited(_load());
+              },
+            ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _add,
+            icon: const Icon(LucideIcons.plus, size: 16),
+            label: Text(context.tr('gov.supAdd')),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Webhooks sortants (étude Phase 4) : URL notifiée par POST
+/// JSON sur les événements choisis — base des connecteurs
+/// comptables et intégrations externes.
+class _Webhooks extends StatefulWidget {
+  const _Webhooks();
+
+  @override
+  State<_Webhooks> createState() => _WebhooksState();
+}
+
+class _WebhooksState extends State<_Webhooks> {
+  List<Map<String, dynamic>>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  WorkspaceRemoteDataSource get _ds =>
+      getIt<WorkspaceRemoteDataSource>();
+
+  Future<void> _load() async {
+    try {
+      final list = await _ds.webhooks();
+      if (mounted) setState(() => _items = list);
+    } catch (_) {
+      if (mounted) setState(() => _items = const []);
+    }
+  }
+
+  Future<void> _add() async {
+    final url = TextEditingController();
+    final secret = TextEditingController();
+    final events = <String>{'payment', 'subscription'};
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => AlertDialog(
+          title: Text(ctx.tr('gov.whAdd')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: url,
+                autofocus: true,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: 'URL (https://…)',
+                ),
+              ),
+              TextField(
+                controller: secret,
+                decoration: InputDecoration(
+                  labelText: ctx.tr('gov.whSecret'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final e in [
+                'payment', 'subscription', 'overdue',
+              ])
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(ctx.tr('wh.$e')),
+                  value: events.contains(e),
+                  onChanged: (v) => setSheet(() {
+                    if (v == true) {
+                      events.add(e);
+                    } else {
+                      events.remove(e);
+                    }
+                  }),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final u = url.text.trim();
+    if (!u.startsWith('http')) return;
+    final okMsg = context.tr('gov.saved');
+    final errMsg = context.tr('gov.error');
+    try {
+      await _ds.addWebhook({
+        'url': u,
+        'secret': secret.text.trim(),
+        'events': events.join(','),
+      });
+      _toast(okMsg);
+      unawaited(_load());
+    } catch (_) {
+      _toast(errMsg, error: true);
+    }
+  }
+
+  void _toast(String msg, {bool error = false}) {
+    if (!mounted) return;
+    toastification.show(
+      context: context,
+      type: error
+          ? ToastificationType.error
+          : ToastificationType.success,
+      title: Text(msg),
+      autoCloseDuration: const Duration(seconds: 2),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    if (items == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Column(
+      children: [
+        if (items.isEmpty)
+          _Hint(text: context.tr('gov.whEmpty'))
+        else
+          for (final w in items)
+            _Tile(
+              title: '${w['url']}',
+              subtitle: [
+                '${w['events']}',
+                if (w['active'] == false)
+                  context.tr('wh.inactive'),
+              ].join(' · '),
+              onDelete: () async {
+                await _ds.deleteWebhook(w['id'] as int);
+                unawaited(_load());
+              },
+            ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _add,
+            icon: const Icon(LucideIcons.plus, size: 16),
+            label: Text(context.tr('gov.whAdd')),
+          ),
+        ),
+      ],
     );
   }
 }
