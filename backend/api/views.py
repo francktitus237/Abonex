@@ -2,7 +2,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -46,7 +46,7 @@ from .serializers import (
 
 from .permissions import (
     EmployeePermission, IsOwner, IsOwnerOrManager,
-    SubscriptionPermission,
+    SubscriptionPermission, has_cap,
 )
 
 
@@ -1561,12 +1561,15 @@ class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class PaymentApprovalView(APIView):
-    """POST /payments/<id>/verdict/ — owner/manager valide ou
-    refuse une déclaration de paiement d'assistant (étude §4.4/B)."""
+    """POST /payments/<id>/verdict/ — owner/manager (ou capacité
+    « payments » des rôles personnalisés) valide ou refuse une
+    déclaration de paiement (étude §4.4/B)."""
 
     def post(self, request, pk):
         profile = request.user.profile
-        if profile.role not in {"owner", "manager"}:
+        if profile.role not in {"owner", "manager"} and not has_cap(
+            profile, "payments"
+        ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         payment = get_object_or_404(
             Payment, pk=pk, workspace=profile.workspace, status="pending"
@@ -2170,13 +2173,162 @@ class PayAllView(APIView):
         return Response({"period": period, "paid": results})
 
 
+class StatementImportView(APIView):
+    """POST /import/transactions/ — import de relevé (étude §E) :
+    CSV multipart avec des colonnes date/libellé/montant
+    (relevé Mobile Money, banque…). Chaque ligne est rapprochée
+    d'une échéance par similarité de nom → Payment approuvé.
+    Retourne {matched, created, unmatched[]}."""
+
+    parser_classes = [MultiPartParser]
+    permission_classes = [IsOwnerOrManager]
+
+    _ALIASES = {
+        "date": ("date", "trans_date", "transaction date"),
+        "label": ("label", "libelle", "libellé", "description",
+                  "details", "détails", "opération"),
+        "amount": ("amount", "montant", "debit", "débit",
+                   "withdrawal", "retrait"),
+    }
+
+    def post(self, request):
+        import csv
+        import io
+        from decimal import Decimal, InvalidOperation
+
+        upload = request.FILES.get("file")
+        if upload is None:
+            return Response(
+                {"detail": "Fichier CSV requis (champ 'file')."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            text = upload.read().decode("utf-8-sig", errors="ignore")
+        except Exception:
+            return Response(
+                {"detail": "Lecture du fichier impossible."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sample = text[:2048]
+        delimiter = ";" if sample.count(";") > sample.count(",") else ","
+        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+        if not reader.fieldnames:
+            return Response(
+                {"detail": "CSV sans en-tête lisible."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        fields = {f.strip().lower(): f for f in reader.fieldnames}
+
+        def pick(key):
+            for alias in self._ALIASES[key]:
+                if alias in fields:
+                    return fields[alias]
+            return None
+
+        date_col = pick("date")
+        label_col = pick("label") or next(
+            iter(fields.values()), None
+        )
+        amount_col = pick("amount")
+        ws = request.user.profile.workspace
+        subs = list(
+            Subscription.objects.filter(
+                workspace=ws, archived_at__isnull=True
+            )
+        )
+        matched = created = 0
+        unmatched = []
+        for row in reader:
+            label = (row.get(label_col) or "").strip()
+            if not label:
+                continue
+            norm = label.lower()
+            best = None
+            for s in subs:
+                for needle in (s.name.lower(), s.provider.lower()):
+                    if needle and needle in norm:
+                        best = s
+                        break
+                if best:
+                    break
+            if best is None:
+                unmatched.append(label[:80])
+                continue
+            matched += 1
+            try:
+                amount = Decimal(
+                    (row.get(amount_col) or "0")
+                    .replace(" ", "")
+                    .replace(",", ".")
+                ) if amount_col else best.amount
+            except (InvalidOperation, AttributeError):
+                amount = best.amount
+            raw_date = (row.get(date_col) or "").strip()[:10]
+            try:
+                paid_date = (
+                    datetime.strptime(raw_date, "%Y-%m-%d").date()
+                    if len(raw_date) >= 8
+                    else timezone.localdate()
+                )
+            except ValueError:
+                try:
+                    paid_date = datetime.strptime(
+                        raw_date, "%d/%m/%Y"
+                    ).date()
+                except ValueError:
+                    paid_date = timezone.localdate()
+            payment, is_new = Payment.objects.get_or_create(
+                subscription=best,
+                workspace=ws,
+                due_date=best.next_due_date,
+                defaults={
+                    "recorded_by": request.user,
+                    "amount": abs(amount),
+                    "amount_paid": abs(amount),
+                    "method": "import",
+                    "reference": label[:120],
+                    "status": "approved",
+                    "approved_by": request.user,
+                    "paid_at": timezone.now(),
+                },
+            )
+            if is_new:
+                created += 1
+                best.status = "paid"
+                best.save(update_fields=["status"])
+                _advance_due(best)
+                _fire_webhooks(
+                    ws,
+                    "payment",
+                    {"id": best.pk, "name": best.name,
+                     "via": "import"},
+                )
+        _audit(
+            request,
+            "import",
+            "statement",
+            getattr(upload, "name", "csv"),
+            after={"matched": matched, "created": created},
+        )
+        return Response(
+            {
+                "matched": matched,
+                "created": created,
+                "unmatched": unmatched[:50],
+            }
+        )
+
+
 class PendingPaymentsView(APIView):
     """GET /payments/ — déclarations de paiement en attente
-    de validation (owner/manager, workflow d'approbation)."""
+    de validation (owner/manager, ou capacité « payments »
+    des rôles personnalisés)."""
 
     def get(self, request):
         profile = request.user.profile
-        if profile.role not in {"owner", "manager"}:
+        if profile.role not in {"owner", "manager"} and not has_cap(
+            profile, "payments"
+        ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         payments = (
             Payment.objects.filter(
@@ -2272,6 +2424,48 @@ class MembershipActivateView(APIView):
         )
         return Response(
             UserSerializer(request.user, context={"request": request}).data
+        )
+
+
+class MembershipPermissionsView(APIView):
+    """PATCH /memberships/<id>/permissions/ — propriétaire
+    accorde des capacités additionnelles au membre (rôles
+    personnalisés, étude Phase 4) : {custom_permissions:
+    "employees,payments,budgets,audit"}."""
+
+    permission_classes = [IsOwner]
+
+    CAPS = {"employees", "payments", "budgets", "audit"}
+
+    def patch(self, request, pk):
+        membership = get_object_or_404(
+            Membership,
+            pk=pk,
+            workspace=request.user.profile.workspace,
+        )
+        raw = request.data.get("custom_permissions") or ""
+        caps = {
+            c.strip() for c in str(raw).split(",") if c.strip()
+        }
+        invalid = caps - self.CAPS
+        if invalid:
+            return Response(
+                {"custom_permissions": [
+                    f"Capacités inconnues : {', '.join(invalid)}"
+                ]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership.custom_permissions = ",".join(sorted(caps))
+        membership.save(update_fields=["custom_permissions"])
+        _audit(
+            request,
+            "role_change",
+            "membership",
+            membership.user.email,
+            after={"custom_permissions": membership.custom_permissions},
+        )
+        return Response(
+            {"custom_permissions": membership.custom_permissions}
         )
 
 

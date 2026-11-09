@@ -38,6 +38,13 @@ abstract class SubscriptionRemoteDataSource {
   Future<void> addComment(String id, String text);
 
   Future<void> deleteComment(int id);
+
+  /// POST `import/transactions/` — relevé CSV MoMo/banque
+  /// → rapprochement auto (étude §E).
+  Future<Map<String, dynamic>> importStatement({
+    required String path,
+    String? filename,
+  });
 }
 
 class SubscriptionRemoteDataSourceImpl
@@ -168,4 +175,19 @@ class SubscriptionRemoteDataSourceImpl
   @override
   Future<void> deleteComment(int id) =>
       _dio.delete<void>('comments/$id/');
+
+  @override
+  Future<Map<String, dynamic>> importStatement({
+    required String path,
+    String? filename,
+  }) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(path, filename: filename),
+    });
+    final res = await _dio.post<Map<String, dynamic>>(
+      'import/transactions/',
+      data: form,
+    );
+    return res.data ?? {};
+  }
 }

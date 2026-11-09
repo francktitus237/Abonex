@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,7 @@ import '../../../../core/widgets/loading_skeletons.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../auth/presentation/cubit/auth_state.dart';
 import '../../../workspace/data/datasources/workspace_remote_datasource.dart';
+import '../../data/datasources/subscription_remote_datasource.dart';
 import '../../domain/entities/subscription.dart';
 import '../cubit/subscriptions_cubit.dart';
 import '../widgets/subscription_tile.dart';
@@ -45,6 +47,63 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   /// Scroll principal — re-tap sur « Abonnements » remonte
   /// en haut et rafraîchit silencieusement.
   final _scroll = ScrollController();
+
+  /// Import de relevé CSV Mobile Money/banque (étude §E) :
+  /// le serveur rapproche chaque ligne d'une échéance par nom
+  /// → paiements validés + récap affiché.
+  Future<void> _importStatement() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv', 'txt'],
+    );
+    if (files.isEmpty || !mounted) return;
+    final path = files.single.path;
+    if (path == null) return;
+    final errMsg = context.tr('imp.error');
+    final ds = getIt<SubscriptionRemoteDataSource>();
+    try {
+      final res = await ds.importStatement(
+        path: path,
+        filename: files.single.name,
+      );
+      if (!mounted) return;
+      unawaited(
+        context.read<SubscriptionsCubit>().refresh(quiet: true),
+      );
+      final unmatched =
+          (res['unmatched'] as List?)?.join('\n') ?? '';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(ctx.tr('imp.done')),
+          content: Text(
+            ctx.tr('imp.summary', {
+                  'matched': '${res['matched'] ?? 0}',
+                  'created': '${res['created'] ?? 0}',
+                }) +
+                (unmatched.isNotEmpty
+                    ? '\n\n${ctx.tr('imp.unmatched')}\n$unmatched'
+                    : ''),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(ctx.tr('common.confirm')),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -78,6 +137,16 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       appBar: AppBar(
         title: Text(context.tr('nav.subscriptions')),
         actions: [
+          // Import de relevé CSV MoMo/banque (étude §E) —
+          // espaces entreprise seulement.
+          if (context.read<AuthCubit>().state
+              case Authenticated(:final user)
+                  when user.workspace?.isBusiness ?? false)
+            IconButton(
+              tooltip: context.tr('imp.tile'),
+              onPressed: _importStatement,
+              icon: const Icon(LucideIcons.fileUp, size: 20),
+            ),
           IconButton(
             tooltip: context.tr('subs.integrations'),
             onPressed: () => context.push(AppRoutes.integrations),

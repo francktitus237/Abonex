@@ -22,6 +22,29 @@ class IsOwner(BasePermission):
         return bool(profile and profile.role == "owner")
 
 
+def has_cap(profile, cap):
+    """Capacité métier (étude Phase 4 — rôles personnalisés) :
+    owner/manager → toujours True ; viewer/assistant → True si
+    le Membership actif porte `cap` dans custom_permissions."""
+    if profile is None:
+        return False
+    if profile.role in {"owner", "manager"}:
+        return True
+    from .models import Membership
+
+    extra = (
+        Membership.objects.filter(
+            user=profile.user,
+            workspace=profile.workspace,
+            status="active",
+        )
+        .values_list("custom_permissions", flat=True)
+        .first()
+        or ""
+    )
+    return cap in extra.split(",")
+
+
 class EmployeePermission(BasePermission):
     """Salaires confidentiels : employés et leur paie réservés au
     propriétaire — un Lecteur/Assistant ne doit jamais lister les
@@ -45,6 +68,13 @@ class EmployeePermission(BasePermission):
             if request.method == "POST":
                 return True
             return False  # PATCH/DELETE : owner seulement
+        # Rôle personnalisé : capacité « employees » accordée
+        # par le propriétaire (lecture seule — les montants
+        # restent masqués côté serializer).
+        if request.method in SAFE_METHODS and has_cap(
+            profile, "employees"
+        ):
+            return True
         return False
 
 
@@ -67,11 +97,15 @@ class SubscriptionPermission(BasePermission):
 
 
 class IsOwnerOrManager(BasePermission):
-    """Owner + manager — gouvernance (paie, budgets, verdicts)."""
+    """Owner + manager — gouvernance (paie, budgets, verdicts) ;
+    un rôle personnalisé passe si la vue déclare `required_cap`
+    (ex. payments, budgets) présent dans custom_permissions."""
 
     def has_permission(self, request, view):
         profile = getattr(request.user, "profile", None)
-        return (
-            profile is not None
-            and profile.role in {"owner", "manager"}
-        )
+        if profile is None:
+            return False
+        if profile.role in {"owner", "manager"}:
+            return True
+        cap = getattr(view, "required_cap", None)
+        return cap is not None and has_cap(profile, cap)

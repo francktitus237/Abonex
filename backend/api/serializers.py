@@ -2,8 +2,9 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import (
-    Attachment, Budget, Department, Employee, Payment,
-    PayrollItem, Subscription, Supplier, Webhook, Workspace,
+    Attachment, Budget, Department, Employee, Membership,
+    Payment, PayrollItem, Subscription, Supplier, Webhook,
+    Workspace,
 )
 
 
@@ -44,17 +45,50 @@ class UserSerializer(serializers.ModelSerializer):
     language = serializers.CharField(source="profile.language")
     workspace = WorkspaceSerializer(source="profile.workspace")
     avatar_url = serializers.SerializerMethodField()
+    membership_id = serializers.SerializerMethodField()
+    custom_permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "email", "role", "first_name", "last_name",
             "language", "workspace", "avatar_url",
+            "membership_id", "custom_permissions",
         ]
         read_only_fields = [
             "id", "email", "first_name", "last_name", "workspace",
-            "avatar_url",
+            "avatar_url", "membership_id", "custom_permissions",
         ]
+
+    def get_membership_id(self, obj):
+        """Membership actif du user sur l'espace de la requête —
+        nécessaire pour PATCH /memberships/<id>/permissions/."""
+        request = self.context.get("request")
+        ws = getattr(
+            getattr(request, "user", None), "profile", None
+        )
+        ws = getattr(ws, "workspace", None)
+        if ws is None:
+            return None
+        m = Membership.objects.filter(
+            user=obj, workspace=ws, status="active"
+        ).first()
+        return m.pk if m else None
+
+    def get_custom_permissions(self, obj):
+        """Capacités additionnelles du membership (rôles
+        personnalisés) — CSV exposé au propriétaire."""
+        request = self.context.get("request")
+        ws = getattr(
+            getattr(request, "user", None), "profile", None
+        )
+        ws = getattr(ws, "workspace", None)
+        if ws is None:
+            return ""
+        m = Membership.objects.filter(
+            user=obj, workspace=ws, status="active"
+        ).first()
+        return m.custom_permissions if m else ""
 
     def get_avatar_url(self, obj):
         """URL absolue de la photo — le mobile l'affiche telle
