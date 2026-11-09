@@ -86,6 +86,10 @@ class Membership(models.Model):
         choices=[("active", "Active"), ("suspended", "Suspendue")],
         default="active",
     )
+    # Rôle personnalisé (étude Phase 4) : capacités ajoutées
+    # au-dessus du rôle — CSV parmi : employees, payments,
+    # budgets, audit. Vide = rôle standard.
+    custom_permissions = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

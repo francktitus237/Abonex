@@ -25,6 +25,9 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   late Future<List<User>> _future;
+  // Données brutes /users/ indexées par id — membership_id et
+  // custom_permissions pour le dialogue de capacités.
+  Map<String, Map<String, dynamic>> _raw = {};
 
   @override
   void initState() {
@@ -39,6 +42,12 @@ class _UsersPageState extends State<UsersPage> {
       final items = raw is Map<String, dynamic>
           ? raw['results'] as List<dynamic>
           : raw as List<dynamic>;
+      // membership_id + custom_permissions par user — bruts,
+      // le dialogue « capacités » les consomme (étude §4).
+      _raw = {
+        for (final e in items.cast<Map<String, dynamic>>())
+          '${e['id']}': e,
+      };
       return items.map(_parseUser).toList();
     } on DioException {
       // Pas de mode démo : l'erreur remonte, la page l'affiche
@@ -74,6 +83,76 @@ class _UsersPageState extends State<UsersPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  /// Capacités additionnelles du membre (rôles personnalisés,
+  /// étude Phase 4) : employees/payments/budgets/audit
+  /// accordées AU-DELÀ du rôle — PATCH `memberships/<id>/`.
+  Future<void> _capabilities(User user) async {
+    final raw = _raw[user.id];
+    final membershipId = raw?['membership_id'];
+    if (membershipId == null) return;
+    final caps = {
+      for (final c in '${raw?['custom_permissions'] ?? ''}'
+          .split(','))
+        if (c.isNotEmpty) c,
+    };
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => AlertDialog(
+          title: Text(ctx.tr('users.caps')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final cap in [
+                'employees', 'payments', 'budgets', 'audit',
+              ])
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(ctx.tr('users.cap.$cap')),
+                  value: caps.contains(cap),
+                  onChanged: (v) => setSheet(() {
+                    if (v == true) {
+                      caps.add(cap);
+                    } else {
+                      caps.remove(cap);
+                    }
+                  }),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      await getIt<Dio>().patch<void>(
+        'memberships/$membershipId/permissions/',
+        data: {'custom_permissions': caps.join(',')},
+      );
+      if (!mounted) return;
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('users.capSaved'))),
+      );
+    } on DioException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('users.capFail'))),
+      );
     }
   }
 
@@ -247,6 +326,7 @@ class _UsersPageState extends State<UsersPage> {
                       child: _UserTile(
                         user: e.value,
                         onRoleChanged: (role) => _changeRole(e.value, role),
+                        onCapabilities: _capabilities,
                       ),
                     ),
                   ),
@@ -261,10 +341,15 @@ class _UsersPageState extends State<UsersPage> {
 }
 
 class _UserTile extends StatelessWidget {
-  const _UserTile({required this.user, required this.onRoleChanged});
+  const _UserTile({
+    required this.user,
+    required this.onRoleChanged,
+    required this.onCapabilities,
+  });
 
   final User user;
   final ValueChanged<UserRole> onRoleChanged;
+  final ValueChanged<User> onCapabilities;
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +408,14 @@ class _UserTile extends StatelessWidget {
           ),
           if (user.role == UserRole.owner)
             _RoleBadge(role: user.role)
-          else
+          else ...[
+            // Capacités additionnelles (rôles personnalisés).
+            IconButton(
+              tooltip: context.tr('users.caps'),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(LucideIcons.keyRound, size: 18),
+              onPressed: () => onCapabilities(user),
+            ),
             PopupMenuButton<UserRole>(
               tooltip: context.tr('users.changeRole'),
               initialValue: user.role,
@@ -344,6 +436,7 @@ class _UserTile extends StatelessWidget {
               ],
               child: _RoleBadge(role: user.role, editable: true),
             ),
+          ],
         ],
       ),
     );

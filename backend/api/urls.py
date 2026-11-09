@@ -57,6 +57,10 @@ urlpatterns = [
     path("suppliers/", views.SupplierListCreateView.as_view()),
     path("webhooks/", views.WebhookListCreateView.as_view()),
     path(
+        "import/transactions/",
+        views.StatementImportView.as_view(),
+    ),
+    path(
         "webhooks/<int:pk>/",
         views.WebhookDetailView.as_view(),
     ),
@@ -127,6 +131,10 @@ urlpatterns = [
         views.AttachmentDetailView.as_view(),
     ),
     path("memberships/", views.MembershipListView.as_view()),
+    path(
+        "memberships/<int:pk>/permissions/",
+        views.MembershipPermissionsView.as_view(),
+    ),
     path(
         "memberships/<int:pk>/activate/",
         views.MembershipActivateView.as_view(),
