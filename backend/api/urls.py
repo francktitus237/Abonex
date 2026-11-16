@@ -55,6 +55,11 @@ urlpatterns = [
         views.MyPayslipView.as_view(),
     ),
     path("suppliers/", views.SupplierListCreateView.as_view()),
+    path("plans/", views.PlansView.as_view()),
+    path(
+        "workspace/plan/",
+        views.WorkspacePlanView.as_view(),
+    ),
     path("webhooks/", views.WebhookListCreateView.as_view()),
     path(
         "import/transactions/",

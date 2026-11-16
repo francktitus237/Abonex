@@ -233,6 +233,16 @@ class WorkspaceRemoteDataSource {
   Future<void> deleteWebhook(int id) =>
       _dio.delete<void>('webhooks/$id/');
 
+  /// GET /plans/ — catalogue des offres + plan courant.
+  Future<Map<String, dynamic>> plans() async {
+    final res = await _dio.get<Map<String, dynamic>>('plans/');
+    return res.data ?? {};
+  }
+
+  /// PATCH /workspace/plan/ — changement d'offre (owner).
+  Future<void> setPlan(String plan) =>
+      _dio.patch<void>('workspace/plan/', data: {'plan': plan});
+
   /// PATCH /employees/ID/ — met à jour + resynchronise la paie.
   Future<Map<String, dynamic>> updateEmployee(
     String id,

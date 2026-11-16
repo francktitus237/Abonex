@@ -55,6 +55,7 @@ _WorkspaceModel _$WorkspaceModelFromJson(Map<String, dynamic> json) =>
       taxId: json['tax_id'] as String? ?? '',
       sector: json['sector'] as String? ?? '',
       size: json['size'] as String? ?? '',
+      plan: json['plan'] as String? ?? 'free',
     );
 
 Map<String, dynamic> _$WorkspaceModelToJson(_WorkspaceModel instance) =>
@@ -70,4 +71,5 @@ Map<String, dynamic> _$WorkspaceModelToJson(_WorkspaceModel instance) =>
       'tax_id': instance.taxId,
       'sector': instance.sector,
       'size': instance.size,
+      'plan': instance.plan,
     };

@@ -89,6 +89,7 @@ class _PendingPaymentsPageState extends State<PendingPaymentsPage> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.tr('pend.reasonTitle')),
         content: TextField(
           controller: ctrl,

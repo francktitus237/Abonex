@@ -59,6 +59,10 @@ abstract class WorkspaceModel with _$WorkspaceModel {
     @Default('') String taxId,
     @Default('') String sector,
     @Default('') String size,
+
+    /// Offre tarifaire de l'espace (free/pro/business) —
+    /// fonctions avancées verrouillées côté serveur.
+    @Default('free') String plan,
   }) = _WorkspaceModel;
 
   factory WorkspaceModel.fromJson(Map<String, dynamic> json) =>
@@ -76,5 +80,6 @@ abstract class WorkspaceModel with _$WorkspaceModel {
     taxId: taxId,
     sector: sector,
     size: size,
+    plan: plan,
   );
 }

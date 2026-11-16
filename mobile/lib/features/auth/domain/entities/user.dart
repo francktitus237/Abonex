@@ -80,6 +80,9 @@ abstract class Workspace with _$Workspace {
     @Default('') String taxId,
     @Default('') String sector,
     @Default('') String size,
+
+    /// Offre tarifaire de l'espace (free/pro/business).
+    @Default('free') String plan,
   }) = _Workspace;
 
   bool get isBusiness => kind == 'business';

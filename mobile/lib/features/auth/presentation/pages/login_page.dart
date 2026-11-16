@@ -307,6 +307,7 @@ class _LoginViewState extends State<_LoginView> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         icon: Icon(
           LucideIcons.mail,
           color: Theme.of(dialogContext).colorScheme.primary,

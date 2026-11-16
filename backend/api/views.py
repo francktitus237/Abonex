@@ -1328,6 +1328,81 @@ def _visible_subscriptions(request):
     return qs
 
 
+PLAN_ORDER = {"free": 0, "pro": 1, "business": 2}
+
+PLANS = [
+    {
+        "id": "free", "price": "0", "currency": "EUR",
+        "features": [
+            "Échéances & rappels", "Multi-devises",
+            "Notifications app fermée",
+        ],
+    },
+    {
+        "id": "pro", "price": "4.99", "currency": "EUR",
+        "features": [
+            "Départements & budgets", "Exports Excel/PDF",
+            "Justificatifs", "Trésorerie",
+        ],
+    },
+    {
+        "id": "business", "price": "14.99", "currency": "EUR",
+        "features": [
+            "Employés & paie", "Fournisseurs", "Webhooks",
+            "Rôles personnalisés", "2FA",
+        ],
+    },
+]
+
+
+def _require_plan(workspace, minimum):
+    """True si le plan de l'espace ≥ `minimum` (free/pro/
+    business) — monétisation des fonctions avancées (étude §4)."""
+    return PLAN_ORDER.get(workspace.plan, 0) >= PLAN_ORDER[
+        minimum
+    ]
+
+
+class PlansView(APIView):
+    """GET /plans/ — catalogue des offres (étude Phase 4) +
+    plan actuel de l'espace."""
+
+    def get(self, request):
+        return Response(
+            {
+                "plans": PLANS,
+                "current": request.user.profile.workspace.plan,
+            }
+        )
+
+
+class WorkspacePlanView(APIView):
+    """PATCH /workspace/plan/ {plan} — changement d'offre,
+    réservé au propriétaire. En l'absence de passerelle de
+    paiement réelle, la bascule est directe (checkout à
+    brancher ici via Stripe/Powens)."""
+
+    permission_classes = [IsOwner]
+
+    def patch(self, request):
+        plan = request.data.get("plan")
+        if plan not in PLAN_ORDER:
+            return Response(
+                {"plan": ["free, pro ou business attendu."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ws = request.user.profile.workspace
+        ws.plan = plan
+        ws.save(update_fields=["plan"])
+        _audit(
+            request,
+            "update",
+            "workspace",
+            f"Plan : {plan}",
+        )
+        return Response({"plan": plan})
+
+
 def _fire_webhooks(workspace, event, payload):
     """POST JSON vers les webhooks actifs abonnés à `event`
     (étude Phase 4 — connecteurs comptables). Échecs ignorés :
@@ -1361,10 +1436,25 @@ def _fire_webhooks(workspace, event, payload):
 
 
 class WebhookListCreateView(generics.ListCreateAPIView):
-    """GET/POST /webhooks/ — intégrations externes (étude §4)."""
+    """GET/POST /webhooks/ — intégrations externes (étude §4).
+    Plan « business » requis."""
 
     permission_classes = [IsOwnerOrManager]
     serializer_class = WebhookSerializer
+
+    def get(self, request, *args, **kwargs):
+        if not _require_plan(
+            request.user.profile.workspace, "business"
+        ):
+            return Response(status=status.HTTP_402_PAYMENT_REQUIRED)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if not _require_plan(
+            request.user.profile.workspace, "business"
+        ):
+            return Response(status=status.HTTP_402_PAYMENT_REQUIRED)
+        return super().post(request, *args, **kwargs)
 
     def get_queryset(self):
         return Webhook.objects.filter(

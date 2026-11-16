@@ -52,6 +52,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.tr('emp.payAll')),
         content: Text(
           ctx.tr('emp.payAllConfirm', {'period': period}),
@@ -278,6 +279,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
     Employee? existing,
   }) async {
     final saved = await showModalBottomSheet<Employee>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -308,6 +310,7 @@ class _EmployeeTile extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('emp.addItem')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -632,11 +635,12 @@ class _EmployeeFormState extends State<_EmployeeForm> {
         right: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               context.tr(
@@ -739,6 +743,7 @@ class _EmployeeFormState extends State<_EmployeeForm> {
             ),
             const SizedBox(height: 8),
           ],
+          ),
         ),
       ),
     );
