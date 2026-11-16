@@ -84,6 +84,7 @@ class _GovernancePageState extends State<GovernancePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.tr('gov.deptAdd')),
         content: TextField(
           controller: ctrl,
@@ -147,6 +148,7 @@ class _GovernancePageState extends State<GovernancePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('gov.budgetAdd')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -557,6 +559,7 @@ class _ThresholdTileState extends State<_ThresholdTile> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.tr('gov.thrTitle')),
         content: TextField(
           controller: ctrl,
@@ -695,6 +698,7 @@ class _SuppliersState extends State<_Suppliers> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.tr('gov.supAdd')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -831,6 +835,7 @@ class _WebhooksState extends State<_Webhooks> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('gov.whAdd')),
           content: Column(
             mainAxisSize: MainAxisSize.min,

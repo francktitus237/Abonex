@@ -135,6 +135,11 @@ class _ProfileView extends StatelessWidget {
               _PasswordTile(),
               const Divider(indent: 56),
               _TwoFaTile(),
+              const Divider(indent: 56),
+              // Offre tarifaire de l'espace (étude Phase 4) :
+              // Free / Pro / Business — fonctions verrouillées
+              // côté serveur selon le plan.
+              _PlanTile(),
             ],
           ),
         ),
@@ -407,6 +412,7 @@ Future<void> _confirmDeleteAccount(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       icon: Icon(
         LucideIcons.triangleAlert,
         color: Theme.of(ctx).colorScheme.error,
@@ -484,6 +490,7 @@ Future<void> _switchSpace(BuildContext context) async {
   if (!context.mounted || spaces == null || spaces.isEmpty) return;
 
   final picked = await showModalBottomSheet<int>(
+    useRootNavigator: true,
     context: context,
     builder: (ctx) => SafeArea(
       child: Column(
@@ -568,6 +575,7 @@ Future<void> _editCompany(BuildContext context, User user) async {
   final sizes = ['', 'solo', 'tpe', 'pme', 'eti'];
 
   final saved = await showModalBottomSheet<bool>(
+    useRootNavigator: true,
     context: context,
     isScrollControlled: true,
     builder: (ctx) => Padding(
@@ -577,13 +585,14 @@ Future<void> _editCompany(BuildContext context, User user) async {
         20,
         MediaQuery.of(ctx).viewInsets.bottom + 20,
       ),
-      child: StatefulBuilder(
-        builder: (ctx, setSheet) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              ctx.tr('co.title'),
+      child: SingleChildScrollView(
+        child: StatefulBuilder(
+          builder: (ctx, setSheet) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                ctx.tr('co.title'),
               style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -639,6 +648,7 @@ Future<void> _editCompany(BuildContext context, User user) async {
               child: Text(ctx.tr('common.save')),
             ),
           ],
+        ),
         ),
       ),
     ),
@@ -1281,6 +1291,7 @@ class _ReminderScheduleTileState extends State<_ReminderScheduleTile> {
         builder: (ctx, setDialog) {
           final theme = Theme.of(ctx);
           return AlertDialog(
+            scrollable: true,
             title: Text(ctx.tr('reminder.title')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1697,6 +1708,7 @@ class _PasswordTile extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('profile.password')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1870,6 +1882,7 @@ class _UpdateTileState extends State<_UpdateTile> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         icon: Icon(
           LucideIcons.arrowDownToLine,
           color: Theme.of(ctx).colorScheme.primary,
@@ -1952,6 +1965,7 @@ class _TwoFaTile extends StatelessWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('twofa.setup')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1990,5 +2004,107 @@ class _TwoFaTile extends StatelessWidget {
     } catch (_) {
       if (context.mounted) _toast(context, errMsg, error: true);
     }
+  }
+}
+
+/// Offre tarifaire de l'espace (étude Phase 4) : plan courant +
+/// dialogue de changement Free/Pro/Business — PATCH owner-only.
+class _PlanTile extends StatefulWidget {
+  @override
+  State<_PlanTile> createState() => _PlanTileState();
+}
+
+class _PlanTileState extends State<_PlanTile> {
+  Future<void> _manage() async {
+    final ds = getIt<WorkspaceRemoteDataSource>();
+    final errMsg = context.tr('plan.error');
+    try {
+      final res = await ds.plans();
+      if (!mounted) return;
+      final current = '${res['current'] ?? 'free'}';
+      final chosen = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          scrollable: true,
+          title: Text(ctx.tr('plan.title')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final p in (res['plans'] as List? ?? []))
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${p['id'].toString().toUpperCase()}'
+                    ' — ${p['price']} ${p['currency']}/mois',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    (p['features'] as List? ?? []).join(' · '),
+                  ),
+                  trailing: '${p['id']}' == current
+                      ? Icon(
+                          LucideIcons.check,
+                          size: 18,
+                          color: Theme.of(
+                            ctx,
+                          ).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () => Navigator.of(ctx).pop('${p['id']}'),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(ctx.tr('common.cancel')),
+            ),
+          ],
+        ),
+      );
+      if (chosen == null || chosen == current || !mounted) return;
+      final okMsg = context.tr('plan.updated');
+      await ds.setPlan(chosen);
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.success,
+          title: Text(okMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+        unawaited(getIt<AuthCubit>().refresh());
+      }
+    } catch (_) {
+      if (mounted) {
+        toastification.show(
+          context: context,
+          type: ToastificationType.error,
+          title: Text(errMsg),
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final workspace = switch (
+        context.watch<AuthCubit>().state) {
+      Authenticated(:final user) => user.workspace,
+      _ => null,
+    };
+    final plan = workspace?.plan ?? 'free';
+    return ListTile(
+      leading: _TileIcon(icon: LucideIcons.crown),
+      title: Text(context.tr('plan.tile')),
+      subtitle: Text(
+        context.tr('plan.tileSub', {'plan': plan}),
+      ),
+      trailing: const Icon(LucideIcons.chevronRight, size: 18),
+      onTap: _manage,
+    );
   }
 }

@@ -102,6 +102,7 @@ class _UsersPageState extends State<UsersPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('users.caps')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -176,6 +177,7 @@ class _UsersPageState extends State<UsersPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('users.inviteTitle')),
           content: Column(
             mainAxisSize: MainAxisSize.min,

@@ -638,6 +638,7 @@ class _BudgetCardState extends State<_BudgetCard> {
     final value = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         icon: Icon(
           LucideIcons.wallet,
           color: Theme.of(ctx).colorScheme.primary,
@@ -1271,6 +1272,7 @@ class _ReminderDialog extends StatelessWidget {
         .join(' + ');
 
     return AlertDialog(
+      scrollable: true,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radius + 4),
       ),

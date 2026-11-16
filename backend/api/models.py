@@ -35,6 +35,18 @@ class Workspace(models.Model):
     approval_threshold = models.DecimalField(
         max_digits=14, decimal_places=2, null=True, blank=True
     )
+    # Plan tarifaire (étude Phase 4) : free | pro | business —
+    # les fonctions avancées (webhooks, fournisseurs, paie,
+    # trésorerie) sont verrouillées par require_plan().
+    plan = models.CharField(
+        max_length=12,
+        choices=[
+            ("free", "Free"),
+            ("pro", "Pro"),
+            ("business", "Business"),
+        ],
+        default="free",
+    )
     # ---------- Profil société (comptes entreprise) ----------
     # Raison sociale affichée sur rapports/exports ; `name` reste
     # le nom affiché dans l'app (éditable — étude §4 « une
@@ -64,6 +76,13 @@ class Profile(models.Model):
     # en deux étapes (pre_token signé → code → tokens JWT).
     totp_secret = models.CharField(max_length=40, blank=True)
     totp_enabled = models.BooleanField(default=False)
+    # Photo de profil uploadée par l'utilisateur (FileField :
+    # aucune dépendance Pillow — validation type/taille à la vue).
+    avatar = models.FileField(upload_to="avatars/", blank=True)
+    # Adresse confirmée par lien email (anti-comptes bidons).
+    email_verified = models.BooleanField(default=False)
+    # Jeton FCM du dernier appareil connecté — notifications push.
+    fcm_token = models.CharField(max_length=255, blank=True, default="")
 
 
 class Membership(models.Model):
@@ -98,13 +117,6 @@ class Membership(models.Model):
                 fields=["user", "workspace"], name="uniq_membership"
             )
         ]
-    # Photo de profil uploadée par l'utilisateur (FileField :
-    # aucune dépendance Pillow — validation type/taille à la vue).
-    avatar = models.FileField(upload_to="avatars/", blank=True)
-    # Adresse confirmée par lien email (anti-comptes bidons).
-    email_verified = models.BooleanField(default=False)
-    # Jeton FCM du dernier appareil connecté — notifications push.
-    fcm_token = models.CharField(max_length=255, blank=True, default="")
 
 
 class Invitation(models.Model):

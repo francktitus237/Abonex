@@ -17,6 +17,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/result.dart';
+import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../data/datasources/subscription_remote_datasource.dart';
 import '../../domain/entities/subscription.dart';
@@ -88,7 +89,14 @@ class _DetailBody extends StatelessWidget {
         : context.tr('date.in', {'n': '$days'});
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+      // barInset : le dernier bloc reste accessible au-dessus de
+      // la pill de navigation (page dans la branche shell).
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        AppShell.barInset + 24,
+      ),
       children: [
         // --- En-tête : icône catégorie + nom + montant ---
         Container(
@@ -396,6 +404,7 @@ class _DetailBody extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('paid.title')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -465,6 +474,7 @@ class _DetailBody extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         icon: Icon(LucideIcons.trash2, color: Theme.of(ctx).colorScheme.error),
         title: Text(ctx.tr('detail.deleteTitle')),
         content: Text(ctx.tr('detail.deleteBody', {'name': subscription.name})),

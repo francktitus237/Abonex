@@ -32,6 +32,7 @@ class WorkspaceBudgetSerializer(serializers.ModelSerializer):
             "extra_currencies", "configured", "monthly_budget",
             "legal_name", "tax_id", "sector", "size",
             "approval_threshold",
+            "plan",
         ]
         read_only_fields = ["kind", "configured"]
 

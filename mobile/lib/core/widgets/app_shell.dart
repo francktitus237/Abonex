@@ -53,6 +53,7 @@ class _AppShellState extends State<AppShell> {
     await storage.setFirstLoginGuideSeen();
     if (!mounted) return;
     await showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       isDismissible: false,

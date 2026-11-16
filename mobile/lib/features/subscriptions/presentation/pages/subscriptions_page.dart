@@ -75,6 +75,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
+          scrollable: true,
           title: Text(ctx.tr('imp.done')),
           content: Text(
             ctx.tr('imp.summary', {
